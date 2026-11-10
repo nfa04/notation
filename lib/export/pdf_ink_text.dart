@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart' as pw;
 import '../ink/ink_clusters.dart';
 import '../ink/ink_grouping.dart';
 import '../models/canvas_models.dart';
+import '../search/search_query.dart';
 
 /// The setting that switches the text under the handwriting of an exported PDF off (`0`); it is on otherwise.
 const pdfInkTextSetting = 'pdf_handwriting_text';
@@ -78,6 +79,9 @@ class PdfInkText {
 
   final Stopwatch _clock = Stopwatch();
 
+  /// What was read now, for the database to keep (the next export, the search and a conversion find it there).
+  final List<InkText> fresh = [];
+
   /// How many blocks of writing are left without text because the time was out or the reader failed.
   int unread = 0;
 
@@ -101,6 +105,7 @@ class PdfInkText {
         try {
           text = (await reader(cluster.strokes)).trim();
           known[cluster.key] = text;
+          fresh.add(InkText(key: cluster.key, page: page, text: text, bounds: cluster.bounds));
         } catch (_) {
           unread++;
           continue;

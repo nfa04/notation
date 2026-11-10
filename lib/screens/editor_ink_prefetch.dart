@@ -31,6 +31,7 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
 
   void _inkProgressed() {
     if (_checkOn) _marks = _currentMarks();
+    _refreshInkSpelling();
     setState(() {}); // (the buttons over a selection show whether it is ready)
   }
 }

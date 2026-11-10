@@ -15,7 +15,10 @@ class _ConnectorHandles extends CustomPainter {
   final String? Function() over;
   final Color color;
 
-  _ConnectorHandles(this.items, this.over, this.color, {required Listenable repaint}) : super(repaint: repaint);
+  /// The selected connector, whose two ends get a handle to pull (null: none).
+  final DrawingStroke? Function()? ends;
+
+  _ConnectorHandles(this.items, this.over, this.color, {required Listenable repaint, this.ends}) : super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -35,6 +38,17 @@ class _ConnectorHandles extends CustomPainter {
         canvas.drawCircle(at, 6, fill);
         canvas.drawCircle(at, 6, ring);
       }
+    }
+    _paintEnds(canvas, ring);
+  }
+
+  void _paintEnds(Canvas canvas, Paint ring) {
+    final link = ends?.call()?.link;
+    if (link == null) return;
+    final fill = Paint()..color = color;
+    for (final p in [link.from.point, link.to.point]) {
+      canvas.drawCircle(p, 8, fill);
+      canvas.drawCircle(p, 8, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2);
     }
   }
 
@@ -71,6 +85,105 @@ extension _EditorConnectors on _FixedPageNoteEditorState {
       if (!_inGutter(b)) out.add((id: b.id, rect: _boxRect(b)));
     }
     return out;
+  }
+
+  /// The connector that is the whole selection, on [page] (null: none, or the layer is locked).
+  DrawingStroke? _selectedConnectorOn(int page) {
+    if (_selectedStrokePage != page || _selection.length != 1 || _groupBoxes.isNotEmpty || _groupImages.isNotEmpty) return null;
+    final s = _selection.first;
+    return s.link != null && s.link!.isLinked && _layers.editable(s) ? s : null;
+  }
+
+  /// A handle on each end of the selected connector, to pull it to another item. They are above the text boxes and pictures, whose
+  /// edges the ends lie on.
+  List<Widget> _connectorEndHandles(int page) {
+    final s = _selectedConnectorOn(page);
+    if (s == null || _connecting) return const [];
+    const half = 22.0;
+    final link = s.link!;
+    return [
+      for (final start in const [true, false])
+        () {
+          final centre = start ? link.from.point : link.to.point;
+          return Positioned(
+            key: ValueKey('connector-end-${start ? 'from' : 'to'}'),
+            left: centre.dx - half,
+            top: centre.dy - half,
+            width: half * 2,
+            height: half * 2,
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: (e) {
+                _endGrab = (stroke: s, start: start, link: s.link!, points: List.of(s.points));
+                _connectOver = null;
+              },
+              onPointerMove: (e) => _connectorEndMove(page, centre + (e.localPosition - const Offset(half, half))),
+              onPointerUp: (_) => _connectorEndUp(page),
+              onPointerCancel: (_) => _connectorEndCancel(page),
+            ),
+          );
+        }(),
+    ];
+  }
+
+  /// The end follows the pen and snaps to the item it is over (not the one the other end is on).
+  void _connectorEndMove(int page, Offset p) {
+    final grab = _endGrab;
+    if (grab == null) return;
+    final other = grab.start ? grab.link.to : grab.link.from;
+    final over = _connectHitAt(page, p, except: other.item);
+    final end = over == null ? LinkEnd.free(p) : LinkEnd.to(over.id, anchor: over.anchor);
+    final link = grab.start ? grab.link.copyWith(from: end) : grab.link.copyWith(to: end);
+    final rects = {for (final i in _connectItems(page)) i.id: i.rect};
+    final routed = routeLink(link, (id) => rects[id]);
+    grab.stroke
+      ..points.clear()
+      ..points.addAll(routed.points)
+      ..pressures = null
+      ..link = routed.link;
+    _connectOver = over;
+    _connectorSeen.remove(grab.stroke.id);
+    _inkTick.value++;
+  }
+
+  /// The pen is lifted: the new end stays (one step to take back). A line left with both ends free is a plain arrow.
+  void _connectorEndUp(int page) {
+    final grab = _endGrab;
+    _endGrab = null;
+    _connectOver = null;
+    if (grab == null) return;
+    final s = grab.stroke;
+    if (s.link != null && !s.link!.isLinked) s.link = null;
+    final link = s.link, points = List.of(s.points);
+    if (link == grab.link && points.length == grab.points.length) {
+      setState(() {});
+      return;
+    }
+    void put(StrokeLink? l, List<Offset> pts) {
+      s
+        ..link = l
+        ..points.clear()
+        ..points.addAll(pts);
+      s.pressures = null;
+      _connectorSeen.remove(s.id);
+    }
+
+    setState(() => _undoStack.push(UndoStep(() => put(grab.link, grab.points), () => put(link, points))));
+    _scheduleSave();
+  }
+
+  /// The pen was taken away by the system: the connector goes back to how it was.
+  void _connectorEndCancel(int page) {
+    final grab = _endGrab;
+    if (grab == null) return;
+    _endGrab = null;
+    _connectOver = null;
+    grab.stroke
+      ..link = grab.link
+      ..points.clear()
+      ..points.addAll(grab.points);
+    _connectorSeen.remove(grab.stroke.id);
+    _inkTick.value++;
   }
 
   /// The side of [rect] whose dot is within reach of [p]; auto when none is (the connector then picks the side).

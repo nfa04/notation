@@ -122,6 +122,7 @@ import '../ink/ink_clusters.dart';
 import '../ink/ink_grouping.dart' show strokeBounds;
 import '../ink/ink_prefetcher.dart';
 import '../ink/ink_recognizer.dart';
+import '../ink/ink_spelling.dart';
 import '../ink/math_marks.dart';
 import '../ink/note_ink_reader.dart';
 import '../block_editor/block_editor.dart';
@@ -262,6 +263,7 @@ part 'editor_history.dart';
 part 'editor_duplicate.dart';
 part 'editor_ink_prefetch.dart';
 part 'editor_math_check.dart';
+part 'editor_ink_spelling.dart';
 part 'editor_extensions.dart';
 part 'editor_find.dart';
 part 'editor_scan.dart';
@@ -606,14 +608,23 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     isOpen: () => mounted,
     isLocked: () => _lockMode != LockMode.none,
     ready: () => _ready.future,
-    indexWanted: () async => _inSettings(Feature.handwriting) && widget.handwriting != null && await widget.repository.settings.get(inkIndexSetting) != '0',
+    // (read behind the writing when the search wants it, and also when the exported PDFs carry the text: the export then finds it read)
+    indexWanted: () async =>
+        _inSettings(Feature.handwriting) &&
+        widget.handwriting != null &&
+        (await widget.repository.settings.get(inkIndexSetting) != '0' || await widget.repository.settings.get(pdfInkTextSetting) != '0' || _spellInkOn),
     saveIndex: widget.repository.text.saveInkText,
+    loadSaved: (id) async => {for (final t in await widget.repository.text.inkTexts(id)) t.key: t.text},
     onProgress: _inkProgressed,
   );
 
   /// The lines of maths that were checked, and who checks.
   final _marker = MathMarker();
   List<MathMark> _marks = const [];
+
+  /// The words of the handwriting that are not spelled right, and the timer that works them out again soon after a change.
+  List<InkMisspelling> _inkSpelling = const [];
+  Timer? _spellTimer;
 
   @override
   Future<String> prepareInk({required bool text, required bool math}) => _reader.prepare(text: text, math: math);
@@ -1236,6 +1247,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   _ConnectHit? _connectFrom, _connectOver;
   final Map<String, int> _connectorSeen = {};
 
+  /// An end of the selected connector being pulled to another item (or let go): the line, which end, and how it was.
+  ({DrawingStroke stroke, bool start, StrokeLink link, List<Offset> points})? _endGrab;
+
   /// When a box was last grown from the side of another one (see [_growBoxFrom]).
   DateTime? _grewBoxAt;
   Offset _shapeStart = Offset.zero;
@@ -1533,6 +1547,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _shortcuts.addHandler(_onShortcut);
     WidgetsBinding.instance.addObserver(this);
     widget.features?.addListener(_syncMathCheck);
+    widget.spell?.addListener(_refreshInkSpelling);
     _syncMathCheck();
     _documentController.useSpelling(widget.spell);
     _titleController = TextEditingController();
@@ -1601,6 +1616,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   void didUpdateWidget(FixedPageNoteEditor old) {
     super.didUpdateWidget(old);
     if (old.spell != widget.spell) {
+      old.spell?.removeListener(_refreshInkSpelling);
+      widget.spell?.addListener(_refreshInkSpelling);
+      _refreshInkSpelling();
       _documentController.useSpelling(widget.spell);
       for (final boxes in _textBoxesPerPage.values) {
         for (final b in boxes) {
@@ -1773,7 +1791,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
       if (reload) return;
       if (widget.collab != null) _bindLive();
       unawaited(_lookForNewerCopy());
-      unawaited(_reader.startIndex());
+      unawaited(_reader.restore().then((_) => _reader.startIndex()));
       final find = widget.initialFind;
       if (find != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _openFind(query: find, page: math.max(0, widget.initialPage)) : null);
@@ -1833,6 +1851,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _saveTimer = Timer(const Duration(milliseconds: 800), _saveNow);
     _metaSoon(); // so is what changed that is not a stroke, for the undo button
     _ink?.changed(); // the writing that changed is read again, a moment later
+    _refreshInkSpellingSoon();
     if (_checkOn) {
       _marksTimer?.cancel();
       _marksTimer = Timer(const Duration(milliseconds: 300), () {
@@ -2008,6 +2027,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _inkTick.dispose();
     _viewTick.dispose();
     _marksTimer?.cancel();
+    _spellTimer?.cancel();
+    widget.spell?.removeListener(_refreshInkSpelling);
     _metaTimer?.cancel();
     _undoTick.dispose();
     _findField.dispose();

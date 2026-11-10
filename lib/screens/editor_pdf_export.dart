@@ -402,11 +402,32 @@ extension _PdfExport on _FixedPageNoteEditorState {
     }
     final reader = widget.handwriting;
     final canRead = reader != null && _inSettings(Feature.handwriting) && reader.status == HandwritingStatus.installed;
-    return PdfInkText(known: known, read: canRead ? reader.recognize : null);
+    // (a block the background reader is reading right now is waited for, not read twice; the models do one job at a time)
+    final background = _reader.prefetcher;
+    final read = !canRead
+        ? null
+        : background == null
+            ? reader.recognize
+            : (List<DrawingStroke> strokes) => background.exclusive(() async => background.lookupText(strokes) ?? await reader.recognize(strokes));
+    return PdfInkText(known: known, read: read);
+  }
+
+  /// Keeps what the export had to read, so that it is not read again (by the next export, a conversion or the search), also for the
+  /// open note's reader.
+  Future<void> _keepExportReadings(PdfInkText? text) async {
+    if (text == null || text.fresh.isEmpty || _lockMode != LockMode.none) return;
+    _reader.prefetcher?.seed({for (final t in text.fresh) t.key: t.text});
+    try {
+      // (nothing is dropped here: only the reader of the open note knows which blocks are gone)
+      await widget.repository.text.saveInkText(widget.noteId, text.fresh, {...text.known.keys});
+    } catch (e) {
+      debugPrint('[ink] could not keep the readings of the export: $e');
+    }
   }
 
   Future<void> _saveExportedPdf(Uint8List bytes) async {
     final unread = _inkText?.unread ?? 0;
+    await _keepExportReadings(_inkText);
     _inkText = null;
     // an automation names the file itself: no dialog, no message
     final target = _exportTo;

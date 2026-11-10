@@ -44,6 +44,9 @@ class NoteInkReader {
   /// Keeps what was read of the writing: [read] are added, and what is not among [alive] is dropped.
   final Future<void> Function(String noteId, List<InkText> read, Set<String> alive) saveIndex;
 
+  /// What was kept of the readings of the note (by the key of the block of strokes); empty when nothing was.
+  final Future<Map<String, String>> Function(String noteId) loadSaved;
+
   /// Told when readings arrived (or the work changed): the editor shows which selections are ready and marks checked maths.
   final void Function() onProgress;
 
@@ -60,6 +63,7 @@ class NoteInkReader {
     required this.ready,
     required this.indexWanted,
     required this.saveIndex,
+    required this.loadSaved,
     required this.onProgress,
   });
 
@@ -94,18 +98,41 @@ class NoteInkReader {
     if (!installed) return tr('The models are not installed (see Settings)');
     await ready();
     if (!isOpen()) return tr('The note was not open');
-    final reader = prefetcher ??= InkPrefetcher(
-      strokes: strokes,
-      canRun: isQuiet,
-      idle: idle,
-      // (only the page in view and its neighbours; a rest after each piece so that the screen keeps up)
-      // (all of it when the writing is read for the search)
-      wanted: (c) => indexInk || (c.page - visiblePage()).abs() <= 1,
-      pause: idle < const Duration(seconds: 1) ? Duration.zero : const Duration(milliseconds: 250),
-    )..addListener(_progressed);
+    final reader = _ensure();
     reader.configure(text: hw, math: formulas, rows: checkOn);
     return null;
   }
+
+  InkPrefetcher _ensure() => prefetcher ??= InkPrefetcher(
+        strokes: strokes,
+        canRun: isQuiet,
+        idle: idle,
+        // (only the page in view and its neighbours; a rest after each piece so that the screen keeps up)
+        // (all of it when the writing is read for the search)
+        wanted: (c) => indexInk || (c.page - visiblePage()).abs() <= 1,
+        pause: idle < const Duration(seconds: 1) ? Duration.zero : const Duration(milliseconds: 250),
+      )..addListener(_progressed);
+
+  /// What the handwriting of this note said when it was read before is there again, before anything asks for it: a selection is
+  /// converted at once, and nothing that was read is read twice. Works without a reader being set up (no model is needed to look up).
+  Future<void> restore() async {
+    if (isLocked()) return;
+    await ready();
+    if (!isOpen() || isLocked()) return;
+    try {
+      // (the prefetcher is there from now on, so that a conversion that is asked for is remembered too)
+      final reader = _ensure();
+      final saved = await loadSaved(noteId);
+      if (saved.isEmpty || !isOpen()) return;
+      _kept.addAll(saved);
+      reader.seed(saved);
+    } catch (e) {
+      debugPrint('[ink] could not load the kept readings: $e');
+    }
+  }
+
+  /// What is in the database now (key to text), so that the same readings are not written again.
+  final Map<String, String> _kept = {};
 
   /// Starts reading the writing for the search, unless the person switched that off (in the settings).
   Future<void> startIndex() async {
@@ -120,14 +147,20 @@ class NoteInkReader {
     _indexTimer?.cancel();
     final reader = prefetcher;
     // (line by line readings are of another kind of block; a locked note keeps nothing in the open)
-    if (reader == null || !indexInk || checkOn || isLocked()) return;
+    if (reader == null || checkOn || isLocked()) return;
     final blocks = reader.readings();
+    // (nothing new to keep, nothing dropped)
+    final now = {for (final r in blocks) if (r.text != null) r.block.key: r.text!};
+    if (now.length == _kept.length && now.entries.every((e) => _kept[e.key] == e.value) && _kept.keys.every(now.containsKey)) return;
     try {
       await saveIndex(
         noteId,
         [for (final r in blocks) if (r.text != null) InkText(key: r.block.key, page: r.block.page, text: r.text!, bounds: r.block.bounds)],
         {for (final r in blocks) r.block.key},
       );
+      _kept
+        ..clear()
+        ..addAll(now);
     } catch (e) {
       debugPrint('[ink] could not keep the readings for the search: $e');
     }
@@ -135,7 +168,6 @@ class NoteInkReader {
 
   /// Keeps what was read of the writing soon after the readings change.
   void _saveSoon() {
-    if (!indexInk) return;
     _indexTimer?.cancel();
     _indexTimer = Timer(const Duration(seconds: 2), saveReadings);
   }
@@ -149,7 +181,7 @@ class NoteInkReader {
   /// The note is closed: what was read is kept, and the reading stops.
   void dispose() {
     _indexTimer?.cancel();
-    if (indexInk) unawaited(saveReadings());
+    unawaited(saveReadings());
     prefetcher?.dispose();
   }
 }

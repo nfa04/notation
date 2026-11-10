@@ -301,3 +301,12 @@ a device yet):
 Known gaps: Scribble's text placeholder (`insertTextPlaceholder`: the system asks for room where the pen writes; none is made, the text is put in when the
 writing is read); the system's own handwriting gestures on Android (cross out, join) are not handled, since Flutter's Android embedder has no `performHandwritingGesture`; the spell check still reads all of the
 text a moment after typing stops (`recheckSpelling`), which is a pause on a slow device with a long document.
+
+## Spell checking of handwriting
+
+The words of the handwriting are checked with the same dictionaries as text boxes (`SpellService`, tool "Spell checking"). The
+background reader (`NoteInkReader`, which also keeps the readings for the search and the PDF text) reads the note when a dictionary is on;
+`misspelledInk` (`lib/ink/ink_spelling.dart`) takes the readings, cuts them into lines with `inkTextLines`, and places each unknown word by
+its share of the line (the reader keeps no box per word, so the underline is near the word, not exact). Words of up to two letters are left
+alone. The editor (`editor_ink_spelling.dart`) draws a wavy red line under the word and a tap offers suggestions (copied to the clipboard,
+the ink cannot be changed), "Add to dictionary" and "Ignore". A changed block has a new key, so its old underlines go until it is read again.

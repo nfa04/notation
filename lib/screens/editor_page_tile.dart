@@ -934,11 +934,11 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
             ..._guideHandles(pageIndex, pageHeight),
 
             // the sides of the items a connector can be fixed to
-            if (_connecting)
+            if (_connecting || _selectedConnectorOn(pageIndex) != null)
               IgnorePointer(
                 child: RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ConnectorHandles(_connectItems(pageIndex), () => _connectOver?.id, Theme.of(context).colorScheme.primary, repaint: _inkTick),
+                    painter: _ConnectorHandles(_connectItems(pageIndex), () => _connectOver?.id, Theme.of(context).colorScheme.primary, repaint: _inkTick, ends: () => _connecting ? null : _selectedConnectorOn(pageIndex)),
                     size: Size(_paperWidth, pageHeight),
                   ),
                 ),
@@ -965,10 +965,15 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
             // what lies over those by its layer
             if (stacking != null) ..._stackedAbove(stacking, pageIndex),
 
+            ..._connectorEndHandles(pageIndex), // (above the boxes: the ends lie on their edges)
+
             if (_penPath != null) _penToolBar(pageIndex, pageHeight),
 
             // what the maths check found, beside the lines
             ..._markWidgets(pageIndex),
+
+            // the words of the handwriting that are not spelled right
+            ..._spellWidgets(pageIndex),
           ],
         ),
       )),

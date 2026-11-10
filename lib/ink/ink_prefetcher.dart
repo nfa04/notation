@@ -317,6 +317,17 @@ class InkPrefetcher extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Takes readings that were kept from an earlier time (by the key of the block, which names its strokes exactly): they are there
+  /// at once, as if they had just been read, and are not read again. What was already read here is not replaced.
+  void seed(Map<String, String> texts) {
+    if (_disposed || texts.isEmpty) return;
+    for (final e in texts.entries) {
+      final r = _cache.putIfAbsent(e.key, InkReading.new);
+      r.text ??= e.value;
+    }
+    notifyListeners();
+  }
+
   /// Keeps what a conversion that was asked for read, if [selection] is exactly one block.
   void remember(Iterable<DrawingStroke> selection, String value, {bool math = false}) {
     final clusters = _clustersOf(selection);

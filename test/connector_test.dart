@@ -371,4 +371,92 @@ void editorTests() {
     final note = await tester.runAsync(() => f.repo.loadNote(f.id));
     expect(note, isNotNull);
   });
+
+  testWidgets('an end of a selected connector can be pulled to another box or let go, and is one step to take back', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final f = _EditorFixture();
+    await tester.runAsync(() async {
+      f.repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+      f.id = await f.repo.createNote();
+      final note = (await f.repo.loadNote(f.id))!;
+      note.textBoxes[0] = [
+        TextBoxWidgetModel(id: 'A', position: const Offset(100, 100), size: const Size(200, 0), initialText: 'Start'),
+        TextBoxWidgetModel(id: 'B', position: const Offset(500, 100), size: const Size(200, 0), initialText: 'End'),
+        TextBoxWidgetModel(id: 'C', position: const Offset(500, 400), size: const Size(200, 0), initialText: 'Other'),
+      ];
+      await f.repo.saveNote(note);
+    });
+    await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(f.id), noteId: f.id, repository: f.repo)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Draw'));
+    await tester.pumpAndSettle();
+
+    List<DrawingStroke> strokes() {
+      final paint = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is InkLayerPainter);
+      return {for (final p in paint.evaluate()) ...((p.widget as CustomPaint).painter as InkLayerPainter).strokes}.toList();
+    }
+
+    final origin = tester.getTopLeft(find.byKey(const ValueKey('page-0')));
+    Future<void> drag(Offset from, Offset to) async {
+      final g = await tester.startGesture(origin + from, kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+      for (var i = 1; i <= 10; i++) {
+        await g.moveTo(origin + Offset.lerp(from, to, i / 10)!);
+      }
+      await g.up();
+      await tester.pumpAndSettle();
+    }
+
+    await tester.ensureVisible(find.byKey(const ValueKey('shape-tool')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('shape-tool')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('shape-connector')));
+    await tester.pumpAndSettle();
+    await drag(const Offset(200, 120), const Offset(600, 120)); // A to B
+    expect(strokes().single.link!.to.item, 'B');
+
+    // select it with a tap of the pen's own tool
+    await tester.tap(find.byKey(const ValueKey('shape-tool')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('shape-freehand')));
+    await tester.pumpAndSettle();
+    final line = strokes().single;
+    final onLine = line.points[line.points.length ~/ 2];
+    final tap = await tester.startGesture(origin + onLine, kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+    await tap.up();
+    await tester.pumpAndSettle();
+
+    // its end (on the left side of B) is pulled into the third box
+    final end = line.link!.to.point;
+    final pointsOnB = List.of(line.points);
+    await drag(end, const Offset(600, 420));
+    final moved = strokes().single;
+    expect(moved.link!.from.item, 'A');
+    expect(moved.link!.to.item, 'C');
+    expect(moved.points.last.dy, greaterThan(350));
+
+    // taking that back puts it on the second box again
+    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.pumpAndSettle();
+    expect(strokes().single.link!.to.item, 'B');
+    expect(strokes().single.points, pointsOnB);
+    expect(strokes().single.link!.to.point, end);
+    await tester.tap(find.byKey(const ValueKey('redo-button')));
+    await tester.pumpAndSettle();
+    expect(strokes().single.link!.to.item, 'C');
+
+    // let go over empty paper (the undo let go of the selection: select it again)
+    final again = strokes().single;
+    final tap2 = await tester.startGesture(origin + again.points[again.points.length ~/ 3], kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+    await tap2.up();
+    await tester.pumpAndSettle();
+    // the end is free there, the start is still fixed
+    await drag(strokes().single.link!.to.point, const Offset(900, 700));
+    final freed = strokes().single;
+    expect(freed.link!.to.isFree, isTrue);
+    expect(freed.link!.from.item, 'A');
+  });
 }

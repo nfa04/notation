@@ -27,7 +27,7 @@ enum Feature {
   straighten(FeatureGroup.writing, 'Straight lines and shapes', 'Lines drawn nearly straight are straightened, and drawings very close to a rectangle, ellipse, triangle or diamond become that shape.', Icons.show_chart),
   images(FeatureGroup.writing, 'Pictures', 'Put pictures on a page.', Icons.add_photo_alternate_outlined),
   themeImages(FeatureGroup.writing, 'Theme images', 'A picture at the top of a note, a folder or a day of the calendar.', Icons.wallpaper_outlined),
-  spelling(FeatureGroup.writing, 'Spell checking', 'Underlines misspelled words in text boxes and the written document, with suggestions. Needs a dictionary from the settings.', Icons.spellcheck),
+  spelling(FeatureGroup.writing, 'Spell checking', 'Underlines misspelled words in text boxes, the written document and (once read) handwriting, with suggestions. Needs a dictionary from the settings.', Icons.spellcheck),
   tables(FeatureGroup.writing, 'Tables', 'Tables in text boxes and in the written document.', Icons.table_chart_outlined),
   diagrams(FeatureGroup.writing, 'Mind maps and diagrams', 'Turn an outline into a mind map, lines like "Start -> Check -> Done" into a flowchart, or (advanced) a state diagram, a tree or a graph, on the page.', Icons.account_tree_outlined),
 

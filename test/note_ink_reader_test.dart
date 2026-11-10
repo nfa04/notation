@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes/ink/ink_clusters.dart';
 import 'package:notes/ink/note_ink_reader.dart';
 import 'package:notes/models/canvas_models.dart';
 import 'package:notes/search/search_query.dart';
@@ -10,6 +11,7 @@ void main() {
   late Map<int, List<DrawingStroke>> strokes;
   late List<(String, List<InkText>, Set<String>)> saved;
   late int progressed;
+  var kept = <String, String>{};
   var open = true, locked = false, wanted = true;
 
   NoteInkReader reader({FakeReader? handwriting, FakeReader? math}) => NoteInkReader(
@@ -25,6 +27,7 @@ void main() {
         ready: () async {},
         indexWanted: () async => wanted,
         saveIndex: (id, read, alive) async => saved.add((id, read, alive)),
+        loadSaved: (id) async => kept,
         onProgress: () => progressed++,
       );
 
@@ -33,6 +36,7 @@ void main() {
     strokes = {0: word('a', 100, 100)};
     saved = [];
     progressed = 0;
+    kept = {};
     open = true;
     locked = false;
     wanted = true;
@@ -68,6 +72,33 @@ void main() {
       expect(r.prefetcher, isNotNull);
       expect(r.prepText, isTrue);
       expect(r.prepMath, isFalse);
+      r.dispose();
+    });
+  });
+
+  group('readings kept from before', () {
+    test('are there again at once, without a reader, and are not read twice', () async {
+      final key = clusterStrokes(0, strokes[0]!).single.key;
+      kept = {key: 'kept words'};
+      final r = reader(handwriting: text);
+      await r.restore();
+      expect(r.prefetcher!.lookupText(strokes[0]!), 'kept words');
+      await r.startIndex();
+      r.prefetcher!.changed();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(text.calls, isEmpty);
+      r.dispose();
+    });
+
+    test('a conversion that was asked for is kept, also when the search index is off', () async {
+      wanted = false;
+      final r = reader(handwriting: text);
+      await r.restore();
+      r.prefetcher!.remember(strokes[0]!, 'asked for');
+      await r.saveReadings();
+      expect(saved.single.$2.single.text, 'asked for');
+      await r.saveReadings();
+      expect(saved, hasLength(1)); // (nothing new: not written again)
       r.dispose();
     });
   });
