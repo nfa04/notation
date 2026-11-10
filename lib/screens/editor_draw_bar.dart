@@ -119,6 +119,23 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
     await widget.repository.settings.setPenColors(_customColors);
   }
 
+  /// Offers complementary, triadic and analogous palettes built on the pen colour.
+  Future<void> _chooseHarmony() async {
+    final choice = await showColorHarmonies(context, _selectedPenColor);
+    if (choice == null || !mounted) return;
+    setState(() {
+      for (final c in choice.keep) {
+        if ([...drawColors, ..._customColors].any((x) => x.toARGB32() == c.toARGB32())) continue;
+        _customColors.add(c);
+        if (_customColors.length > _maxCustomColors) _customColors.removeAt(0);
+      }
+      _selectedPenColor = choice.use;
+      _erasing = false;
+      _lassoing = false;
+    });
+    await widget.repository.settings.setPenColors(_customColors);
+  }
+
   Future<void> _removeCustomColor(Color c) async {
     setState(
       () => _customColors.removeWhere((x) => x.toARGB32() == c.toARGB32()),
@@ -695,6 +712,15 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           icon: const Icon(Icons.add_circle_outline, size: 22),
           tooltip: tr('Add a color (hold an added color to remove it)'),
           onPressed: _addCustomColor,
+        ),
+      ),
+      Center(
+        heightFactor: 1,
+        child: IconButton(
+          key: const ValueKey('color-harmonies'),
+          icon: const Icon(Icons.palette_outlined, size: 22),
+          tooltip: tr('Color harmonies: complementary, triadic and analogous colors from the pen color'),
+          onPressed: _chooseHarmony,
         ),
       ),
       if (_on(Feature.colorPicker))

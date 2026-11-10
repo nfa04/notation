@@ -197,6 +197,7 @@ import 'label_dialog.dart';
 import 'assistant_panel.dart';
 import 'collab_ui.dart';
 import 'color_wheel_dialog.dart';
+import 'color_harmony_dialog.dart';
 import 'document_sheet.dart';
 import 'document_sheets.dart';
 import 'print_preview.dart';
