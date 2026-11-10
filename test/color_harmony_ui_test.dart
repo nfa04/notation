@@ -8,7 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   setUpAll(AppDatabase.initFfi);
 
-  testWidgets('a harmony palette can be kept on the bar, and one of its colours chosen', (tester) async {
+  testWidgets('the colour wheel offers harmony palettes that can be added to the bar', (tester) async {
     tester.view.physicalSize = const Size(1600, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -27,10 +27,11 @@ void main() {
 
     await tester.tap(find.byWidgetPredicate((w) => w is CircleAvatar && w.backgroundColor == const Color(0xFFFF0000)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('color-harmonies')));
+    await tester.tap(find.byIcon(Icons.add_circle_outline));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('harmony-keep-triadic')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('harmony-keep-triadic')));
+    await tester.tap(find.byKey(const ValueKey('harmony-triadic')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('harmony-keep')));
     await tester.pumpAndSettle();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     final saved = await tester.runAsync(() => repo.settings.penColors());

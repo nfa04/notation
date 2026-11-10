@@ -1,15 +1,29 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
+import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../models/color_harmony.dart';
 import '../style/platform_dialog.dart';
 
 /// Lets the user pick any colour on a hue/saturation wheel plus a brightness
 /// slider; null if cancelled.
-Future<Color?> pickColorOnWheel(BuildContext context, Color initial) =>
-    showDialog<Color>(context: context, builder: (_) => ColorWheelDialog(initial: initial));
+Future<Color?> pickColorOnWheel(BuildContext context, Color initial) async => (await pickColorsOnWheel(context, initial))?.use;
 
-/// A dialog to pick any colour on a wheel; pops the chosen [Color], or null.
+/// What the wheel decided: the colour to use, and the colours to keep (the colour itself, or a whole harmony palette).
+typedef WheelChoice = ({Color use, List<Color> keep});
+
+/// The wheel, also offering palettes (complementary, triadic, analogous) built on the colour; null if cancelled.
+Future<WheelChoice?> pickColorsOnWheel(BuildContext context, Color initial) =>
+    showDialog<WheelChoice>(context: context, builder: (_) => ColorWheelDialog(initial: initial));
+
+String harmonyName(Harmony h) => switch (h) {
+  Harmony.complementary => tr('Complementary'),
+  Harmony.triadic => tr('Triadic'),
+  Harmony.analogous => tr('Analogous'),
+};
+
+/// A dialog to pick any colour on a wheel; pops the chosen [WheelChoice], or null.
 class ColorWheelDialog extends StatefulWidget {
   final Color initial;
 
@@ -25,6 +39,10 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
   // from. It opens as bright as the colours are, with the hue it has.
   late HSVColor _hsv = _openedAs(HSVColor.fromColor(widget.initial));
 
+  // The palette on offer is built on the colour as the wheel last set it, so that taking a colour of the palette does not move the palette.
+  Harmony? _harmony;
+  late Color _base = _hsv.toColor();
+
   static HSVColor _openedAs(HSVColor c) => c.value < 0.35 ? c.withValue(1) : c;
 
   void _pick(Offset local) {
@@ -32,7 +50,10 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
     final d = local - const Offset(r, r);
     final hue = (math.atan2(d.dy, d.dx) * 180 / math.pi + 360) % 360;
     final sat = (d.distance / r).clamp(0.0, 1.0);
-    setState(() => _hsv = HSVColor.fromAHSV(1, hue, sat, _hsv.value));
+    setState(() {
+      _hsv = HSVColor.fromAHSV(1, hue, sat, _hsv.value);
+      _base = _hsv.toColor();
+    });
   }
 
   @override
@@ -45,7 +66,7 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
       title: const Text('Pick a color'),
       content: SizedBox(
         width: _size,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+        child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           GestureDetector(
             key: const ValueKey('color-wheel'),
             onPanStart: (d) => _pick(d.localPosition),
@@ -77,17 +98,66 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
           Slider.adaptive(
             key: const ValueKey('color-brightness'),
             value: _hsv.value,
-            onChanged: (v) => setState(() => _hsv = _hsv.withValue(v)),
+            onChanged: (v) => setState(() {
+              _hsv = _hsv.withValue(v);
+              _base = _hsv.toColor();
+            }),
           ),
           Container(
             height: 28,
             decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
           ),
-        ]),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, children: [
+            for (final h in Harmony.values)
+              ChoiceChip(
+                key: ValueKey('harmony-${h.name}'),
+                label: Text(harmonyName(h)),
+                selected: _harmony == h,
+                onSelected: (on) => setState(() {
+                  _harmony = on ? h : null;
+                  _base = color;
+                }),
+              ),
+          ]),
+          if (_harmony != null) ...[
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              for (final c in harmonyOf(_base, _harmony!))
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: InkResponse(
+                    key: ValueKey('harmony-swatch-${c.toARGB32().toRadixString(16)}'),
+                    radius: 24,
+                    onTap: () => setState(() => _hsv = HSVColor.fromColor(c)),
+                    child: Semantics(
+                      button: true,
+                      label: tr('Use this color'),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Theme.of(context).colorScheme.outline),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ]),
+          ],
+        ])),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, color), child: const Text('Add')),
+        if (_harmony != null)
+          TextButton(
+            key: const ValueKey('harmony-keep'),
+            onPressed: () => Navigator.pop<WheelChoice>(context, (use: color, keep: [...harmonyOf(_base, _harmony!), color])),
+            child: Text(tr('Add palette')),
+          ),
+        FilledButton(onPressed: () => Navigator.pop<WheelChoice>(context, (use: color, keep: [color])), child: const Text('Add')),
       ],
     );
   }
