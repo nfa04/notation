@@ -481,6 +481,13 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           icon: const Icon(Icons.image_outlined, size: 20),
           onPressed: _isLoadingPdf ? null : _exportImages,
         ),
+      if (_on(Feature.exportImages))
+        IconButton(
+          key: const ValueKey('export-svg-button'),
+          tooltip: tr('Export as SVG (shapes for a vector program)'),
+          icon: const Icon(Icons.polyline_outlined, size: 20),
+          onPressed: _isLoadingPdf ? null : _exportSvg,
+        ),
       if (_hasDocument) _documentExportMenu(),
       // (a canvas has no pages to cut it into)
       if (_on(Feature.pdf) && !_infinite)

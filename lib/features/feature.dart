@@ -33,7 +33,7 @@ enum Feature {
 
   brushes(FeatureGroup.creative, 'More brushes', 'Pencil, fountain pen, calligraphy nib, marker, charcoal, airbrush and watercolour for the drawing bar.', Icons.brush_outlined),
   guides(FeatureGroup.creative, 'Guides and rulers', 'Overlays for composition (thirds, golden ratio, grid) and perspective, and a ruler or set square that the lines you draw along it follow.', Icons.straighten),
-  flipbook(FeatureGroup.creative, 'Flipbook', 'Play the pages of a note one after the other like the frames of an animation, round and round, at a speed you choose.', Icons.movie_filter_outlined),
+  flipbook(FeatureGroup.creative, 'Flipbook', 'Play the pages of a note one after the other like the frames of an animation, round and round, at a speed you choose; while drawing, the pages before and after can show through faintly (onion skin).', Icons.movie_filter_outlined),
   ideas(FeatureGroup.creative, 'Ideas from the assistant', 'Ask the assistant for a colour palette for a mood or subject, or for ideas to start from: a drawing, a character, a story, a song, a design. Needs the assistant.', Icons.lightbulb_outline),
   pathText(FeatureGroup.creative, 'Text on lines and shapes', 'Write words along a line, a curve or round a shape, or inside a shape. The text belongs to the drawing and goes where it goes.', Icons.text_rotation_angleup),
   alignLines(FeatureGroup.creative, 'Alignment lines', 'Lines that show where a text box, picture or shape you are moving lines up with the others on the page (or the middle and edges of the page), and let it fall into place. Hold Alt to move freely.', Icons.align_horizontal_center),

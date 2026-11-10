@@ -10,6 +10,7 @@ import 'package:archive/archive.dart' show Archive, ArchiveFile, CompressionType
 import '../export/file_dialogs.dart';
 import '../export/image_export.dart';
 import '../export/pdf_brush.dart';
+import '../export/svg_export.dart';
 import '../export/pdf_ink_text.dart';
 import '../export/pdf_label.dart';
 import '../export/widget_pictures.dart';
@@ -167,6 +168,7 @@ import '../models/symmetry.dart';
 import '../models/straighten.dart';
 import '../models/undo_stack.dart';
 import '../painters/canvas_painters.dart';
+import '../painters/onion_skin.dart';
 import '../painters/align_lines_painter.dart';
 import '../painters/guides_painter.dart';
 import '../painters/symmetry_painter.dart';
@@ -244,6 +246,7 @@ part 'editor_side_panels.dart';
 part 'editor_guides.dart';
 part 'editor_ideas.dart';
 part 'editor_image_export.dart';
+part 'editor_svg_export.dart';
 part 'editor_lecture.dart';
 part 'editor_echoes.dart';
 part 'editor_labels.dart';
@@ -281,6 +284,7 @@ part 'editor_shape_ops.dart';
 part 'editor_groups.dart';
 part 'editor_eyedropper.dart';
 part 'editor_fill_bucket.dart';
+part 'editor_onion_skin.dart';
 
 /// What the clipboard holds that a note can take: a picture, files (pictures
 /// copied in a file manager) or text.
@@ -710,6 +714,22 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     try {
       final pages = _picturePages;
       await _exportPictures(preset, allPages ? pages : [pages.contains(_visiblePage().$1) ? _visiblePage().$1 : pages.first], seeThrough: seeThrough);
+    } finally {
+      _exportTo = null;
+    }
+    if (_exportError != null) return _exportError;
+    return File(path).existsSync() ? null : 'nothing was written';
+  }
+
+  /// Saves the pages as SVG at [path] (an SVG for one page, else a ZIP of them); null, or what went wrong.
+  Future<String?> exportSvgTo(String path, {bool allPages = false, bool seeThrough = false}) async {
+    await ready;
+    if (!mounted) return 'the note was closed';
+    _exportTo = path;
+    _exportError = null;
+    try {
+      final pages = _picturePages;
+      await _exportSvgPages(allPages ? pages : [pages.contains(_visiblePage().$1) ? _visiblePage().$1 : pages.first], seeThrough: seeThrough);
     } finally {
       _exportTo = null;
     }
@@ -1169,6 +1189,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// The fill bucket is on (see `editor_fill_bucket.dart`), and how big a gap in the lines it still closes.
   bool _bucket = false;
   FillGap _fillGap = FillGap.medium;
+
+  /// The onion skin (see `editor_onion_skin.dart`): how many earlier pages show through, and whether the next one does.
+  int _onionBack = 0;
+  bool _onionNext = false;
 
   /// The pages (or the canvas) as they are shown, without the tools over them: what the eyedropper reads.
   final GlobalKey _surfaceKey = GlobalKey();

@@ -463,6 +463,9 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
               ),
             ),
 
+            // (the faint lines of the pages next to this one, for drawing frames of an animation)
+            ..._onionLayers(pageIndex, pageHeight),
+
             // Z-INDEX 3: Vector Drawing Ink Layer - the finished lines as one kept picture, the line being drawn above it
             // (each in a layer of its own, so that a move of the pen paints only that line)
             IgnorePointer(

@@ -674,6 +674,21 @@ Tools of their own group in *Settings → Tools* (`Feature.brushes`, `symmetry`,
   see-through line colour), put under the lines of its layer, so it is recolored, moved, hidden with its layer, taken back and
   exported (PDF, pictures) like any shape; filling the same area again replaces it. On a paged note the edge of the paper closes the
   area; on the infinite canvas an area that runs out is "not closed". Only lines are walls (not pictures or text boxes).
+- **SVG export** (`lib/export/svg_export.dart`, `lib/screens/editor_svg_export.dart`; `Feature.exportImages`, the button beside *Export as
+  pictures*): a page as an SVG file (all pages: a ZIP; the paper can be left out). A pen line is a `<path>` with its colour, width, round
+  ends and dashes; a closed shape has its fill (a gradient is written once into `<defs>`); a line drawn with pressure and a brush are
+  their outlines (`Outline` pieces: polygons and ovals as one path, a ribbon of one thickness as its line stroked that thick), brush
+  layers and `multiply` as groups with `opacity` and `mix-blend-mode`; a fill made by the bucket is a plain fill. Layers are Inkscape
+  layers (`inkscape:groupmode="layer"`, `inkscape:label` = the name) with their opacity and blend mode, groups nest, hidden ones are left
+  out; within a layer the pictures are at the bottom, then the lines, then the boxes. What cannot be shapes is a picture in the file
+  (PNG, base64): text boxes and the written document (drawn as the editor draws them, formulas included), a PDF page under the lines,
+  a brush that blurs (`BrushShape.soft`) and a line with text along it. A clipped layer is not clipped (as in the PDF). The ruling of
+  an infinite canvas is left out. `exportSvgTo` on the editor state is the hook for automations and tests.
+- **Onion skin** (`lib/painters/onion_skin.dart`, `lib/screens/editor_onion_skin.dart`; `Feature.flipbook`, paged notes only): the
+  layers-shaped button in the drawing bar lets up to three earlier pages show through behind the lines (red, 30 / 18 / 10 %) and,
+  if chosen, the next page (green, 25 %), to draw the frames of an animation that the flipbook then plays. Each ghost is the page's
+  lines drawn as they are (visible layers, `paintLayered`) and taken to one colour by a `srcIn` colour filter in a `saveLayer`; it sits
+  under the page's own lines, takes no touch and is not in any export. The choice is kept (`onion_back`, `onion_next` settings).
 - **Mood boards** (`lib/models/collage.dart`): the top bar's *Add several pictures as a mood board* takes several files and lays them out
   in rows of the same height that each fill the page's width (the last row keeps its height), as pictures like any other.
 - **Reference to trace**: a picture's own toolbar has *Use as a reference*, which puts it on a layer `reference` at the very bottom

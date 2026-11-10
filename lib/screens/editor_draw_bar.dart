@@ -76,6 +76,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
   Future<void> _loadCustomColors() async {
     final saved = await widget.repository.settings.penColors();
     final straighten = await widget.repository.settings.get('straighten_lines');
+    final onionBack = int.tryParse(await widget.repository.settings.get('onion_back') ?? '');
+    final onionNext = await widget.repository.settings.get('onion_next');
     final stabiliser = double.tryParse(
       await widget.repository.settings.get('stabiliser_strength') ?? '',
     );
@@ -94,6 +96,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         _activeToolbarProfile = profiles.active;
         _customColors = saved;
         _straighten = straighten != '0';
+        _onionBack = (onionBack ?? 0).clamp(0, 3);
+        _onionNext = onionNext == '1';
         _stabiliserStrength = (stabiliser ?? 0).clamp(0.0, 1.0);
       });
     }
@@ -585,6 +589,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
       if ((widget.extensions?.drawTools ?? const []).isNotEmpty)
         Center(heightFactor: 1, child: _drawToolButton()),
       if (_on(Feature.layers)) Center(heightFactor: 1, child: _layersButton()),
+      if (_on(Feature.flipbook) && !_infinite) Center(heightFactor: 1, child: _onionButton()),
       if (_on(Feature.guides)) Center(heightFactor: 1, child: _guidesButton()),
       if (_on(Feature.stabiliser)) Center(heightFactor: 1, child: _stabiliserButton()),
       if (_on(Feature.symmetry)) Center(heightFactor: 1, child: _symmetryButton()),
