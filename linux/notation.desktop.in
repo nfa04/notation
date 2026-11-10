@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Notation
+Comment=Notes, PDF annotation and live collaboration
+Exec=@EXEC@ %u
+Terminal=false
+Categories=Office;Education;
+MimeType=x-scheme-handler/notation;application/x-uninote;

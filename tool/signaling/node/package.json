@@ -1,0 +1,17 @@
+{
+  "name": "uninotes-signaling",
+  "version": "1.0.0",
+  "description": "Signalling server for Notation live sessions: relays sealed messages between the devices of one session and keeps nothing.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}

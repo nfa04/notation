@@ -1,0 +1,29 @@
+name: Room for an Android build
+description: >-
+  A free runner of a private repository has 2 cores, 7 GB of memory and 14 GB of disk. An Android build (the SDK and NDK it
+  downloads, the Gradle cache, the libraries of every plugin) needs more disk than that has left ("No space left on device"),
+  and Gradle with its default heap needs more memory than there is (the runner is then stopped, which shows up as "cancelled").
+  This frees the disk, adds swap and keeps Gradle's heap small.
+
+runs:
+  using: composite
+  steps:
+    - name: Free disk space, add swap, limit Gradle's memory
+      shell: bash
+      run: |
+        echo "== before"; df -h / /mnt; free -m
+        # tools of the runner image that an Android build does not use
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /usr/share/swift \
+          /opt/hostedtoolcache/CodeQL /usr/lib/google-cloud-sdk
+        sudo docker image prune --all --force > /dev/null || true
+        # more swap, in a file of its own (the image has one on /mnt that is in use already): as much as the disk has to spare, up to 8 GB
+        free_mb=$(df -m --output=avail /mnt | tail -1 | tr -d ' ')
+        size_mb=$(( free_mb > 9216 ? 8192 : free_mb - 1024 ))
+        if [ "$size_mb" -ge 2048 ]; then
+          sudo fallocate -l "${size_mb}M" /mnt/extra-swap && sudo chmod 600 /mnt/extra-swap && sudo mkswap /mnt/extra-swap > /dev/null && sudo swapon /mnt/extra-swap \
+            || echo "no extra swap"
+        fi
+        # Gradle and its Kotlin compiler: the properties of the home directory win over android/gradle.properties (which has -Xmx8G)
+        mkdir -p ~/.gradle
+        printf 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g\nkotlin.daemon.jvmargs=-Xmx1g\n' >> ~/.gradle/gradle.properties
+        echo "== after"; df -h / /mnt; free -m

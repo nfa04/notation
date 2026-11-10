@@ -1,0 +1,49 @@
+name: Release
+
+# Push a tag such as v0.0.1 (after changing `version:` in pubspec.yaml to match) and this builds every platform and
+# attaches the downloads to a GitHub Release. Steps and secrets: docs/releasing.md.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/builds.yml
+    secrets: inherit
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag has to match pubspec.yaml
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(sed -n 's/^version: \([0-9.]*\).*/\1/p' pubspec.yaml)"
+          [ "$want" = "$have" ] || { echo "tag $GITHUB_REF_NAME but pubspec.yaml says $have"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+      - name: Collect the files
+        run: |
+          mkdir out
+          cp dl/notation-ios/*.ipa out/Notation-ios-unsigned.ipa
+          cp dl/notation-macos/*.zip out/Notation-macos.zip
+          cp dl/notation-macos/*.dmg out/Notation-macos.dmg
+          cp dl/notation-android/*.apk out/Notation-android-arm64.apk
+          cp dl/notation-linux-flatpak/*.flatpak out/Notation-linux-x86_64.flatpak
+          cp dl/notation-windows-setup/*.exe out/Notation-windows-x64-setup.exe
+          (cd dl/notation-windows-x64 && zip -qr ../../out/Notation-windows-x64.zip .)
+          python3 tool/make_altstore_source.py --ipa "out/Notation-ios-unsigned.ipa" \
+            --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --out out/altstore.json
+          (cd out && sha256sum * > SHA256SUMS.txt)
+          ls -l out
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* --title "Notation ${GITHUB_REF_NAME#v}" \
+            --notes-file "fastlane/metadata/android/en-US/changelogs/$(sed -n 's/^version: [0-9.]*+\([0-9]*\).*/\1/p' pubspec.yaml).txt"

@@ -1,0 +1,24 @@
+Notation is a note-taking and PDF-annotation app for people who write by hand, study, and want their notes to stay theirs.
+
+<b>Write the way you think</b>
+• Pen, highlighter and shape tools with pressure, rulers and guides
+• Text boxes, tables, checklists and formulas in the same note
+• Handwriting turns into searchable text, on the device
+• Annotate PDFs; the ink is exported with an invisible text layer
+
+<b>Study</b>
+• Flashcards with spaced repetition, quizzes and an Ask mode that answers from your notes
+• A maths checker for handwritten working: sums, matrices, inequalities, logic and statistics
+• Export flashcards to Anki, notes to Markdown, PDF or LaTeX
+
+<b>Organise</b>
+• Folders, tags, search, a calendar with tasks, and reminders
+• A graph of the facts your notes state
+
+<b>Private by design</b>
+• No account, no ads, no analytics
+• AI features run on the device by default
+• Optional live collaboration and sync (Nextcloud, Dropbox, OneDrive, S3, CalDAV), end-to-end encrypted
+• Lock notes with a passcode or biometrics
+
+Free software under the AGPL-3.0.

@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# one run per branch: a newer push cancels the one before it
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # pdf_overlay is a package of its own: its tests (package:test) can only be resolved once it has had its own pub get,
+      # which a fresh checkout has not (on a developer's machine its .dart_tool is already there)
+      - run: dart pub get
+        working-directory: pdf_overlay
+      - run: flutter analyze
+      - name: Tests of pdf_overlay
+        run: dart test
+        working-directory: pdf_overlay
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Linux build tools and libraries of the plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev liblzma-dev
+      - run: flutter pub get
+      # the plugins with native code (PDFium, SQLite, ONNX Runtime, QuickJS) are found in the bundle of a debug build
+      - run: flutter build linux --debug
+      - name: Tests
+        run: flutter test
+        env:
+          LD_LIBRARY_PATH: build/linux/x64/debug/bundle/lib
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # (the disk of a free runner is full before this build is done: "No space left on device" in mergeDebugNativeLibs)
+      - uses: ./.github/actions/android-room
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # one ABI is enough to know that it builds; --split-per-abi leaves the libraries of the other ABIs out of the APK
+      - run: flutter build apk --debug --split-per-abi --target-platform android-arm64

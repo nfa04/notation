@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-pressing the app icon offers a quick note; the link opens the app at the quick note dialog. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="quick_note"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_quick_note"
+        android:shortcutLongLabel="@string/shortcut_quick_note">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="notation://capture"
+            android:targetPackage="io.github.nfa04.notation"
+            android:targetClass="io.github.nfa04.notation.MainActivity" />
+    </shortcut>
+</shortcuts>

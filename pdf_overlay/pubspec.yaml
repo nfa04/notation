@@ -1,0 +1,16 @@
+name: pdf_overlay
+description: >-
+  Merge a vector overlay PDF (highlights, shapes, text boxes) onto an existing
+  PDF as an incremental update. Pure Dart, no native code, no external
+  binaries. The original pages are never rewritten, so text stays selectable.
+version: 0.1.0
+publish_to: none # remove when you publish
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  archive: '>=3.4.0 <5.0.0' # MIT, pure Dart: only used to inflate xref/object streams
+
+dev_dependencies:
+  test: ^1.24.0

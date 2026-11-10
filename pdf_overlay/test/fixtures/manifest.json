@@ -1,0 +1,210 @@
+[
+  {
+    "name": "classic",
+    "original": "classic.pdf",
+    "overlay": "classic.overlay.pdf",
+    "targets": [
+      0,
+      2
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ],
+      [
+        595.0,
+        842.0
+      ],
+      [
+        612.0,
+        792.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "classic xref table; overlay only for pages 0 and 2"
+  },
+  {
+    "name": "objstm",
+    "original": "objstm.pdf",
+    "overlay": "objstm.overlay.pdf",
+    "targets": [
+      0,
+      1,
+      2
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ],
+      [
+        612.0,
+        792.0
+      ],
+      [
+        595.0,
+        842.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "xref stream + compressed object streams; overlay is also xref-stream/Flate"
+  },
+  {
+    "name": "inherit",
+    "original": "inherit.pdf",
+    "overlay": "inherit.overlay.pdf",
+    "targets": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "geometry": [
+      [
+        842.0,
+        595.0
+      ],
+      [
+        640.0,
+        460.0
+      ],
+      [
+        612.0,
+        792.0
+      ],
+      [
+        842.0,
+        595.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "nested tree, inherited MediaBox/Rotate, leaf CropBox, offset MediaBox, Rotate 270"
+  },
+  {
+    "name": "annots",
+    "original": "annots.pdf",
+    "overlay": "annots.overlay.pdf",
+    "targets": [
+      0,
+      1
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ],
+      [
+        595.0,
+        842.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "existing /Annots: indirect array on page 0, direct array on page 1"
+  },
+  {
+    "name": "prev",
+    "original": "prev.pdf",
+    "overlay": "prev.overlay.pdf",
+    "targets": [
+      0,
+      1
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ],
+      [
+        595.0,
+        842.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "two xref sections linked with /Prev"
+  },
+  {
+    "name": "rotations",
+    "original": "rotations.pdf",
+    "overlay": "rotations.overlay.pdf",
+    "targets": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "geometry": [
+      [
+        400.0,
+        600.0
+      ],
+      [
+        600.0,
+        400.0
+      ],
+      [
+        400.0,
+        600.0
+      ],
+      [
+        600.0,
+        400.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "Rotate 0/90/180/270, offset MediaBox, CropBox inside it"
+  },
+  {
+    "name": "linearized",
+    "original": "linearized.pdf",
+    "overlay": "linearized.overlay.pdf",
+    "targets": [
+      0,
+      1
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ],
+      [
+        612.0,
+        792.0
+      ]
+    ],
+    "expect": "ok",
+    "note": "linearized file; update is appended after it"
+  },
+  {
+    "name": "damaged",
+    "original": "damaged.pdf",
+    "overlay": "damaged.overlay.pdf",
+    "targets": [
+      0
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ]
+    ],
+    "expect": "unsupported",
+    "note": "corrupt startxref offset"
+  },
+  {
+    "name": "encrypted",
+    "original": "encrypted.pdf",
+    "overlay": "encrypted.overlay.pdf",
+    "targets": [
+      0
+    ],
+    "geometry": [
+      [
+        595.0,
+        842.0
+      ]
+    ],
+    "expect": "unsupported",
+    "note": "RC4/AES encrypted"
+  }
+]

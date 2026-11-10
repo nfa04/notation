@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.nfa04.notation</id>
+  <name>Notation</name>
+  <summary>Handwritten notes, PDF annotation, formulas and flashcards</summary>
+  <developer id="io.github.nfa04">
+    <name>Noel Aeby</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <url type="homepage">https://github.com/nfa04/notation</url>
+  <url type="bugtracker">https://github.com/nfa04/notation/issues</url>
+  <url type="vcs-browser">https://github.com/nfa04/notation</url>
+  <description>
+    <p>
+      Notation is a note-taking and PDF-annotation app for people who write by hand and study. Pen, highlighter and
+      shapes, text boxes, tables and formulas live in the same note, and handwriting becomes searchable text on your
+      device.
+    </p>
+    <p>Study with flashcards and spaced repetition, quizzes, and a maths checker for handwritten working.</p>
+    <ul>
+      <li>Annotate PDFs and export them with a text layer</li>
+      <li>Flashcards, quizzes and Anki export</li>
+      <li>Folders, tags, search, a calendar with tasks and reminders</li>
+      <li>AI features run on the device by default</li>
+      <li>Optional live collaboration and sync, end-to-end encrypted</li>
+      <li>No account, no ads, no analytics</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.nfa04.notation.desktop</launchable>
+  <categories>
+    <category>Office</category>
+    <category>Education</category>
+  </categories>
+  <keywords>
+    <keyword>notes</keyword>
+    <keyword>handwriting</keyword>
+    <keyword>PDF</keyword>
+    <keyword>flashcards</keyword>
+    <keyword>maths</keyword>
+  </keywords>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>notation</binary>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <releases>
+    <release version="0.0.1" date="2026-11-10" type="development">
+      <description>
+        <p>First public pre-release (early beta).</p>
+      </description>
+    </release>
+  </releases>
+</component>

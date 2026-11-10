@@ -1,0 +1,70 @@
+# Packages a finished `flutter build linux --release` bundle (the CI builds it first, see .github/workflows/builds.yml).
+# Locally: flutter build linux --release
+#          flatpak-builder --user --install-deps-from=flathub --force-clean --repo=repo build-dir linux/flatpak/io.github.nfa04.notation.yml
+#          flatpak build-bundle repo notation.flatpak io.github.nfa04.notation
+app-id: io.github.nfa04.notation
+runtime: org.gnome.Platform # the runtime has GTK 3 and libsecret, which the Flutter runner and flutter_secure_storage link against
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: notation
+
+finish-args:
+  - --share=ipc
+  - --share=network # live collaboration, device and cloud sync
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --socket=pulseaudio # sound, reading aloud, recording
+  - --system-talk-name=org.freedesktop.NetworkManager # connectivity_plus: the app notices a move to another network
+  - --talk-name=org.freedesktop.secrets # flutter_secure_storage keeps its keys in the keyring
+  - --talk-name=org.freedesktop.Notifications # reminders
+
+modules:
+  # file_picker opens its file dialogs by running zenity (or qarma, or kdialog), and the runtime has none of them.
+  # Inside the sandbox zenity 4 asks the file chooser portal, so the dialog is the one of the desktop.
+  - name: zenity
+    buildsystem: meson
+    config-opts:
+      - -Dmanpage=false # (needs help2man)
+      - -Dwebkitgtk=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/zenity/4.2/zenity-4.2.2.tar.xz
+        sha256: 019186a996096ef4fc356e21577b5673f5baa3a29ac8e3d608b753371c18018d
+
+  - name: notation
+    buildsystem: simple
+    build-options:
+      # stripping would damage the AOT snapshot (libapp.so) and the prebuilt model runtimes
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      - mkdir -p /app/notation /app/bin
+      - cp -r bundle/. /app/notation/
+      - ln -s ../notation/notation /app/bin/notation
+      - install -Dm644 icon.svg /app/share/icons/hicolor/scalable/apps/io.github.nfa04.notation.svg
+      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/io.github.nfa04.notation.png
+      - install -Dm644 icon-256.png /app/share/icons/hicolor/256x256/apps/io.github.nfa04.notation.png
+      - install -Dm644 icon-512.png /app/share/icons/hicolor/512x512/apps/io.github.nfa04.notation.png
+      # the same desktop file as the link handler of tool/install_linux_link_handler.sh, with the command of this package
+      - mkdir -p /app/share/applications
+      - sed 's|@EXEC@|notation|' notation.desktop.in > /app/share/applications/io.github.nfa04.notation.desktop
+      - echo 'Icon=io.github.nfa04.notation' >> /app/share/applications/io.github.nfa04.notation.desktop
+    sources:
+      - type: dir
+        path: ../../build/linux/x64/release/bundle
+        dest: bundle
+      - type: file
+        path: ../notation.desktop.in
+      - type: file
+        path: ../icons/io.github.nfa04.notation.svg
+        dest-filename: icon.svg
+      - type: file
+        path: ../icons/128.png
+        dest-filename: icon-128.png
+      - type: file
+        path: ../icons/256.png
+        dest-filename: icon-256.png
+      - type: file
+        path: ../icons/512.png
+        dest-filename: icon-512.png

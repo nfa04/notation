@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+  <!-- The app finds all its files next to this page, wherever it is put (the root, /live/, ...): the base is the folder of the address
+       that was opened, whatever --base-href said at the build. -->
+  <script>
+    (function () {
+      var path = location.pathname;
+      if (!path.endsWith('/')) {
+        var last = path.substring(path.lastIndexOf('/') + 1);
+        path = last.indexOf('.') >= 0 ? path.substring(0, path.lastIndexOf('/') + 1) : path + '/'; // (/live -> /live/)
+      }
+      document.querySelector('base').href = path;
+    })();
+  </script>
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Notes, PDF annotation and live collaboration.">
+  <meta name="theme-color" content="#4285f4">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Notation">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Notation</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!-- ONNX Runtime for the models that run in the browser (handwriting, formulas, speech, the assistant); kept with the app so that
+       they work offline and nothing is fetched from elsewhere. MIT licence, see the licences in the app. -->
+  <script src="ort/ort.min.js"></script>
+  <script>
+    ort.env.wasm.wasmPaths = new URL('ort/', document.baseURI).href;
+    // Threads need shared memory, which the page only has when the server sends the headers of .htaccess (cross-origin isolation).
+    ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(2, Math.min(8, navigator.hardwareConcurrency >> 1)) : 1;
+    // The app hands the bytes of a model over under a name ('bytes:1') instead of an address to fetch them from: that is a copy of
+    // the whole model less (the plugin only takes a text). A name that is not on the shelf is an address as before.
+    // The plugin hands numbers to BigInt64Array.from for int64 tensors (the ids of tokens), which only takes BigInts.
+    const bigFrom = BigInt64Array.from.bind(BigInt64Array);
+    BigInt64Array.from = (source, ...rest) => bigFrom(Array.from(source, (x) => typeof x === 'bigint' ? x : BigInt(x)), ...rest);
+    window.__ortBytes = {};
+    const create = ort.InferenceSession.create.bind(ort.InferenceSession);
+    ort.InferenceSession.create = (source, ...rest) => create(
+        typeof source === 'string' && window.__ortBytes[source] ? window.__ortBytes[source] : source, ...rest);
+  </script>
+  <script src="pdfium_sync.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

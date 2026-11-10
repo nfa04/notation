@@ -1,0 +1,55 @@
+# Draft of the recipe for F-Droid (the file goes to gitlab.com/fdroid/fdroiddata as metadata/io.github.nfa04.notation.yml).
+# Tested with fdroidserver 2.4.5 (`fdroid build -l`, local clone of the tag): see docs/releasing.md ("F-Droid") for the reviewers' questions.
+Categories:
+  - Writing
+  - Science & Education
+License: AGPL-3.0-or-later
+AuthorName: Noel Aeby
+WebSite: https://github.com/nfa04/notation
+SourceCode: https://github.com/nfa04/notation
+IssueTracker: https://github.com/nfa04/notation/issues
+Changelog: https://github.com/nfa04/notation/releases
+
+AutoName: Notation
+
+RepoType: git
+Repo: https://github.com/nfa04/notation.git
+
+Builds:
+  - versionName: 0.0.1
+    # `flutter build apk --split-per-abi` adds 2000 for arm64-v8a (1000 armeabi-v7a, 4000 x86_64) to the versionCode of the pubspec (+1)
+    versionCode: 2001
+    commit: v0.0.1
+    # the plugins' Gradle projects are built by `flutter build`, from the pub cache that is inside the checkout
+    output: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+    srclibs:
+      - flutter@3.47.7
+    rm:
+      - ios
+      - macos
+      - linux
+      - windows
+      - web
+    prebuild:
+      # SQLite is compiled from its source (the sqlite3 package would download a prebuilt library), see tool/use_sqlite_source.sh
+      - mkdir -p third_party
+      - curl -fsSL -o third_party/sqlite.zip https://sqlite.org/2026/sqlite-amalgamation-3540000.zip
+      - echo "68e913b0fe8ec6b4e5f391c594a28872884e80d6cd042a1e50c957be46b5aa4d  third_party/sqlite.zip" | sha256sum -c -
+      - unzip -q -j third_party/sqlite.zip 'sqlite-amalgamation-3540000/sqlite3.c' -d third_party/sqlite3
+      - rm third_party/sqlite.zip
+      - tool/use_sqlite_source.sh third_party/sqlite3/sqlite3.c
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get
+    scandelete:
+      - .pub-cache
+    build:
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter build apk --release --split-per-abi --target-platform android-arm64
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+VercodeOperation:
+  - '%c + 2000'
+CurrentVersion: 0.0.1
+CurrentVersionCode: 2001

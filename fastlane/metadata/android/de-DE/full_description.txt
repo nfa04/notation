@@ -1,0 +1,24 @@
+Notation ist eine App für Notizen und PDF-Anmerkungen für alle, die von Hand schreiben, lernen und ihre Notizen für sich behalten wollen.
+
+<b>Schreiben, wie man denkt</b>
+• Stift, Textmarker und Formen mit Druckstärke, Linealen und Hilfslinien
+• Textfelder, Tabellen, Checklisten und Formeln in derselben Notiz
+• Handschrift wird zu durchsuchbarem Text, auf dem Gerät
+• PDFs beschriften; die Tinte wird mit unsichtbarer Textebene exportiert
+
+<b>Lernen</b>
+• Karteikarten mit Wiederholungsabstand, Quiz und ein Fragemodus, der aus den eigenen Notizen antwortet
+• Ein Mathe-Prüfer für handschriftliche Rechenwege: Summen, Matrizen, Ungleichungen, Logik und Statistik
+• Karteikarten nach Anki exportieren, Notizen als Markdown, PDF oder LaTeX
+
+<b>Ordnen</b>
+• Ordner, Schlagwörter, Suche, Kalender mit Aufgaben und Erinnerungen
+• Ein Graph der Fakten, die deine Notizen enthalten
+
+<b>Privat von Grund auf</b>
+• Kein Konto, keine Werbung, keine Analyse
+• KI-Funktionen laufen standardmäßig auf dem Gerät
+• Optionale Zusammenarbeit in Echtzeit und Sync (Nextcloud, Dropbox, OneDrive, S3, CalDAV), Ende-zu-Ende-verschlüsselt
+• Notizen mit Code oder Biometrie sperren
+
+Freie Software unter der AGPL-3.0.

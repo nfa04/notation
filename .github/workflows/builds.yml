@@ -1,0 +1,349 @@
+name: Builds
+
+# Release builds of every platform. Answers "does it still build" and leaves the result as a download
+# (run page -> Artifacts). Nothing is signed with a real key and nothing is published.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - lib/**
+      - assets/**
+      - pdf_overlay/**
+      - ios/**
+      - macos/**
+      - windows/**
+      - android/**
+      - linux/**
+      - web/**
+      - pubspec.yaml
+      - pubspec.lock
+      - .github/workflows/builds.yml
+  pull_request:
+    paths: *paths
+  # run it by hand from the Actions tab on any branch
+  workflow_dispatch:
+  # release.yml builds the same things for a version tag, and publishes them
+  workflow_call:
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+      MACOS_CERTIFICATE_BASE64:
+        required: false
+      MACOS_CERTIFICATE_PASSWORD:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      APPLE_APP_SPECIFIC_PASSWORD:
+        required: false
+
+# one run per branch. A newer push cancels the run before it on a pull request, but not on main: the Android build takes
+# a quarter of an hour, so a push during it would cancel it every time (the newer run then waits for the older to finish).
+concurrency:
+  group: builds-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FLUTTER_VERSION: 3.47.7 # keep in step with ci.yml
+  # The downloads count against the storage of the account (2 GB on Pro) until they expire, so keep them short.
+  # Pull requests only build, they upload nothing.
+  RETENTION_DAYS: 3
+
+jobs:
+  apple:
+    name: ${{ matrix.platform }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false # a broken iOS build should not hide the macOS result
+      matrix:
+        include:
+          - platform: ios
+            # no signing identity or provisioning profile on the runner
+            command: flutter build ios --release --no-codesign
+          - platform: macos
+            command: flutter build macos --release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Xcode in use
+        run: xcodebuild -version
+      - run: flutter pub get
+      # the plugins' pods are resolved on the first build, so cache them by lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cocoapods
+          key: pods-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pods-${{ runner.os }}-
+      - run: ${{ matrix.command }}
+      # an .ipa is a zip with Payload/<app>.app in it; this one is unsigned, so it has to be re-signed (AltStore, Sideloadly, Xcode) to run
+      - name: Pack the unsigned .ipa
+        if: matrix.platform == 'ios'
+        run: |
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry notation-ios-unsigned.ipa Payload
+      # Signs the app with a "Developer ID Application" certificate and has Apple notarize it, so that it opens with a double-click.
+      # Does nothing without the five secrets of docs/releasing.md (then the app stays unsigned and users take the steps of docs/install.md).
+      - name: Sign and notarize the macOS app
+        if: matrix.platform == 'macos'
+        env:
+          CERT_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          if [ -z "$CERT_BASE64" ] || [ -z "$APPLE_ID" ] || [ -z "$TEAM_ID" ] || [ -z "$APP_PASSWORD" ]; then
+            echo "No Apple secrets: the macOS app stays unsigned."
+            exit 0
+          fi
+          APP=build/macos/Build/Products/Release/Notation.app
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$CERT_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+          [ -n "$IDENTITY" ] || { echo "no Developer ID Application certificate in the .p12"; exit 1; }
+          # inside out: libraries, frameworks and helpers first (deepest paths first), the app itself last with its entitlements
+          find "$APP/Contents" \( -name '*.dylib' -o -name '*.so' -o -name '*.framework' -o -name '*.xpc' -o -name '*.app' \) -print0 \
+            | xargs -0 -n1 sh -c 'echo "${#0} $0"' | sort -rn | cut -d' ' -f2- \
+            | while IFS= read -r item; do codesign --force --timestamp --options runtime --sign "$IDENTITY" "$item"; done
+          codesign --force --timestamp --options runtime --entitlements macos/Runner/Release.entitlements --sign "$IDENTITY" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_PASSWORD" --wait
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
+      # ditto keeps the symlinks and permissions inside the frameworks, which a plain zip of the artifact would lose
+      - name: Pack the macOS app
+        if: matrix.platform == 'macos'
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/Notation.app notation-macos.zip
+      # the disk image: the app next to an Applications shortcut, to drag it over. Signed and notarized too when the Apple secrets exist.
+      - name: Make the macOS disk image
+        if: matrix.platform == 'macos'
+        env:
+          CERT_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/dmg"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          ditto build/macos/Build/Products/Release/Notation.app "$STAGE/Notation.app"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "Notation" -srcfolder "$STAGE" -ov -format UDZO notation-macos.dmg
+          if [ -n "${CERT_BASE64:-}" ] && [ -n "${APPLE_ID:-}" ] && [ -n "${TEAM_ID:-}" ] && [ -n "${APP_PASSWORD:-}" ]; then
+            KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+            IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+            codesign --force --timestamp --sign "$IDENTITY" notation-macos.dmg
+            xcrun notarytool submit notation-macos.dmg --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_PASSWORD" --wait
+            xcrun stapler staple notation-macos.dmg
+          fi
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: notation-${{ matrix.platform }}
+          path: |
+            notation-ios-unsigned.ipa
+            notation-macos.zip
+            notation-macos.dmg
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+          compression-level: 0 # the files are compressed already
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # --no-web-resources-cdn: CanvasKit and the fonts come from the build itself, not from gstatic.com
+      # (blocked or offline, the page would stay white)
+      # --base-href /live/: the build is served from the "live" folder of the website
+      - run: flutter build web --release --no-web-resources-cdn --no-wasm-dry-run --base-href /live/
+      - name: Check that the files the page needs are in the build
+        run: |
+          for f in index.html main.dart.js canvaskit/canvaskit.wasm sqlite3.wasm sqflite_sw.js pdfium_sync.js ort .htaccess; do
+            test -e "build/web/$f" || { echo "missing build/web/$f"; exit 1; }
+          done
+      - run: tar -czf notation-web.tar.gz -C build/web .
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: web-build
+          path: notation-web.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+          compression-level: 0
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      # the installer (Start-menu entry, uninstaller, notation:// links, Visual C++ runtime if missing); the folder stays as the portable version
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          Invoke-WebRequest https://aka.ms/vs/17/release/vc_redist.x64.exe -OutFile windows/installer/vc_redist.x64.exe
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$PWD\build\windows\x64\runner\Release" "/DOutDir=$PWD\installer-out" "/DRedist=vc_redist.x64.exe" windows/installer/notation.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: notation-windows-setup
+          path: installer-out/Notation-windows-x64-setup.exe
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+          compression-level: 0
+      # the whole folder (notation.exe, the DLLs and data/) has to stay together; it needs the Visual C++ runtime that most PCs have
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: notation-windows-x64
+          path: build/windows/x64/runner/Release
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      # A free runner of a private repository has 2 cores, 7 GB of memory and 14 GB of disk. The build of a laptop takes 2 minutes and
+      # 6 GB for Gradle; here the disk filled up ("No space left on device", in the debug build of ci.yml) and the runner was stopped
+      # after 18 minutes ("cancelled", with nobody cancelling it). The action frees the disk, adds swap and limits Gradle's memory.
+      - uses: ./.github/actions/android-room
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # The upload key comes from the repository secrets (see docs/releasing.md); without them the build is signed with the debug key.
+      - name: Android signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+            printf 'storeFile=upload-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
+          else
+            echo "No signing secrets: the APK is signed with the debug key."
+          fi
+      # without android/key.properties the release build is signed with the debug key: it installs, but it cannot go to a store.
+      # arm64 only: that is every current phone (an emulator on a PC would need an x64 build too). --split-per-abi is what leaves
+      # the other ABIs' libraries of the plugins out of the APK: without it the APK is 182 MB instead of 96 MB.
+      # The loop writes the memory and disk use into the log every minute, so a failure shows what it ran out of.
+      - name: Build the APKs
+        run: |
+          ( while sleep 60; do echo "[monitor] $(date +%T) memory available: $(free -m | awk '/Mem/{print $7}') MB, swap used: $(free -m | awk '/Swap/{print $3}') MB, disk free: $(df -h --output=avail / | tail -1 | tr -d ' ')"; done ) &
+          monitor=$!
+          trap 'kill $monitor' EXIT
+          flutter build apk --release --split-per-abi --target-platform android-arm64
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: notation-android
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+          compression-level: 0
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Linux build tools and libraries of the plugins
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev liblzma-dev
+      - run: flutter pub get
+      - run: flutter build linux --release
+      # a tarball, because an artifact would lose the executable bit; the flatpak job unpacks it
+      - run: tar -czf notation-linux-x64.tar.gz -C build/linux/x64/release bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: notation-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  flatpak:
+    needs: linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-bundle
+      # linux/flatpak/*.yml packages build/linux/x64/release/bundle
+      - run: |
+          mkdir -p build/linux/x64/release
+          tar -xzf notation-linux-x64.tar.gz -C build/linux/x64/release
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: linux/flatpak/io.github.nfa04.notation.yml
+          bundle: notation.flatpak
+          upload-artifact: false
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: notation-linux-flatpak
+          path: notation.flatpak
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+          compression-level: 0

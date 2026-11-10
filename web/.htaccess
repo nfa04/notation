@@ -1,0 +1,23 @@
+# Apache settings for the web version of the app (copied into build/web by `flutter build web`).
+# Needs mod_headers and mod_mime; AllowOverride must allow FileInfo (and Options is not needed).
+
+# Cross-origin isolation: without these two headers the browser gives the page no SharedArrayBuffer, and the models (ONNX
+# Runtime) run on one thread. "credentialless" keeps pictures and fonts of other sites working; Safari does not know it
+# (it runs single-threaded there; "require-corp" would make it work, but then every other site's resources need a CORP header).
+# Check in the browser's console: `crossOriginIsolated` must be true.
+<IfModule mod_headers.c>
+  Header always set Cross-Origin-Opener-Policy "same-origin"
+  Header always set Cross-Origin-Embedder-Policy "credentialless"
+</IfModule>
+
+# Types some servers do not know: a module script with another type is refused by the browser, and a .wasm file needs its own for
+# the streaming compile.
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType text/javascript .js .mjs
+</IfModule>
+
+# The big files compress well and are fetched once (the app keeps what it needs in the browser).
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE application/wasm application/javascript text/javascript application/json
+</IfModule>
