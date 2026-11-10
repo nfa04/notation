@@ -2,9 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'brush_effects.dart';
 import 'canvas_models.dart';
 import 'outline.dart';
 
+export 'brush_effects.dart';
 export 'outline.dart';
 
 /// The id of the brush every line had before there were brushes: the pressure-sensitive pen.
@@ -31,7 +33,26 @@ class BrushShape {
   /// Whether the line is drawn so that it darkens what it lies on, as a marker does (a multiply blend): where lines cross, or a line
   /// crosses itself in two layers, the colours multiply. The PDF export says the same.
   final bool multiply;
-  const BrushShape(this.outline, {this.filled = false, this.opacity = 1, this.layers = const [], this.soft, this.multiply = false});
+
+  /// What is drawn first, behind the shape: a shadow, a glow, an outline (each with its own opacity and colour, as the [layers]).
+  final List<BrushLayer> under;
+
+  /// Another shape drawn over this one, for the same line (a brush that mixes two). Null for most.
+  final BrushShape? next;
+
+  /// The line this shape is made for, if that is not the line that is being drawn: the line a mixed brush gives its second part (the
+  /// same points, another thickness). Null: the line itself.
+  final DrawingStroke? line;
+  const BrushShape(this.outline,
+      {this.filled = false, this.opacity = 1, this.layers = const [], this.soft, this.multiply = false, this.under = const [], this.next, this.line});
+
+  /// This shape with [next] drawn over it.
+  BrushShape withNext(BrushShape next) =>
+      BrushShape(outline, filled: filled, opacity: opacity, layers: layers, soft: soft, multiply: multiply, under: under, next: next, line: line);
+
+  /// This shape, made for [line] (see [line]).
+  BrushShape forLine(DrawingStroke line) =>
+      BrushShape(outline, filled: filled, opacity: opacity, layers: layers, soft: soft, multiply: multiply, under: under, next: next, line: line);
 
   Path get path => outline.path;
 }
@@ -45,19 +66,57 @@ class BrushLayer {
   /// lightness (0: the colour as it is), and how many degrees round the colour wheel its hue is turned. Brushes that vary their
   /// colour along a line draw the pieces of it as layers of their own.
   final double lightness, hue;
-  const BrushLayer(this.outline, this.opacity, {this.lightness = 0, this.hue = 0});
+
+  /// Whether a colour with no hue (black, grey, white) is made a colour that has one before it is turned: a rainbow on a black pen.
+  final bool vivid;
+  const BrushLayer(this.outline, this.opacity, {this.lightness = 0, this.hue = 0, this.vivid = false});
+
+  /// Whether the layer is drawn in a colour of its own (and not the colour of the line).
+  bool get tinted => lightness != 0 || hue != 0 || vivid;
 
   /// [base] as this layer is drawn.
-  Color colorOf(Color base) => tintedColor(base, lightness, hue);
+  Color colorOf(Color base) => tintedColor(base, lightness, hue, vivid: vivid);
 
   Path get path => outline.path;
 }
 
 /// [base] made lighter or darker by [lightness] (from -1 to 1, of the whole range) and its hue turned by [hue] degrees; the opacity is kept.
-Color tintedColor(Color base, double lightness, double hue) {
-  if (lightness == 0 && hue == 0) return base;
-  final hsl = HSLColor.fromColor(base);
+///
+/// With [vivid], a colour that has hardly any saturation (black, grey, white, so that turning its hue shows nothing) first becomes a
+/// mid-light colour with saturation, so that the turn can be seen.
+Color tintedColor(Color base, double lightness, double hue, {bool vivid = false}) {
+  if (lightness == 0 && hue == 0 && !vivid) return base;
+  var hsl = HSLColor.fromColor(base);
+  if (vivid && hsl.saturation < 0.2) hsl = hsl.withSaturation(0.8).withLightness(hsl.lightness.clamp(0.35, 0.6));
   return hsl.withLightness((hsl.lightness + lightness).clamp(0.0, 1.0)).withHue((hsl.hue + hue) % 360).toColor();
+}
+
+/// The layers drawn behind a line for its [LineEffects]: a glow, a shadow, an outline, the furthest first. [make] gives the shape of the
+/// line made [grow] thicker on every side and moved by [shift].
+List<BrushLayer> behindLayers(LineEffects fx, double width, Outline Function(double grow, Offset shift) make) {
+  final out = <BrushLayer>[];
+  if (fx.glow > 0) {
+    const opacities = [0.16, 0.22, 0.3];
+    for (var j = 0; j < opacities.length; j++) {
+      out.add(BrushLayer(make(width * fx.glow * 0.9 * (3 - j) / 3, Offset.zero), opacities[j], hue: fx.glowHue, vivid: fx.glowHue != 0));
+    }
+  }
+  if (fx.shadow > 0) {
+    final shift = const Offset(0.6, 0.8) * (fx.shadowDistance * width);
+    if (fx.shadowBlur <= 0) {
+      out.add(BrushLayer(make(0, shift), fx.shadow, lightness: -1));
+    } else {
+      const opacities = [0.18, 0.22, 0.3, 0.45];
+      for (var j = 0; j < opacities.length; j++) {
+        out.add(BrushLayer(make(width * 0.6 * fx.shadowBlur * (3 - j) / 3, shift), fx.shadow * opacities[j], lightness: -1));
+      }
+    }
+  }
+  if (fx.outline > 0) {
+    final tone = fx.outlineTone.round();
+    out.add(BrushLayer(make(width * fx.outline * 0.5, Offset.zero), 1, lightness: tone == 0 ? -1 : (tone == 1 ? 1 : 0), hue: tone == 2 ? 180 : 0, vivid: tone == 2));
+  }
+  return out;
 }
 
 /// What a brush draws with blurred edges: [blurred] are filled paths each drawn with a gaussian blur of [blur] (its standard
@@ -379,6 +438,18 @@ class BrushParams {
   /// Whether the line darkens what it lies on (see [BrushShape.multiply]).
   final bool multiply;
 
+  /// The thickness the pen's pressure gives, as a curve: five points from the lightest touch to the hardest press, each how thick the
+  /// line is there compared to the width that is set. Null: [pressure] and [pressureCurve] say it. The same for the speed of the hand
+  /// (from standing still to twice the usual speed), instead of [speedThin].
+  final List<double>? pressurePoints, speedPoints;
+
+  /// How much the points of a line are averaged with their neighbours, so that a shaky hand draws a steadier line (0: not at all).
+  final double stabilise;
+
+  /// How the colour changes along the line, and what is drawn round it.
+  final ColourFlow flow;
+  final LineEffects effects;
+
   const BrushParams({
     this.width = 1,
     this.pressure = 0,
@@ -396,6 +467,11 @@ class BrushParams {
     this.lightness = 0,
     this.hue = 0,
     this.multiply = false,
+    this.pressurePoints,
+    this.speedPoints,
+    this.stabilise = 0,
+    this.flow = ColourFlow.none,
+    this.effects = LineEffects.none,
   });
 
   @override
@@ -416,10 +492,18 @@ class BrushParams {
       other.waver == waver &&
       other.lightness == lightness &&
       other.hue == hue &&
-      other.multiply == multiply;
+      other.multiply == multiply &&
+      sameCurve(other.pressurePoints, pressurePoints) &&
+      sameCurve(other.speedPoints, speedPoints) &&
+      other.stabilise == stabilise &&
+      other.flow == flow &&
+      other.effects == effects;
 
   @override
-  int get hashCode => Object.hash(width, pressure, smoothing, taper, opacity, jitter, nibAngle, nibFlatness, pressureCurve, speedThin, startTaper, endTaper, waver, lightness, hue, multiply);
+  int get hashCode => Object.hashAll([
+        width, pressure, smoothing, taper, opacity, jitter, nibAngle, nibFlatness, pressureCurve, speedThin, startTaper, endTaper, waver, lightness, hue, multiply,
+        Object.hashAll(pressurePoints ?? const []), Object.hashAll(speedPoints ?? const []), stabilise, flow, effects, //
+      ]);
 }
 
 /// A brush made of [BrushParams]: it draws a filled outline, so that the thickness can follow the pressure, the ends, the
@@ -439,7 +523,7 @@ class ParamBrush extends Brush {
   double get widthScale => params.width;
 
   @override
-  bool get usesPressure => params.pressure > 0;
+  bool get usesPressure => params.pressure > 0 || params.pressurePoints != null || params.flow.pressureShade != 0;
 
   @override
   bool operator ==(Object other) => other is ParamBrush && other.id == id && other.label == label && other.params == params;
@@ -455,8 +539,11 @@ class ParamBrush extends Brush {
     var pts = stroke.points;
     if (pts.isEmpty) return null;
     final given = stroke.pressures;
-    List<double>? pr = params.pressure > 0 && given != null && given.length == pts.length ? [for (final v in given) v / 255] : null;
+    final curve = params.pressurePoints;
+    final wantsPressure = params.pressure > 0 || curve != null || params.flow.pressureShade != 0;
+    List<double>? pr = wantsPressure && given != null && given.length == pts.length ? [for (final v in given) v / 255] : null;
 
+    if (params.stabilise > 0 && pts.length >= 3) pts = _steadied(pts, params.stabilise);
     final rounds = params.smoothing <= 0 ? 0 : (params.smoothing < 0.5 ? 1 : 2);
     for (var r = 0; r < rounds && pts.length >= 3 && pts.length <= _smoothest; r++) {
       final (p2, q2) = _chaikin(pts, pr);
@@ -477,8 +564,9 @@ class ParamBrush extends Brush {
     final startLength = math.min((params.startTaper ?? params.taper) * 30, total / 2);
     final endLength = math.min((params.endTaper ?? params.taper) * 30, total / 2);
     // (the speed: how far apart the points are, against how far apart they are on the whole, over a few points)
+    final speedCurve = params.speedPoints;
     List<double>? speed;
-    if (params.speedThin > 0 && n > 2 && total > 0) {
+    if ((params.speedThin > 0 || speedCurve != null || params.flow.speedShade != 0) && n > 2 && total > 0) {
       final gap = [for (var i = 0; i < n; i++) i == 0 ? along[1] : along[i] - along[i - 1]];
       final mean = total / (n - 1);
       speed = [
@@ -496,7 +584,11 @@ class ParamBrush extends Brush {
     final knots = params.waver > 0 ? <double>[for (var i = 0; i <= total ~/ 14 + 1; i++) _noise(seed, 5000011 + i) - 0.5] : const <double>[];
     final factor = List<double>.filled(n, 1);
     for (var i = 0; i < n; i++) {
-      var f = pr == null ? 1.0 : pressureFactor(params.pressureCurve == 1 ? pr[i] : math.pow(pr[i], params.pressureCurve).toDouble(), params.pressure);
+      var f = pr == null || (curve == null && params.pressure <= 0)
+          ? 1.0
+          : curve != null
+              ? curveValue(curve, pr[i])
+              : pressureFactor(params.pressureCurve == 1 ? pr[i] : math.pow(pr[i], params.pressureCurve).toDouble(), params.pressure);
       if (eachEnd) {
         var ends = 1.0;
         if (startLength > 0) ends = math.min(ends, (along[i] / startLength).clamp(0.0, 1.0));
@@ -507,7 +599,13 @@ class ParamBrush extends Brush {
         f *= 0.12 + 0.88 * (edge / taperLength).clamp(0.0, 1.0);
       }
       if (params.jitter > 0) f *= 1 + params.jitter * (_noise(seed, i) - 0.5) * 0.9;
-      if (speed != null) f *= (1 - params.speedThin * 0.35 * (speed[i] - 1).clamp(-1.0, 2.0)).clamp(0.3, 1.6);
+      if (speed != null) {
+        if (speedCurve != null) {
+          f *= curveValue(speedCurve, speed[i] / 2);
+        } else if (params.speedThin > 0) {
+          f *= (1 - params.speedThin * 0.35 * (speed[i] - 1).clamp(-1.0, 2.0)).clamp(0.3, 1.6);
+        }
+      }
       if (knots.isNotEmpty) {
         final at = along[i] / 14, j = at.floor();
         f *= 1 + params.waver * 0.9 * (knots[j] + (knots[j + 1] - knots[j]) * (at - j));
@@ -517,30 +615,243 @@ class ParamBrush extends Brush {
 
     final width = stroke.width;
     final nib = params.nibAngle;
-    Outline outlineOf(List<Offset> p, List<double> fs) =>
-        nib == null ? ribbonOutline(p, [for (final f in fs) width * f / 2]) : _nibOutline(p, fs, width, nib * math.pi / 180, params.nibFlatness);
-
-    // a colour that varies: the line is cut into pieces about as long as it is thick, each drawn in one of five colours near the line's
-    if ((params.lightness > 0 || params.hue > 0) && n >= 2 && total > 0) {
-      final pieceLength = math.max(6.0, width * 1.5);
-      final byTint = List.generate(5, (_) => Outline());
-      var from = 0;
-      while (from < n - 1) {
-        final piece = (along[from] / pieceLength).floor();
-        var to = from + 1;
-        while (to < n - 1 && (along[to] / pieceLength).floor() == piece) {
-          to++;
-        }
-        final tint = (_noise(seed, 9100000 + piece) * 5).floor().clamp(0, 4);
-        byTint[tint].addOutline(outlineOf(pts.sublist(from, to + 1), factor.sublist(from, to + 1)));
-        from = to;
-      }
-      return BrushShape(byTint[2], filled: true, opacity: params.opacity, multiply: params.multiply, layers: [
-        for (var t = 0; t < 5; t++)
-          if (t != 2 && byTint[t].pieces.isNotEmpty) BrushLayer(byTint[t], params.opacity, lightness: (t - 2) / 2 * params.lightness * 0.3, hue: (t - 2) / 2 * params.hue),
-      ]);
+    // (the shape of a part of the line; [grow] makes it that much thicker on each side)
+    Outline outlineOf(List<Offset> p, List<double> fs, [double grow = 0, bool roundStart = true, bool roundEnd = true]) {
+      if (nib != null) return _nibOutline(p, fs, width, nib * math.pi / 180, params.nibFlatness, grow);
+      final half = [for (final f in fs) width * f / 2 + grow];
+      return roundStart && roundEnd ? ribbonOutline(p, half) : _cutRibbon(p, half, roundStart, roundEnd);
     }
-    return BrushShape(outlineOf(pts, factor), filled: true, opacity: params.opacity, multiply: params.multiply);
+
+    final fx = params.effects;
+    final runs = fx.dash > 0 && n >= 2 && total > 0 ? _dashRuns(pts, factor, along, total, width, fx) : [(pts: pts, factor: factor, along: along)];
+    Outline whole([double grow = 0, Offset shift = Offset.zero]) {
+      if (runs.length == 1 && grow == 0 && shift == Offset.zero) return outlineOf(runs.first.pts, runs.first.factor);
+      final out = Outline();
+      for (final r in runs) {
+        out.addOutline(outlineOf(shift == Offset.zero ? r.pts : [for (final q in r.pts) q + shift], r.factor, grow));
+      }
+      return out;
+    }
+
+    final under = fx.hasBehind ? behindLayers(fx, width, (grow, shift) => whole(grow, shift)) : const <BrushLayer>[];
+    final randomTint = params.lightness > 0 || params.hue > 0;
+    final flow = params.flow;
+
+    // a colour that varies: the line is cut into pieces about as long as it is thick, each drawn in one of the colours near the line's
+    if ((randomTint || flow.active) && n >= 2 && total > 0) {
+      final pieceLength = math.max(6.0, width * 1.5);
+      (double, double, double) tintOf(int piece, double mid) {
+        var l = 0.0, h = 0.0, o = 1.0;
+        if (randomTint) {
+          final bucket = (_noise(seed, 9100000 + piece) * 5).floor().clamp(0, 4);
+          l = (bucket - 2) / 2 * params.lightness * 0.3;
+          h = (bucket - 2) / 2 * params.hue;
+        }
+        if (flow.active) {
+          final t = (mid / total).clamp(0.0, 1.0);
+          if (flow.gradientHue != 0 || flow.gradientLight != 0) {
+            final q = (t * 8).floor().clamp(0, 7) / 7;
+            h += flow.gradientHue * q;
+            l += flow.gradientLight * q;
+          }
+          if (flow.rainbow > 0) h += (((mid / (flow.rainbow * width)) % 1.0) * 12).floor() * 30.0;
+          if (flow.fade != 0) {
+            final q = (t * 6).floor().clamp(0, 5) / 5;
+            o *= flow.fade > 0 ? 1 - flow.fade * q : 1 + flow.fade * (1 - q);
+          }
+          if (flow.pressureShade != 0 && pr != null) {
+            final x = ((_valueAt(pr, along, mid) * 5).floor().clamp(0, 4) + 0.5) / 5;
+            l += flow.pressureShade * (x - 0.5) * 0.8;
+          }
+          if (flow.speedShade != 0 && speed != null) {
+            final x = (((_valueAt(speed, along, mid) / 2).clamp(0.0, 1.0) * 5).floor().clamp(0, 4) + 0.5) / 5;
+            l += flow.speedShade * (x - 0.5) * 0.8;
+          }
+          l = (l * 1000).round() / 1000;
+          h = (h * 1000).round() / 1000;
+          o = (o.clamp(0.05, 1.0) * 1000).round() / 1000;
+        }
+        return (l, h, o);
+      }
+
+      final groups = <(double, double, double), Outline>{};
+      for (final r in runs) {
+        final m = r.pts.length;
+        var from = 0;
+        while (from < m - 1) {
+          final piece = (r.along[from] / pieceLength).floor();
+          var to = from + 1;
+          while (to < m - 1 && (r.along[to] / pieceLength).floor() == piece) {
+            to++;
+          }
+          // (pieces of different colours are put end to end: cut straight across, so that none lies over the next, with the corner between them filled)
+          final here = groups[tintOf(piece, (r.along[from] + r.along[to]) / 2)] ??= Outline();
+          here.addOutline(outlineOf(r.pts.sublist(from, to + 1), r.factor.sublist(from, to + 1), 0, from == 0, to == m - 1));
+          from = to;
+        }
+      }
+      final shades = _fewShades(groups);
+      // (a rainbow on a black pen has no colour to turn: every part is a colour of its own, so there is no line's own colour left)
+      final vivid = flow.turnsHue;
+      Outline? base;
+      final layers = <BrushLayer>[];
+      for (final key in shades) {
+        final (l, h, o) = key;
+        if (!vivid && l == 0 && h == 0 && o == 1) {
+          base = groups[key];
+        } else {
+          layers.add(BrushLayer(groups[key]!, params.opacity * o, lightness: l, hue: h, vivid: vivid));
+        }
+      }
+      return BrushShape(base ?? Outline(), filled: true, opacity: params.opacity, multiply: params.multiply, layers: layers, under: under);
+    }
+    return BrushShape(whole(), filled: true, opacity: params.opacity, multiply: params.multiply, under: under);
+  }
+
+  /// A ribbon like [ribbonOutline] but with joints that are not round (a corner is cut off flat) and, where [roundStart] or [roundEnd]
+  /// is false, an end cut straight across the line. Pieces of different colours put end to end then do not lie over each other.
+  /// Quads for the segments and two triangles at each joint (one of them lies inside the quads), all wound as the rest of an outline.
+  static Outline _cutRibbon(List<Offset> pts, List<double> half, bool roundStart, bool roundEnd) {
+    final out = Outline();
+    final n = pts.length;
+    Offset? before;
+    for (var i = 0; i < n - 1; i++) {
+      final d = pts[i + 1] - pts[i];
+      final len = d.distance;
+      if (len < 1e-6) continue;
+      final normal = Offset(-d.dy / len, d.dx / len);
+      final a = pts[i], b = pts[i + 1];
+      out.addPolygon([a - normal * half[i], b - normal * half[i + 1], b + normal * half[i + 1], a + normal * half[i]]);
+      if (before != null) {
+        final previous = before;
+        final l1 = previous.distance;
+        final n1 = Offset(-previous.dy / l1, previous.dx / l1);
+        for (final side in const [-1.0, 1.0]) {
+          final p1 = a + n1 * (half[i] * side), p2 = a + normal * (half[i] * side);
+          if ((p1 - p2).distance < 0.05) continue;
+          final area = a.dx * p1.dy - p1.dx * a.dy + p1.dx * p2.dy - p2.dx * p1.dy + p2.dx * a.dy - a.dx * p2.dy;
+          out.addPolygon(area >= 0 ? [a, p1, p2] : [a, p2, p1]);
+        }
+      }
+      before = d;
+    }
+    if (roundStart) out.addOval(Rect.fromCircle(center: pts.first, radius: half.first));
+    if (roundEnd) out.addOval(Rect.fromCircle(center: pts.last, radius: half.last));
+    return out;
+  }
+
+  /// The most layers a line of changing colour is drawn in.
+  static const _mostShades = 40;
+
+  /// The keys of [groups] from the darkest to the lightest; if there are more than [_mostShades] of them, nearly equal ones are put
+  /// together (the outlines of [groups] are added up under the first of each).
+  static List<(double, double, double)> _fewShades(Map<(double, double, double), Outline> groups) {
+    int order((double, double, double) a, (double, double, double) b) {
+      final c = a.$1.compareTo(b.$1);
+      if (c != 0) return c;
+      final d = a.$2.compareTo(b.$2);
+      return d != 0 ? d : a.$3.compareTo(b.$3);
+    }
+
+    var step = 1.0;
+    while (groups.length > _mostShades && step < 64) {
+      step *= 2;
+      final merged = <(double, double, double), Outline>{};
+      for (final e in groups.entries) {
+        double snap(double v, double unit) => (v / (unit * step)).round() * unit * step;
+        // (how see-through a part is is kept finer than the colours: it has the smaller range)
+        final opacity = (e.key.$3 / math.min(0.05 * step, 0.25)).round() * math.min(0.05 * step, 0.25);
+        (merged[(snap(e.key.$1, 0.02), snap(e.key.$2, 4), opacity.clamp(0.05, 1.0).toDouble())] ??= Outline()).addOutline(e.value);
+      }
+      groups
+        ..clear()
+        ..addAll(merged);
+    }
+    return groups.keys.toList()..sort(order);
+  }
+
+  /// [values] (one for each of the points whose distances along the line are [along]) at the distance [at].
+  static double _valueAt(List<double> values, List<double> along, double at) {
+    var lo = 0, hi = along.length - 1;
+    while (hi - lo > 1) {
+      final mid = (lo + hi) ~/ 2;
+      if (along[mid] <= at) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    final span = along[hi] - along[lo];
+    final t = span <= 0 ? 0.0 : ((at - along[lo]) / span).clamp(0.0, 1.0);
+    return values[lo] + (values[hi] - values[lo]) * t;
+  }
+
+  /// The line cut into dashes (or dots): each a run of points, with the thickness and the distance along the line at each, and a point
+  /// exactly where the dash begins and ends. A dash is [LineEffects.dash] widths long as it looks (the round ends of the line included).
+  static List<({List<Offset> pts, List<double> factor, List<double> along})> _dashRuns(
+      List<Offset> pts, List<double> factor, List<double> along, double total, double width, LineEffects fx) {
+    final n = pts.length;
+    final visible = math.max(fx.dash, 1.0) * width;
+    var centres = visible - width;
+    final period = math.max(visible + fx.dashGap * width, 0.5);
+    // (a very long line gets its dashes further apart rather than a thousand more)
+    final step = math.max(period, total / 3000);
+    centres *= step / period;
+    int segmentOf(double at, int from) {
+      var k = from;
+      while (k < n - 2 && along[k + 1] <= at) {
+        k++;
+      }
+      return k;
+    }
+
+    ({Offset p, double f}) at(int seg, double a) {
+      final a0 = along[seg], a1 = along[seg + 1];
+      final t = a1 > a0 ? ((a - a0) / (a1 - a0)).clamp(0.0, 1.0) : 0.0;
+      return (p: Offset.lerp(pts[seg], pts[seg + 1], t)!, f: factor[seg] + (factor[seg + 1] - factor[seg]) * t);
+    }
+
+    final runs = <({List<Offset> pts, List<double> factor, List<double> along})>[];
+    var seg = 0;
+    for (var s = 0.0; s <= total; s += step) {
+      final e = math.min(s + centres, total);
+      seg = segmentOf(s, seg);
+      final first = at(seg, s);
+      final p = [first.p], f = [first.f], a = [s];
+      var k = seg + 1;
+      while (k < n && along[k] < e) {
+        p.add(pts[k]);
+        f.add(factor[k]);
+        a.add(along[k]);
+        k++;
+      }
+      final last = at(math.min(k - 1, n - 2), e);
+      p.add(last.p);
+      f.add(last.f);
+      a.add(e);
+      runs.add((pts: p, factor: f, along: a));
+    }
+    return runs;
+  }
+
+  /// [pts] with each point replaced by the average of itself and the [amount] of neighbours on both sides (the ends stay where they are).
+  static List<Offset> _steadied(List<Offset> pts, double amount) {
+    final reach = (amount * 6).ceil().clamp(1, 6);
+    final n = pts.length;
+    return [
+      for (var i = 0; i < n; i++)
+        if (i == 0 || i == n - 1)
+          pts[i]
+        else
+          () {
+            final r = math.min(reach, math.min(i, n - 1 - i));
+            var sum = Offset.zero;
+            for (var j = i - r; j <= i + r; j++) {
+              sum += pts[j];
+            }
+            return sum / (2 * r + 1).toDouble();
+          }(),
+    ];
   }
 
   static (List<Offset>, List<double>?) _chaikin(List<Offset> pts, List<double>? pr) {
@@ -563,9 +874,9 @@ class ParamBrush extends Brush {
   }
 
   /// The swept shape of a flat nib: for every segment the convex hull of the nib at both of its ends. All pieces wind the same way.
-  static Outline _nibOutline(List<Offset> pts, List<double> factor, double width, double angle, double flatness) {
+  static Outline _nibOutline(List<Offset> pts, List<double> factor, double width, double angle, double flatness, [double grow = 0]) {
     final c = math.cos(angle), s = math.sin(angle);
-    final hw = width / 2, ht = math.max(0.3, width * flatness / 2);
+    final hw = width / 2 + grow, ht = math.max(0.3, width * flatness / 2) + grow;
     List<Offset> stamp(Offset at, double f) => [
           for (final (x, y) in [(-hw, -ht), (hw, -ht), (hw, ht), (-hw, ht)]) at + Offset((x * c - y * s) * f, (x * s + y * c) * f),
         ];
@@ -863,6 +1174,11 @@ class StampParams {
   final double lightness, hue;
   final bool multiply;
 
+  /// How the colour changes along the line (only the gradient, the rainbow and the fade count) and what is drawn behind the dabs
+  /// (a shadow, a glow, an outline).
+  final ColourFlow flow;
+  final LineEffects effects;
+
   const StampParams({
     this.spacing = 0.35,
     this.scatter = 0,
@@ -877,6 +1193,8 @@ class StampParams {
     this.lightness = 0,
     this.hue = 0,
     this.multiply = false,
+    this.flow = ColourFlow.none,
+    this.effects = LineEffects.none,
   });
 
   @override
@@ -894,10 +1212,12 @@ class StampParams {
       other.opacity == opacity &&
       other.lightness == lightness &&
       other.hue == hue &&
-      other.multiply == multiply;
+      other.multiply == multiply &&
+      other.flow == flow &&
+      other.effects == effects;
 
   @override
-  int get hashCode => Object.hash(spacing, scatter, sizeJitter, pressure, shape, squash, angle, angleJitter, follow, opacity, lightness, hue, multiply);
+  int get hashCode => Object.hash(spacing, scatter, sizeJitter, pressure, shape, squash, angle, angleJitter, follow, opacity, lightness, hue, multiply, flow, effects);
 }
 
 /// A brush that stamps the same small shape again and again along the line (dots, squares, stars, leaves), each a little different
@@ -959,8 +1279,8 @@ class StampBrush extends Brush {
     final seed = ParamBrush._fnv(stroke.id);
     final size = stroke.width;
     final corners = _corners(params.shape);
-    final tinted = params.lightness > 0 || params.hue > 0;
-    final byTint = List.generate(tinted ? 5 : 1, (_) => Outline());
+    final randomTint = params.lightness > 0 || params.hue > 0;
+    final flow = params.flow;
 
     var total = 0.0;
     for (var i = 1; i < pts.length; i++) {
@@ -968,9 +1288,10 @@ class StampBrush extends Brush {
     }
     final step = math.max(math.max(0.3, params.spacing * size), total / _mostDabs);
 
-    var dab = 0;
-    void stamp(Offset at, Offset direction, double pressureHere) {
-      final k = dab++;
+    // every dab: where it is, how big, how it is turned, how far along the line, and which of five colours near the line's it is
+    final dabs = <({Offset centre, double d, double cos, double sin, double along, int bucket})>[];
+    void stamp(Offset at, Offset direction, double pressureHere, double along) {
+      final k = dabs.length;
       var d = size * (1 - params.sizeJitter * ParamBrush._noise(seed, k * 7 + 1) * 0.8);
       if (pressure != null) d *= 1 - params.pressure + params.pressure * (0.3 + 1.4 * pressureHere);
       if (d < 0.2) d = 0.2;
@@ -979,28 +1300,15 @@ class StampBrush extends Brush {
       final centre = at + normal * ((ParamBrush._noise(seed, k * 7 + 2) - 0.5) * 2 * params.scatter * size);
       var turn = params.angle * math.pi / 180 + (ParamBrush._noise(seed, k * 7 + 3) - 0.5) * 2 * params.angleJitter * math.pi;
       if (params.follow && length >= 1e-9) turn += math.atan2(direction.dy, direction.dx);
-      final c = math.cos(turn), sn = math.sin(turn);
-      final out = Outline();
-      if (params.shape == StampShape.round && params.squash == 1) {
-        out.addOval(Rect.fromCircle(center: centre, radius: d / 2));
-      } else {
-        out.addPolygon([
-          for (final p in corners)
-            () {
-              final x = p.dx * d, y = p.dy * d * params.squash;
-              return centre + Offset(x * c - y * sn, x * sn + y * c);
-            }(),
-        ]);
-      }
-      final tint = tinted ? (ParamBrush._noise(seed, k * 7 + 4) * 5).floor().clamp(0, 4) : 0;
-      byTint[tint].addOutline(out);
+      final bucket = randomTint ? (ParamBrush._noise(seed, k * 7 + 4) * 5).floor().clamp(0, 4) : 2;
+      dabs.add((centre: centre, d: d, cos: math.cos(turn), sin: math.sin(turn), along: along, bucket: bucket));
     }
 
     if (pts.length == 1 || total <= 0) {
-      stamp(pts.first, Offset.zero, pressure?.first ?? 1);
+      stamp(pts.first, Offset.zero, pressure?.first ?? 1, 0);
     } else {
-      var carried = 0.0;
-      stamp(pts.first, pts[1] - pts[0], pressure?.first ?? 1);
+      var carried = 0.0, walked = 0.0;
+      stamp(pts.first, pts[1] - pts[0], pressure?.first ?? 1, 0);
       for (var i = 1; i < pts.length; i++) {
         final a = pts[i - 1], b = pts[i];
         final seg = (b - a).distance;
@@ -1008,18 +1316,127 @@ class StampBrush extends Brush {
         var at = step - carried;
         while (at <= seg) {
           final t = at / seg;
-          stamp(Offset.lerp(a, b, t)!, b - a, pressure == null ? 1 : pressure[i - 1] + (pressure[i] - pressure[i - 1]) * t);
+          stamp(Offset.lerp(a, b, t)!, b - a, pressure == null ? 1 : pressure[i - 1] + (pressure[i] - pressure[i - 1]) * t, walked + at);
           at += step;
         }
         carried = seg - (at - step);
+        walked += seg;
       }
     }
 
-    if (!tinted) return BrushShape(byTint[0], filled: true, opacity: params.opacity, multiply: params.multiply);
-    return BrushShape(byTint[2], filled: true, opacity: params.opacity, multiply: params.multiply, layers: [
-      for (var t = 0; t < 5; t++)
-        if (t != 2 && byTint[t].pieces.isNotEmpty) BrushLayer(byTint[t], params.opacity, lightness: (t - 2) / 2 * params.lightness * 0.3, hue: (t - 2) / 2 * params.hue),
-    ]);
+    // (a dab made [grow] bigger on every side and moved by [shift])
+    Outline dabOutline(({Offset centre, double d, double cos, double sin, double along, int bucket}) dab, [double grow = 0, Offset shift = Offset.zero]) {
+      final out = Outline();
+      final d = dab.d + grow * 2, centre = dab.centre + shift;
+      if (params.shape == StampShape.round && params.squash == 1) {
+        out.addOval(Rect.fromCircle(center: centre, radius: d / 2));
+      } else {
+        out.addPolygon([
+          for (final p in corners)
+            () {
+              final x = p.dx * d, y = p.dy * d * params.squash;
+              return centre + Offset(x * dab.cos - y * dab.sin, x * dab.sin + y * dab.cos);
+            }(),
+        ]);
+      }
+      return out;
+    }
+
+    Outline all([double grow = 0, Offset shift = Offset.zero]) {
+      final out = Outline();
+      for (final dab in dabs) {
+        out.addOutline(dabOutline(dab, grow, shift));
+      }
+      return out;
+    }
+
+    final fx = params.effects;
+    final under = fx.hasBehind ? behindLayers(fx, size, all) : const <BrushLayer>[];
+
+    if (!randomTint && !flow.active) return BrushShape(all(), filled: true, opacity: params.opacity, multiply: params.multiply, under: under);
+
+    final groups = <(double, double, double), Outline>{};
+    for (final dab in dabs) {
+      var l = (dab.bucket - 2) / 2 * params.lightness * 0.3, h = (dab.bucket - 2) / 2 * params.hue, o = 1.0;
+      if (flow.active) {
+        final t = total <= 0 ? 0.0 : (dab.along / total).clamp(0.0, 1.0);
+        if (flow.gradientHue != 0 || flow.gradientLight != 0) {
+          final q = (t * 8).floor().clamp(0, 7) / 7;
+          h += flow.gradientHue * q;
+          l += flow.gradientLight * q;
+        }
+        if (flow.rainbow > 0) h += (((dab.along / (flow.rainbow * size)) % 1.0) * 12).floor() * 30.0;
+        if (flow.fade != 0) {
+          final q = (t * 6).floor().clamp(0, 5) / 5;
+          o *= flow.fade > 0 ? 1 - flow.fade * q : 1 + flow.fade * (1 - q);
+        }
+        l = (l * 1000).round() / 1000;
+        h = (h * 1000).round() / 1000;
+        o = (o.clamp(0.05, 1.0) * 1000).round() / 1000;
+      }
+      (groups[(l, h, o)] ??= Outline()).addOutline(dabOutline(dab));
+    }
+    final vivid = flow.turnsHue;
+    Outline? base;
+    final layers = <BrushLayer>[];
+    for (final key in ParamBrush._fewShades(groups)) {
+      final (l, h, o) = key;
+      if (!vivid && l == 0 && h == 0 && o == 1) {
+        base = groups[key];
+      } else {
+        layers.add(BrushLayer(groups[key]!, params.opacity * o, lightness: l, hue: h, vivid: vivid));
+      }
+    }
+    return BrushShape(base ?? Outline(), filled: true, opacity: params.opacity, multiply: params.multiply, layers: layers, under: under);
+  }
+}
+
+/// Two brushes drawn on the same line, one over the other: an ink with a charcoal edge, a marker with a stamp of stars along it. The
+/// first sets the width in the drawing bar; the second is made [sizeB] times as thick as it would be on its own.
+class MixBrush extends Brush {
+  @override
+  final String id;
+  @override
+  final String label;
+  @override
+  final IconData icon;
+  final Brush a, b;
+  final double sizeB;
+
+  /// Whether the second is drawn under the first (else over it).
+  final bool underneath;
+
+  const MixBrush(this.id, this.label, this.a, this.b, {this.icon = Icons.layers_outlined, this.sizeB = 1, this.underneath = false});
+
+  @override
+  double get widthScale => a.widthScale;
+
+  @override
+  bool get usesPressure => a.usesPressure || b.usesPressure;
+
+  @override
+  bool get writing => a.writing && b.writing;
+
+  @override
+  bool operator ==(Object other) => other is MixBrush && other.id == id && other.label == label && other.a == a && other.b == b && other.sizeB == sizeB && other.underneath == underneath;
+
+  @override
+  int get hashCode => Object.hash(id, label, a, b, sizeB, underneath);
+
+  @override
+  BrushShape? shape(DrawingStroke stroke) {
+    final first = a.shape(stroke);
+    // (the second part draws a line of its own: the same points, as thick as that brush makes it)
+    final line = DrawingStroke(
+      id: '${stroke.id}#b',
+      color: stroke.color,
+      width: stroke.width * b.widthScale / a.widthScale * sizeB,
+      points: stroke.points,
+      pressures: stroke.pressures,
+    );
+    final second = b.shape(line)?.forLine(line);
+    if (first == null || second == null) return first ?? second;
+    return underneath ? second.withNext(first) : first.withNext(second);
   }
 }
 

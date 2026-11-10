@@ -9,8 +9,11 @@ import 'package:notes/collab/replica.dart';
 import 'package:notes/collab/session.dart';
 import 'package:notes/collab/transport.dart';
 import 'package:notes/data/note_data.dart';
+import 'package:notes/models/brush.dart';
 import 'package:notes/models/brush_desc.dart';
 import 'package:notes/models/canvas_models.dart';
+
+import '../brush_look_frozen_test.dart' show lookOf;
 
 DrawingStroke stroke(String brush, {String? id}) =>
     DrawingStroke(id: id, color: Colors.black, width: 4, points: [for (var i = 0; i < 6; i++) Offset(10.0 + i * 5, 30.0 + i)], brush: brush);
@@ -120,6 +123,36 @@ void main() {
     expect(Brushes.byId(fancy.id), isNull);
     expect(Brushes.byId(other.id), isNull);
     expect(b.note.strokes[0]!.single.brush, fancy.id, reason: 'the line keeps its name and is drawn as the pen where the brush is not known');
+    expect(kept, isEmpty);
+  });
+
+  test('a mixed brush and a brush with effects and curves arrive with all their numbers and their parts, and look the same there', () {
+    final duo = BrushDesc(BrushKind.mix, 'Duo', const {'sizeB': 2, 'underneath': 1}, [
+      BrushDesc(BrushKind.ink, 'Neon', const {'glow': 1, 'dash': 2, 'pressureAt0': 0.5, 'pressureAt50': 1.5, 'rainbow': 8}),
+      BrushDesc(BrushKind.stamp, 'Stars', const {'shape': 3, 'outline': 0.5, 'fade': 0.5}),
+    ]);
+    CustomBrushes.sync([(desc: duo, listed: true)]);
+    final a = Device('a'), b = Device('b');
+    a.note.strokes[0] = [stroke(duo.id, id: 'x')];
+    final ops = a.changes();
+    final here = Brushes.byId(duo.id)!.shape(a.note.strokes[0]!.single)!;
+    becomeAnotherDevice();
+    b.take(ops);
+    expect(Brushes.byId(duo.id), isA<MixBrush>());
+    expect(CustomBrushes.of(duo.id), duo);
+    expect(kept, [duo]);
+    final there = Brushes.byId(duo.id)!.shape(b.note.strokes[0]!.single)!;
+    expect(lookOf(there), lookOf(here));
+  });
+
+  test('a mix with a mix in it that comes in a line is not taken, and does no harm', () {
+    final inner = BrushDesc(BrushKind.mix, 'Inner');
+    final a = Device('a'), b = Device('b');
+    a.note.strokes[0] = [stroke(fancy.id, id: 'x')];
+    final op = a.changes().firstWhere((o) => o.kind == ElementKind.stroke);
+    becomeAnotherDevice();
+    final nested = {'k': 'mix', 'n': 'Bad', 'p': <String, Object?>{}, 'parts': [inner.toCompactJson(), fancy.toCompactJson()]};
+    expect(() => b.take([CollabOp(op.kind, op.id, op.version, data: {...op.data, 'bd': nested})]), returnsNormally);
     expect(kept, isEmpty);
   });
 

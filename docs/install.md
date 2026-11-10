@@ -48,8 +48,13 @@ Notation from the application menu or with `flatpak run io.github.nfa04.notation
 
 ## Android
 
-Download `Notation-android-arm64.apk` and open it (allow "install unknown apps" for your browser or file manager when
-asked).
+Download the APK for your device and open it (allow "install unknown apps" for your browser or file manager when
+asked):
+
+* `Notation-android-arm64.apk`: almost every phone and tablet from the last decade (64-bit ARM). Take this one if unsure.
+* `Notation-android-arm32.apk`: older 32-bit ARM devices.
+* `Notation-android-x64.apk`: the Android emulator on a PC, Chromebooks and x86 Android devices.
+* `Notation-android-universal.apk`: all three in one file (about 260 MB). Works anywhere, but is much bigger; prefer the one for your device.
 
 ## Check the download
 

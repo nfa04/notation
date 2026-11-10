@@ -59,12 +59,22 @@ String lookOf(dynamic shape) {
   b.write('filled ${shape.filled} opacity ${_n(shape.opacity as double)}|');
   // (what was added after the first brushes is written only where it is used, so that the text of a brush that does not use it is as it was)
   if (shape.multiply == true) b.write('multiply|');
-  outline(shape.outline as Outline);
-  for (final l in shape.layers as List) {
-    b.write('|layer ${_n(l.opacity as double)}:');
+  void layer(String name, dynamic l) {
+    b.write('|$name ${_n(l.opacity as double)}:');
     if ((l.lightness as double) != 0 || (l.hue as double) != 0) b.write('tint ${_n(l.lightness as double)},${_n(l.hue as double)}:');
+    if (l.vivid == true) b.write('vivid:');
     outline(l.outline as Outline);
   }
+
+  for (final l in shape.under as List) {
+    layer('under', l);
+  }
+  outline(shape.outline as Outline);
+  for (final l in shape.layers as List) {
+    layer('layer', l);
+  }
+  final next = shape.next;
+  if (next != null) b.write('|next ${shape.line == null ? '' : 'line '}{${lookOf(next)}}');
   final soft = shape.soft;
   if (soft != null) {
     for (final l in soft.blurred as List) {

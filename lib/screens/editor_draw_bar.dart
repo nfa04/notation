@@ -251,6 +251,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           _highlighter = false;
           _erasing = false;
           _lassoing = false;
+          _bucket = false;
           _lassoPath = null;
         });
       },
@@ -429,6 +430,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         _highlighter = false;
         _erasing = false;
         _lassoing = false;
+        _bucket = false;
         _lassoPath = null;
       }),
       itemBuilder: (context) => [
@@ -494,6 +496,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         _chosenDrawTool = null;
         _erasing = false;
         _lassoing = false;
+        _bucket = false;
         _lassoPath = null;
       }),
       itemBuilder: (context) => [
@@ -571,6 +574,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             tooltip: tr('Highlighter (see-through, in the chosen color)'),
             onPressed: () => setState(() {
               _highlighter = !_highlighter;
+              _picking = false;
+              _bucket = false;
               _brush = penBrushId;
               _erasing = false;
               _lassoing = false;
@@ -614,6 +619,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           tooltip: tr('Eraser (drawings only)'),
           onPressed: () => setState(() {
             _erasing = !_erasing;
+            _picking = false;
+            _bucket = false;
             _lassoing = false;
             _highlighter = false;
             _brush = penBrushId;
@@ -635,6 +642,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             ),
             onPressed: () => setState(() {
               _lassoing = !_lassoing;
+              _picking = false;
+              _bucket = false;
               _erasing = false;
               _highlighter = false;
               _brush = penBrushId;
@@ -655,6 +664,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
                 : null,
             onTap: () => setState(() {
               _selectedPenColor = color;
+              _picking = false;
               _erasing = false;
               _lassoing = false;
             }),
@@ -685,6 +695,34 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             ),
           ),
         ),
+      if (_on(Feature.colorPicker))
+        Center(
+          heightFactor: 1,
+          child: IconButton.filledTonal(
+            key: const ValueKey('eyedropper-button'),
+            isSelected: _picking,
+            style: toggleToolStyle(context),
+            selectedIcon: const Icon(Icons.colorize, size: 20),
+            icon: const Icon(Icons.colorize_outlined, size: 20),
+            tooltip: tr('Eyedropper: touch anything on the page to draw in its color (I)'),
+            onPressed: _toggleEyedropper,
+          ),
+        ),
+      if (_on(Feature.fillBucket)) ...[
+        Center(
+          heightFactor: 1,
+          child: IconButton.filledTonal(
+            key: const ValueKey('fill-bucket-button'),
+            isSelected: _bucketOn,
+            style: toggleToolStyle(context),
+            selectedIcon: const Icon(Icons.format_color_fill, size: 20),
+            icon: const Icon(Icons.format_color_fill, size: 20),
+            tooltip: tr('Fill bucket: touch a closed area to fill it with the pen color (G)'),
+            onPressed: _toggleBucket,
+          ),
+        ),
+        if (_bucketOn) Center(heightFactor: 1, child: _fillGapButton()),
+      ],
       Center(
         heightFactor: 1,
         child: IconButton(

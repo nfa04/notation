@@ -44,10 +44,15 @@ Future<List<int>> _screen(List<(Path, Color)> paths) async {
 }
 
 /// The shape of a brush as the screen draws it where it cannot blur (its path and layers, the look a PDF has).
-List<(Path, Color)> _brushPaths(DrawingStroke stroke, BrushShape shape) => [
-      (shape.path, stroke.color.withValues(alpha: stroke.color.a * shape.opacity)),
-      for (final l in shape.layers) (l.path, l.colorOf(stroke.color).withValues(alpha: stroke.color.a * l.opacity)),
-    ];
+List<(Path, Color)> _brushPaths(DrawingStroke stroke, BrushShape shape) {
+  final line = shape.line ?? stroke;
+  return [
+    for (final l in shape.under) (l.path, l.colorOf(line.color).withValues(alpha: line.color.a * l.opacity)),
+    (shape.path, line.color.withValues(alpha: line.color.a * shape.opacity)),
+    for (final l in shape.layers) (l.path, l.colorOf(line.color).withValues(alpha: line.color.a * l.opacity)),
+    if (shape.next != null) ..._brushPaths(stroke, shape.next!),
+  ];
+}
 
 /// The same, of what [draw] puts on a PDF page, drawn by PDFium; and how many bytes the drawing took in the file.
 Future<(List<int>, int)> _pdf(void Function(pw.PdfGraphics canvas) draw) async {
@@ -155,6 +160,23 @@ void main() {
       // (a blend with the colour black cannot be told from none; the comparison has no blend of its own)
       BrushDesc(BrushKind.stamp, 'stamp darker', const {'blend': 1, 'opacity': 0.5}),
       BrushDesc(BrushKind.stamp, 'stamp plain'),
+      // (the third batch: dashes, what is behind a line, colour along it, curves, a steady hand, stamps with the same, two brushes in one)
+      BrushDesc(BrushKind.ink, 'dashes', const {'dash': 3, 'dashGap': 1.5, 'width': 3, 'pressure': 0.7}),
+      BrushDesc(BrushKind.ink, 'dots', const {'dash': 1, 'dashGap': 1, 'width': 3}),
+      BrushDesc(BrushKind.ink, 'dashes nib', const {'dash': 4, 'nibAngle': 30, 'width': 4}),
+      BrushDesc(BrushKind.ink, 'behind', const {'shadow': 0.7, 'shadowBlur': 0.6, 'glow': 1, 'glowHue': 90, 'outline': 0.6, 'outlineTone': 2, 'width': 3}),
+      BrushDesc(BrushKind.ink, 'flow', const {'gradientHue': 120, 'gradientLight': 0.3, 'rainbow': 8, 'fade': 0.7, 'pressure': 0.8, 'pressureShade': 1, 'width': 4}),
+      BrushDesc(BrushKind.ink, 'flow dashed', const {'rainbow': 6, 'dash': 2, 'width': 3, 'opacity': 0.6}),
+      BrushDesc(BrushKind.ink, 'curves', const {
+        'pressureAt0': 0.3, 'pressureAt25': 1.9, 'pressureAt50': 0.5, 'pressureAt75': 1.5, 'pressureAt100': 0.2, //
+        'speedAt0': 1.5, 'speedAt25': 1.2, 'speedAt50': 1, 'speedAt75': 0.6, 'speedAt100': 0.3, 'stabilise': 1, 'width': 3,
+      }),
+      BrushDesc(BrushKind.stamp, 'stamp effects', const {'shape': 3, 'width': 6, 'spacing': 0.9, 'shadow': 0.5, 'outline': 0.4, 'glow': 0.8, 'rainbow': 6, 'fade': 0.5, 'gradientHue': 80}),
+      BrushDesc(BrushKind.mix, 'mix'),
+      BrushDesc(BrushKind.mix, 'mix under', const {'underneath': 1, 'sizeB': 2}, [
+        BrushDesc(BrushKind.ink, 'a', const {'width': 2, 'opacity': 0.6}),
+        BrushDesc(BrushKind.stamp, 'b', const {'width': 3, 'shape': 3, 'spacing': 1.2, 'hue': 40}),
+      ]),
     ];
     await tester.runAsync(() async {
       for (final design in designs) {
@@ -162,7 +184,8 @@ void main() {
         final stroke = _stroke(brush);
         final shape = brush.shape(stroke)!;
         final (pdf, size) = await _pdf((g) => drawBrushOnPdf(g, _h, stroke, shape));
-        _expectSame(await _screen(_brushPaths(stroke, shape)), pdf, design.name);
+        // (a few dozen small dots are anti-aliased a little differently by the two renderers)
+        _expectSame(await _screen(_brushPaths(stroke, shape)), pdf, design.name, darkness: design.name == 'dots' ? 0.06 : 0.03);
         expect(size, lessThan(512 * 1024), reason: '${design.name} took $size bytes');
       }
     });

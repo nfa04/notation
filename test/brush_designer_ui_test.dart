@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/brush_library.dart';
@@ -249,6 +250,177 @@ void main() {
   testWidgets('no warning for a note drawn with the pen', (tester) async {
     await open(tester, drawnWith: penBrushId);
     expect(find.byKey(const ValueKey('missing-extension-brush')), findsNothing);
+  });
+
+  Future<void> openDesigner(WidgetTester tester) async {
+    await open(tester);
+    await openMenu(tester);
+    await tester.tap(find.byKey(const ValueKey('brush-design')));
+    await tester.pumpAndSettle();
+    await later(tester);
+  }
+
+  Future<void> show(WidgetTester tester, Finder f) async {
+    await tester.ensureVisible(f);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the advanced numbers are under headings; a curve for the pen is switched on and dragged, and takes the place of the pressure numbers', (tester) async {
+    await openDesigner(tester);
+    await show(tester, find.byKey(const ValueKey('brush-advanced')));
+    await tester.tap(find.byKey(const ValueKey('brush-advanced')));
+    await tester.pumpAndSettle();
+    for (final heading in ['Pen response', 'Shape', 'Colour', 'Line style', 'Blending']) {
+      expect(find.byKey(ValueKey('brush-group-$heading')), findsOneWidget, reason: heading);
+    }
+    // (the pressure curve number is a slider; when the curve is on, the curve takes its place)
+    expect(find.byKey(const ValueKey('brush-knob-pressureCurve')), findsOneWidget);
+    expect(find.byKey(const ValueKey('brush-curve-pressure')), findsNothing);
+    await show(tester, find.byKey(const ValueKey('brush-curve-pressure-on')));
+    await tester.tap(find.byKey(const ValueKey('brush-curve-pressure-on')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-knob-pressureCurve')), findsNothing);
+    expect(find.byKey(const ValueKey('brush-curve-pressure')), findsOneWidget);
+    await show(tester, find.byKey(const ValueKey('brush-curve-pressure')));
+    // (the middle point goes up)
+    await tester.dragFrom(tester.getCenter(find.byKey(const ValueKey('brush-curve-pressure'))), const Offset(0, -30));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('brush-name')), 'Curvy');
+    await tester.tap(find.byKey(const ValueKey('brush-save')));
+    await later(tester);
+    final made = CustomBrushes.all.single;
+    expect(made['pressureAt50'], greaterThan(1.2));
+    expect(made['pressureAt0'], 1, reason: 'it began as the response there was: a straight line at the width that is set');
+    expect(made['pressureAt100'], 1);
+    expect((Brushes.byId(made.id) as ParamBrush).params.pressurePoints, isNotNull);
+
+    // opened again: the curve is there, and switching it off takes its numbers away
+    await openMenu(tester);
+    await tester.tap(find.byKey(const ValueKey('brush-design')));
+    await tester.pumpAndSettle();
+    await later(tester);
+    await tester.tap(find.byKey(ValueKey('brush-design-${made.id}')));
+    await tester.pumpAndSettle();
+    await show(tester, find.byKey(const ValueKey('brush-curve-pressure-on')));
+    await tester.tap(find.byKey(const ValueKey('brush-curve-pressure-on')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-curve-pressure')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('brush-save')));
+    await later(tester);
+    expect(CustomBrushes.all.any((b) => b['pressureAt50'] != null && b.id != made.id), isFalse);
+  });
+
+  testWidgets('dashes show their gap only when there are dashes, and a shadow its distance only when there is a shadow', (tester) async {
+    await openDesigner(tester);
+    await show(tester, find.byKey(const ValueKey('brush-advanced')));
+    await tester.tap(find.byKey(const ValueKey('brush-advanced')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-knob-dash')), findsOneWidget);
+    expect(find.byKey(const ValueKey('brush-knob-dashGap')), findsNothing);
+    expect(find.byKey(const ValueKey('brush-knob-shadowDistance')), findsNothing);
+    expect(find.byKey(const ValueKey('brush-knob-outlineTone')), findsNothing);
+    await show(tester, find.byKey(const ValueKey('brush-knob-dash')));
+    await tester.drag(find.byKey(const ValueKey('brush-knob-dash')), const Offset(100, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-knob-dashGap')), findsOneWidget);
+    await show(tester, find.byKey(const ValueKey('brush-knob-shadow')));
+    await tester.drag(find.byKey(const ValueKey('brush-knob-shadow')), const Offset(100, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-knob-shadowDistance')), findsOneWidget);
+    expect(find.byKey(const ValueKey('brush-knob-shadowBlur')), findsOneWidget);
+    await show(tester, find.byKey(const ValueKey('brush-knob-outline')));
+    await tester.drag(find.byKey(const ValueKey('brush-knob-outline')), const Offset(100, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-knob-outlineTone')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('brush-save')));
+    await later(tester);
+    final made = CustomBrushes.all.single;
+    expect(made['dash'], greaterThan(0));
+    expect(made['shadow'], greaterThan(0));
+    expect(made['outline'], greaterThan(0));
+    // (and the preview drew all of it without a failure)
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a mix is made of two brushes chosen from the library and the starting ones, and is saved with them', (tester) async {
+    await openDesigner(tester);
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('brush-kind')), matching: find.text('Mix')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('brush-part-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('brush-part-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('brush-knob-sizeB')), findsOneWidget);
+    expect(find.byKey(const ValueKey('brush-advanced')), findsNothing, reason: 'a mix has no advanced numbers');
+    // the second part: the stars
+    await show(tester, find.byKey(const ValueKey('brush-part-1')));
+    await tester.tap(find.byKey(const ValueKey('brush-part-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stars (Stamp)').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('brush-name')), 'Starry');
+    await tester.tap(find.byKey(const ValueKey('brush-save')));
+    await later(tester);
+    final made = CustomBrushes.all.single;
+    expect(made.kind, BrushKind.mix);
+    expect(made.parts[0].kind, BrushKind.ink);
+    expect(made.parts[1].kind, BrushKind.stamp);
+    expect(made.parts[1].name, 'Stars');
+    expect(Brushes.byId(made.id), isA<MixBrush>());
+    expect(Brushes.isListed(made.id), isTrue);
+  });
+
+  testWidgets('a brush is copied as text and taken in from text, and saving a copy leaves the brush it was made from in the menu', (tester) async {
+    String? clipboard;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') clipboard = (call.arguments as Map)['text'] as String?;
+      if (call.method == 'Clipboard.getData') return {'text': clipboard};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await openDesigner(tester);
+    await tester.enterText(find.byKey(const ValueKey('brush-name')), 'Shared');
+    await tester.drag(find.byKey(const ValueKey('brush-knob-taper')), const Offset(100, 0));
+    await tester.pumpAndSettle();
+    await show(tester, find.byKey(const ValueKey('brush-copy-code')));
+    await tester.tap(find.byKey(const ValueKey('brush-copy-code')));
+    await tester.pumpAndSettle();
+    expect(clipboard, startsWith(BrushDesc.codePrefix));
+    final copied = BrushDesc.fromCode(clipboard!);
+    expect(copied.name, 'Shared');
+    expect(copied['taper'], greaterThan(0));
+    expect(CustomBrushes.all, isEmpty, reason: 'copying does not keep it');
+
+    // another kind is in the designer now; the text brings the brush in, kept and in the menu
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('brush-kind')), matching: find.text('Roller')));
+    await tester.pumpAndSettle();
+    await show(tester, find.byKey(const ValueKey('brush-paste-code')));
+    await tester.tap(find.byKey(const ValueKey('brush-paste-code')));
+    await later(tester);
+    expect(CustomBrushes.of(copied.id), copied);
+    expect(Brushes.isListed(copied.id), isTrue);
+    expect(find.byKey(const ValueKey('brush-knob-nibFlatness')), findsNothing);
+    expect(find.byKey(const ValueKey('brush-knob-taper')), findsOneWidget, reason: 'the designer shows the brush that came in');
+
+    // text that is not a brush says so, and takes in nothing
+    clipboard = 'hello';
+    await show(tester, find.byKey(const ValueKey('brush-paste-code')));
+    await tester.tap(find.byKey(const ValueKey('brush-paste-code')));
+    await later(tester);
+    expect(find.byKey(const ValueKey('brush-message')), findsOneWidget);
+    expect(CustomBrushes.all.length, 1);
+
+    // a copy: change a number and save it as a brush of its own; both are in the menu
+    await show(tester, find.byKey(const ValueKey('brush-save-copy')));
+    await tester.tap(find.byKey(const ValueKey('brush-save-copy')));
+    await later(tester);
+    expect(CustomBrushes.all.length, 1, reason: 'the same numbers are the same brush');
+    await tester.drag(find.byKey(const ValueKey('brush-knob-jitter')), const Offset(100, 0));
+    await tester.pumpAndSettle();
+    await show(tester, find.byKey(const ValueKey('brush-save-copy')));
+    await tester.tap(find.byKey(const ValueKey('brush-save-copy')));
+    await later(tester);
+    expect(CustomBrushes.all.length, 2);
+    expect(CustomBrushes.all.every((b) => Brushes.isListed(b.id)), isTrue, reason: 'the brush it was made from stays in the menu');
   });
 
   testWidgets('with the brush tools off there is no designer in the menu', (tester) async {

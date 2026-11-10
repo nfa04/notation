@@ -18,7 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:convert' show jsonDecode, jsonEncode, utf8;
 import 'package:flutter/material.dart' hide Text;
-import 'package:flutter/rendering.dart' show RenderBox, RenderParagraph, ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show RenderBox, RenderParagraph, RenderRepaintBoundary, ScrollCacheExtent;
 import '../pdf/pdf_content_editor.dart';
 import '../pdf/page_cache.dart';
 import '../pdf/pdf_pages.dart';
@@ -142,6 +142,8 @@ import '../models/gradient.dart';
 import '../models/stroke_label.dart';
 import '../models/canvas_view.dart';
 import '../models/collage.dart';
+import '../models/color_sample.dart';
+import '../models/region_fill.dart';
 import '../models/connector.dart';
 import '../images/picture_edit.dart';
 import '../models/align_snap.dart';
@@ -277,6 +279,8 @@ part 'editor_align.dart';
 part 'editor_stamps.dart';
 part 'editor_shape_ops.dart';
 part 'editor_groups.dart';
+part 'editor_eyedropper.dart';
+part 'editor_fill_bucket.dart';
 
 /// What the clipboard holds that a note can take: a picture, files (pictures
 /// copied in a file manager) or text.
@@ -853,7 +857,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   int get _documentSheets => _mode == CanvasInteractionMode.document ? 1 : _docBreaks.length + 1;
 
   /// How far from the left of the page the part on screen starts (a page is always seen from its left edge).
-  double get _visibleLeft => _infinite ? _viewTopLeft.dx : 0.0;
+  double get _visibleLeft => _infinite ? _viewCorner.dx : 0.0;
 
   /// How much of the list page [index] takes up at [scale]: the ruler above it, the page, and the gap below it.
   double _pageExtent(int index, double scale) => _rulerExtent + (_shownPageHeight(index) + 24) * scale;
@@ -1153,6 +1157,22 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// Eraser instead of pen: removes the strokes it touches, nothing else.
   bool _erasing = false;
 
+  /// The eyedropper is on (see `editor_eyedropper.dart`): the pointer that picks, where it is, the picture of the area it reads
+  /// (and its taking, while under way), and the ring that shows the colour.
+  bool _picking = false;
+  int _pickPointer = -1;
+  Offset _pickAt = Offset.zero;
+  ({ByteData bytes, int width, int height, double ratio, RenderRepaintBoundary box})? _pickShot;
+  Future<void>? _pickShooting;
+  final ValueNotifier<({Offset at, Color? color})?> _pickLoupe = ValueNotifier(null);
+
+  /// The fill bucket is on (see `editor_fill_bucket.dart`), and how big a gap in the lines it still closes.
+  bool _bucket = false;
+  FillGap _fillGap = FillGap.medium;
+
+  /// The pages (or the canvas) as they are shown, without the tools over them: what the eyedropper reads.
+  final GlobalKey _surfaceKey = GlobalKey();
+
   /// What a drag with the pen draws (a line of the hand, or a shape), and where it began.
   ShapeTool _shape = ShapeTool.freehand;
 
@@ -1237,7 +1257,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   ({int page, Offset local})? _pageAt(Offset global) {
     if (_pageCount == 0) return null;
     final p = _localInArea(global);
-    if (_infinite) return (page: 0, local: _viewTopLeft + p / _pageScale);
+    if (_infinite) return (page: 0, local: _areaToCanvas(p));
     final scale = _pageScale;
     final y =
         (_pageScroll.hasClients ? _pageScroll.offset : 0.0) +
@@ -1392,7 +1412,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   /// Page that is mostly on screen, and how far down it the screen starts.
   (int, double) _visiblePage() {
-    if (_infinite) return (0, _viewTopLeft.dy);
+    if (_infinite) return (0, _viewCorner.dy);
     final offset = _pageScroll.hasClients ? _pageScroll.offset : 0.0;
     var top = _bannerExtent;
     for (var i = 0; i < _pageCount; i++) {
@@ -1416,6 +1436,12 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   int _middlePan = -1;
   double _scaleBaseZoom = 1;
   int _scaleCount = 0;
+
+  /// How far the canvas is turned on the screen (radians, clockwise), about the middle of the window; what two fingers turned it
+  /// from, and what a trackpad's turn started from. Only the view turns: nothing on the canvas changes.
+  double _viewTurn = 0;
+  double _scaleBaseTurn = 0;
+  double _panZoomStartTurn = 0;
   bool _scaleGo = false;
   double _panZoomLastScale = 1;
 
@@ -1928,6 +1954,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _hScroll.dispose();
     _findDebounce?.cancel();
     _hover.dispose();
+    _pickLoupe.dispose();
     _inkTick.dispose();
     _viewTick.dispose();
     _marksTimer?.cancel();
@@ -2102,7 +2129,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
               child: Stack(
                 key: _areaKey,
                 children: [
-                  LayoutBuilder(builder: (context, box) => _infinite ? _canvasArea(box) : _pagesArea(box)),
+                  RepaintBoundary(key: _surfaceKey, child: LayoutBuilder(builder: (context, box) => _infinite ? _canvasArea(box) : _pagesArea(box))),
                   ..._toolsOverSurface(),
                   Positioned(left: 8, top: 8, child: _buildZoomControls()),
                   if (_echoes.isNotEmpty && !_echoHidden) Positioned(left: 8, bottom: 8, right: 56, child: _echoChip()),
@@ -2123,6 +2150,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
                       ),
                     ),
                   ),
+                  if (_pickingOn) _eyedropperLayer(),
+                  _eyedropperLoupe(),
                 ],
               ),
             ),

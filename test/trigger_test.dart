@@ -34,7 +34,7 @@ void main() {
         expect(ids.map((a) => a.id), ['automation.trigger1', 'automation.trigger2', 'automation.trigger3']);
         expect(ids.every((a) => a.defaults.isEmpty), isTrue, reason: 'no key is taken from the others');
       }
-      expect([for (final b in BarrelAction.values) b.trigger], [null, null, 1, 2, 3, null]);
+      expect([for (final b in BarrelAction.values) b.trigger], [null, null, null, 1, 2, 3, null]);
       expect(BarrelAction.trigger2.label, 'Run automation trigger 2');
     });
 

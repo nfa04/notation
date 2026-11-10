@@ -195,7 +195,7 @@ void main() {
     await tester.pump(const Duration(seconds: 11));
   });
   testWidgets('from Draw to Document the page eases to its place, down as well as sideways (the ruler comes above it)', (tester) async {
-    tester.view.physicalSize = const Size(1200, 1300);
+    tester.view.physicalSize = const Size(1200, 1400); // (tall enough that the drawing tools stay one column)
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     late NoteRepository repo;

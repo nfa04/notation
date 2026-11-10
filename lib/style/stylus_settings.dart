@@ -22,6 +22,9 @@ enum BarrelAction {
   erase('Erase'),
   lasso('Select (lasso)'),
 
+  /// The pen takes the colour of what it touches (the eyedropper), while the button is held.
+  pickColor('Pick a color'),
+
   /// Pressing it runs the automations of a trigger (the event "You press a trigger"); the pen does not draw with the button down.
   trigger1('Run automation trigger 1'),
   trigger2('Run automation trigger 2'),

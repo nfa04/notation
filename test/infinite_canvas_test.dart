@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -47,6 +48,19 @@ void main() {
       expect(w.height / w.width, closeTo(0.75, 1e-9));
       expect(w.contains(const Offset(1000, 1050)), isTrue);
       expect(w.contains(const Offset(3000, 1050)), isTrue);
+    });
+
+    test('a turn of the view is put in one round and settles on a quarter turn it is near', () {
+      expect(settledTurn(0.03), 0.0, reason: 'under 4 degrees from straight');
+      expect(settledTurn(-0.03), 0.0);
+      expect(settledTurn(0.3), closeTo(0.3, 1e-12));
+      expect(settledTurn(math.pi / 2 + 0.05), closeTo(math.pi / 2, 1e-12));
+      expect(settledTurn(2 * math.pi + 0.3), closeTo(0.3, 1e-9), reason: 'a whole turn more is the same view');
+      expect(settledTurn(-math.pi + 0.02), closeTo(math.pi, 1e-12), reason: 'upside down is one number');
+      final v = turnedBy(const Offset(1, 0), math.pi / 2);
+      expect(v.dx, closeTo(0, 1e-12));
+      expect(v.dy, closeTo(1, 1e-12), reason: 'a quarter turn clockwise on the screen (y goes down)');
+      expect(turnedBy(turnedBy(const Offset(3, 4), 0.7), -0.7).dx, closeTo(3, 1e-12));
     });
 
     test('the infinite canvas is not one of the papers', () {
@@ -206,6 +220,62 @@ void main() {
       await a.up();
       await b.up();
       await tester.pump(const Duration(seconds: 1));
+      await close(tester);
+    });
+
+    testWidgets('two fingers turn the canvas about where they are, and the button puts it straight', (tester) async {
+      await open(tester);
+      expect(find.byKey(const ValueKey('canvas-straighten')), findsNothing);
+      final box = find.text('hello canvas');
+      final a = await tester.startGesture(const Offset(600, 500));
+      final b = await tester.startGesture(const Offset(800, 500));
+      await tester.pump();
+      // (the second finger goes round the first by about 30 degrees, in steps)
+      for (var i = 1; i <= 10; i++) {
+        final t = i / 10 * math.pi / 6;
+        await b.moveTo(const Offset(600, 500) + Offset(math.cos(t), math.sin(t)) * 200);
+        await tester.pump();
+      }
+      await a.up();
+      await b.up();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('canvas-straighten')), findsOneWidget);
+      expect(find.textContaining('°'), findsOneWidget);
+      final turned = tester.getRect(box);
+      expect(turned.height, greaterThan(40), reason: 'the line of text stands at a slant, so its box on the screen is taller');
+
+      await tester.tap(find.byKey(const ValueKey('canvas-straighten')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('canvas-straighten')), findsNothing);
+      expect(tester.getRect(box).height, lessThan(turned.height));
+      await close(tester);
+    });
+
+    testWidgets('a quarter turn with the keys: the pen draws where it is on the turned canvas', (tester) async {
+      await open(tester);
+      await tester.ensureVisible(find.text('Draw'));
+      await tester.tap(find.text('Draw'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      for (var i = 0; i < 6; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.bracketRight); // (6 steps of 15 degrees)
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(find.text('90°'), findsOneWidget);
+
+      // to the right on the screen is up on a canvas turned a quarter clockwise
+      final start = const Offset(500, 400);
+      final g = await tester.startGesture(start, kind: PointerDeviceKind.mouse);
+      for (var i = 1; i <= 10; i++) {
+        await g.moveTo(start + Offset(i * 20.0, 0));
+      }
+      await g.up();
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      final points = (await tester.runAsync(() => repo.loadNote(id)))!.strokes[0]!.single.points;
+      expect((points.last.dx - points.first.dx).abs(), lessThan(2));
+      expect(points.first.dy - points.last.dy, closeTo(200, 2), reason: '200 px at 100 %');
       await close(tester);
     });
 

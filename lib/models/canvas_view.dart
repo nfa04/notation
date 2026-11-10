@@ -62,3 +62,22 @@ Rect canvasWindow(Rect? bounds, {double? aspect}) {
   }
   return r;
 }
+
+/// [v] turned by [turn] radians (clockwise on the screen, where y goes down).
+Offset turnedBy(Offset v, double turn) {
+  if (turn == 0) return v;
+  final c = math.cos(turn), s = math.sin(turn);
+  return Offset(v.dx * c - v.dy * s, v.dx * s + v.dy * c);
+}
+
+/// How close (radians, about 4 degrees) to a quarter turn the canvas settles on it.
+const double turnSettle = 4 * math.pi / 180;
+
+/// [turn] put in -pi..pi, and on the quarter turn it is near (straight, sideways, upside down) when it is within [turnSettle] of it.
+double settledTurn(double turn) {
+  var t = turn % (2 * math.pi);
+  if (t > math.pi) t -= 2 * math.pi;
+  final quarter = (t / (math.pi / 2)).round() * (math.pi / 2);
+  if ((t - quarter).abs() < turnSettle) t = quarter == -math.pi ? math.pi : quarter;
+  return t == 0 ? 0.0 : t; // (no -0.0)
+}

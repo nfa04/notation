@@ -13,7 +13,9 @@ import '../models/canvas_models.dart';
 /// along (the rings of an airbrush) as its line, stroked that thick with round ends and joints, which is the same shape. Nothing is
 /// sampled along an outline, so the file holds about as many numbers as the shape has points. The points are rounded to hundredths
 /// of the page's units, far finer than any printer shows, so each is written in a few digits.
-void drawBrushOnPdf(pw.PdfGraphics canvas, double pageHeight, DrawingStroke stroke, BrushShape shape) {
+void drawBrushOnPdf(pw.PdfGraphics canvas, double pageHeight, DrawingStroke drawn, BrushShape shape) {
+  // (the second brush of a mix is made for a line of its own, as thick as it wants)
+  final stroke = shape.line ?? drawn;
   final c = stroke.color;
   final colour = pw.PdfColor(c.r, c.g, c.b);
   canvas
@@ -25,18 +27,27 @@ void drawBrushOnPdf(pw.PdfGraphics canvas, double pageHeight, DrawingStroke stro
   final page = _PdfPage(canvas, pageHeight);
   if (shape.filled) {
     final blend = shape.multiply ? pw.PdfBlendMode.multiply : null;
-    page.fill(shape.outline, c.a * shape.opacity, blend);
-    for (final layer in shape.layers) {
-      // (a layer that varies the colour of the line is filled in its own colour)
-      if (layer.lightness != 0 || layer.hue != 0) {
+    // (a layer that varies the colour of the line is filled in its own colour)
+    void fillLayer(BrushLayer layer) {
+      if (layer.tinted) {
         final t = layer.colorOf(c);
-        canvas.setFillColor(pw.PdfColor(t.r, t.g, t.b));
+        // (a ribbon of one thickness is stroked, the rest filled: both colours are the layer's)
+        final own = pw.PdfColor(t.r, t.g, t.b);
+        canvas
+          ..setFillColor(own)
+          ..setStrokeColor(own);
         page.fill(layer.outline, c.a * layer.opacity, blend);
-        canvas.setFillColor(colour);
+        canvas
+          ..setFillColor(colour)
+          ..setStrokeColor(colour);
       } else {
         page.fill(layer.outline, c.a * layer.opacity, blend);
       }
     }
+
+    shape.under.forEach(fillLayer);
+    page.fill(shape.outline, c.a * shape.opacity, blend);
+    shape.layers.forEach(fillLayer);
   } else {
     // (a shape to be stroked with the width of the line: no brush makes one yet)
     final alpha = c.a * shape.opacity;
@@ -56,6 +67,9 @@ void drawBrushOnPdf(pw.PdfGraphics canvas, double pageHeight, DrawingStroke stro
     canvas.strokePath();
   }
   canvas.restoreContext();
+  // (a mix of two brushes: the second is drawn over the first, for the line it was made for)
+  final next = shape.next;
+  if (next != null) drawBrushOnPdf(canvas, pageHeight, drawn, next);
 }
 
 /// How finely the width of a line drawn with pressure follows the pen in a PDF, in the units of the page.

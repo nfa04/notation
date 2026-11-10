@@ -554,8 +554,8 @@ Tools of their own group in *Settings → Tools* (`Feature.brushes`, `symmetry`,
   (`Brushes.writes`). A line keeps only the brush's id, so a note drawn with one still opens where the brush is missing (drawn as the pen).
   The brushes are in the menu of the brush button; the pen and the roller stay there with the tool off.
 - **Designed brushes** (`lib/models/brush_desc.dart`, `lib/screens/brush_designer.dart`, [docs/strokedesc.md](docs/strokedesc.md)): *Design a brush...* at the end
-  of the brush menu. Every kind of brush - ink, roller, soft, charcoal, stamp (dabs of dots, stars, leaves...) - is a set of numbers with sliders (or typed in), an *Advanced* part (pressure curve, speed, own start and end, hand wobble, colour that varies along the line, a darkening blend) and a live line; *Start from* takes the
-  numbers of a brush the app comes with. A brush is a `.strokedesc` file (JSON: `format`, `version`, `name`, `kind`, `params`) that can be exported and
+  of the brush menu. Every kind of brush - ink, roller, soft, charcoal, stamp (dabs of dots, stars, leaves...), and a *mix* of two of them - is a set of numbers with sliders (or typed in), an *Advanced* part under headings (pressure and speed as curves you drag, own start and end, hand wobble, colour that varies or runs along the line - gradient, rainbow, fade, shade by pressure - dashes and dots, shadow, glow and border, a darkening blend) and a live line; *Start from* takes the
+  numbers of a brush the app comes with or a ready-made effect. A brush can also be copied as a line of text and pasted on another device, and saved as a copy of itself. A brush is a `.strokedesc` file (JSON: `format`, `version`, `name`, `kind`, `params`) that can be exported and
   imported. A line keeps the id of its brush, which is made of the numbers, so changing a brush makes a new one and old lines keep their look. The
   `.uninote` file takes the designed brushes its lines use along as `brushes/<id>.strokedesc` and a device that opens it keeps them (out of the
   menu until the person adds them); the library travels with the profile like the other settings. The brushes that come with the app are held to
@@ -591,6 +591,17 @@ Tools of their own group in *Settings → Tools* (`Feature.brushes`, `symmetry`,
   pictures, lines, boxes. The PDF export puts them in the same order.
   Handwriting and maths are read from all lines, hidden layers included.
 
+  *Blend modes, clipping and groups* (`LayerBlend`, `NoteLayer.blend/clip/isGroup/group/collapsed`; JSON keys `b`, `c`, `g`, `p`, `x`, which a
+  stack without them does not write): the chosen layer's settings hold a blend mode (multiply, screen, overlay, soft light, darken, lighten,
+  color dodge, color burn, difference) and *Clip to the layer below*. A layer's menu puts it in a new group or an existing one (groups are
+  one level deep, a group's layers lie together right above it - `LayerStack` makes it so whatever order it is given, also from sync - and a
+  group folds away in the list). A group has its own visibility, lock, opacity and blend, and is composed as a whole (`paintLayered` /
+  `series`: a `saveLayer` per see-through or blended layer or group; a clipped layer is drawn inside the base's layer and masked with the
+  base again by `dstIn`). `LayerStack.byId` gives the layer as it counts (its group's hide, lock, opacity and blend folded in, so every
+  place that asks `byId(..).visible/.editable/.opacity` works unchanged); the entries of `layers` are as they were set. A blend mode
+  acts on the lines under it in the same drawing, not on pictures, the paper or a PDF page, which are layers of their own (on white paper
+  multiply looks as normal does). A PDF export draws the lines of a blended layer with the PDF blend mode; a *clipped* layer is not clipped
+  there. A layer's pictures and text boxes only take the group's and layer's hide, lock and opacity.
 - **Picture editing** (`lib/images/picture_edit.dart`, `lib/screens/picture_edit_dialog.dart`): a selected picture has an *Edit picture* button (a
   slider icon) that opens a panel with the result shown at once (on a checkerboard, so that see-through parts show): turn left and
   right, flip both ways, crop by the part cut off each side, brightness, contrast, saturation, a filter (grayscale, sepia, invert,
@@ -649,6 +660,20 @@ Tools of their own group in *Settings → Tools* (`Feature.brushes`, `symmetry`,
   as a stamp (*Save as a stamp*, with a name) in `stamps.json` of the app's folder (the strokes packed like a note file's); the stamps
   button of the top bar lists them, and a tap puts one in the middle of the page on screen, selected (made smaller if it is wider or
   taller than half the page). Stamps are drawings only; the selection's text boxes and pictures are not kept.
+- **Eyedropper** (`lib/screens/editor_eyedropper.dart`, `lib/models/color_sample.dart`; `Feature.colorPicker`): the button beside the
+  colours, or the I key, and a touch anywhere picks the colour shown there for the pen (a line, a brush, a gradient, a picture, a PDF, the
+  paper). The area is taken as a picture once when the pointer goes down (`RenderRepaintBoundary.toImage` of the pages or canvas, at the
+  screen's sharpness, without the tools over them); moving reads that picture again, so a ring above the pointer shows the colour under it
+  next to the pen's colour, and letting go chooses it. It picks once and the pen draws again; a colour not on the bar joins the added
+  colours. The pen's side button can be set to *Pick a color* (`BarrelAction.pickColor`).
+- **Fill bucket** (`lib/screens/editor_fill_bucket.dart`, `lib/models/region_fill.dart`; `Feature.fillBucket`): the button beside the
+  colours, or the G key; a touch inside a closed area fills it with the pen colour. `regionAround` draws the lines of the visible layers
+  onto a grid (their own width, at least two cells), grows them by half of the chosen gap (*Gap closing*: none, 5, 12 or 26 page units),
+  floods from the touch, pushes the area back under the lines to their middle and traces its edges; a hole in it (a ring) is joined to the
+  outline by a seam walked there and back. The fill is a shape of its own (`isBucketFill`: a closed line with a `fill` and a fully
+  see-through line colour), put under the lines of its layer, so it is recolored, moved, hidden with its layer, taken back and
+  exported (PDF, pictures) like any shape; filling the same area again replaces it. On a paged note the edge of the paper closes the
+  area; on the infinite canvas an area that runs out is "not closed". Only lines are walls (not pictures or text boxes).
 - **Mood boards** (`lib/models/collage.dart`): the top bar's *Add several pictures as a mood board* takes several files and lays them out
   in rows of the same height that each fill the page's width (the last row keeps its height), as pictures like any other.
 - **Reference to trace**: a picture's own toolbar has *Use as a reference*, which puts it on a layer `reference` at the very bottom
@@ -764,6 +789,10 @@ session is on (`FolderSync.pullNote`; an open note is otherwise left alone by a 
   sheets each way) and a new canvas starts in the middle of it. It is seen through a window (`editor_canvas.dart`) that a finger drags
   (also the pen, while the tool is not the pen), the wheel moves (Shift: sideways), two fingers on a trackpad move, the middle mouse
   button drags, and a pinch or Ctrl and the wheel zoom (5% to 800%; the button beside the zoom lock shows everything on the canvas).
+  Two fingers (or a trackpad's turn) also **turn the view** about where they are, Ctrl+[ and Ctrl+] turn it in steps of 15 degrees and
+  Ctrl+Shift+[ puts it straight; it settles on straight or a quarter turn within 4 degrees (`settledTurn`), the angle shows beside the
+  zoom and a tap on it puts the canvas straight, and the zoom lock stops it. Only the view turns (`_viewTurn`, about the middle of
+  the window, not saved): every point from the screen goes through `_areaToCanvas`, so the pen, panning, zoom and dragging follow it.
   Only the part of the ruling that is on the screen is drawn (`CanvasBackgroundPainter`). There are no page size, margins, written
   document, banner or page scrollbar, a canvas cannot be turned into a notebook or get a PDF, and **it cannot be exported as a PDF**
   (the pages of a PDF have a fixed size, the canvas has none to cut it into). A card's picture and a version in the history show

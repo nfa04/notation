@@ -115,6 +115,12 @@ extension _EditorShortcuts on _FixedPageNoteEditorState {
       case 'tool.lasso':
         if (!_on(Feature.lasso)) return false;
         _chooseTool(lasso: !_lassoing);
+      case 'tool.eyedropper':
+        if (!_on(Feature.colorPicker)) return false;
+        _toggleEyedropper();
+      case 'tool.fillBucket':
+        if (!_on(Feature.fillBucket)) return false;
+        _toggleBucket();
       case 'tool.straighten':
         if (!_on(Feature.straighten)) return false;
         setState(() => _straighten = !_straighten);
@@ -152,6 +158,12 @@ extension _EditorShortcuts on _FixedPageNoteEditorState {
       case 'zoom.fit':
         if (!_infinite) return false;
         _fitCanvas();
+      case 'view.turnLeft' || 'view.turnRight' || 'view.straighten':
+        if (!_infinite || _zoomLocked) return false;
+        // (in steps of 15 degrees, from the nearest step: a turn made with fingers comes onto them)
+        const step = math.pi / 12;
+        final turn = id == 'view.straighten' ? 0.0 : ((_viewTurn / step).round() + (id == 'view.turnRight' ? 1 : -1)) * step;
+        _turnCanvas(turn, _viewMiddle);
       case 'page.next' || 'page.previous' || 'page.first' || 'page.last':
         if (typing || _infinite || _pageCount == 0) return false;
         final at = _visiblePage().$1;
@@ -171,6 +183,8 @@ extension _EditorShortcuts on _FixedPageNoteEditorState {
   void _chooseTool({bool erase = false, bool lasso = false, bool highlighter = false}) {
     if (_mode != CanvasInteractionMode.draw) _selectMode(CanvasInteractionMode.draw);
     setState(() {
+      _picking = false;
+      _bucket = false;
       _erasing = erase;
       _lassoing = lasso;
       _highlighter = highlighter;
@@ -188,6 +202,8 @@ extension _EditorShortcuts on _FixedPageNoteEditorState {
     if (_mode != CanvasInteractionMode.draw) _selectMode(CanvasInteractionMode.draw);
     setState(() {
       _shape = tool;
+      _picking = false;
+      _bucket = false;
       _chosenDrawTool = null;
       _erasing = false;
       _lassoing = false;

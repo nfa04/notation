@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../data/brush_library.dart';
 import '../export/file_dialogs.dart';
@@ -11,6 +12,7 @@ import '../l10n/language.dart';
 import '../models/brush.dart';
 import '../models/brush_desc.dart';
 import '../models/canvas_models.dart';
+import '../painters/canvas_painters.dart' show paintBrushShape;
 import '../painters/soft_strokes.dart';
 import '../style/platform_dialog.dart';
 
@@ -108,6 +110,41 @@ class _BrushDesignerState extends State<BrushDesigner> {
     // (the brush it was made from stays in the library, out of the menu: notes may be drawn with it)
     if (old != null && old != desc.id) await widget.library.setListed(old, false);
     if (mounted) Navigator.pop(context, desc.id);
+  }
+
+  /// Keeps the design as a brush of its own and leaves the one it was made from in the menu (saving it and using it unlists that one).
+  Future<void> _saveCopy() async {
+    final desc = _named;
+    if (_editing == desc.id) {
+      _say(tr('Change a number first: a copy with the same numbers is the same brush.'), problem: true);
+      return;
+    }
+    await widget.library.save(desc);
+    _editing = desc.id;
+    await _reload();
+    if (mounted) _say(tr('Saved "{name}" as a brush of its own.', {'name': desc.name}));
+  }
+
+  /// Puts the brush on the clipboard as a line of text that can be sent in a message.
+  Future<void> _copyCode() async {
+    final desc = _named;
+    await Clipboard.setData(ClipboardData(text: desc.toCode()));
+    if (mounted) _say(tr('Copied the brush "{name}" as text. Paste it in the designer on another device.', {'name': desc.name}));
+  }
+
+  /// Takes in a brush from the text on the clipboard (a copied brush, or the text of a .strokedesc).
+  Future<void> _pasteCode() async {
+    try {
+      final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
+      final desc = BrushDesc.fromCode(text);
+      await widget.library.save(desc);
+      await _reload();
+      final taken = _items.where((b) => b.desc.id == desc.id).firstOrNull;
+      if (taken != null) _edit(taken);
+      _say(tr('Took in the brush "{name}"; it is in the brush menu.', {'name': desc.name}));
+    } on BrushDescException catch (e) {
+      _say(tr(e.message), problem: true);
+    }
   }
 
   Future<void> _export() async {
@@ -213,12 +250,34 @@ class _BrushDesignerState extends State<BrushDesigner> {
     'endTaper': 'An end of its own',
   };
 
+  /// The order the headings of the advanced numbers come in (numbers with no heading come last).
+  static const _groupOrder = ['Pen response', 'Shape', 'Colour', 'Line style', 'Blending'];
+
+  /// The curves a kind can have, by the start of the names of their numbers, with what the curve is called, what is on the way in
+  /// (left to right) and the switch that turns it on; and the numbers it takes the place of.
+  static const _curves = {
+    'pressure': (title: 'Pressure curve', x: 'Light touch → hard press', replaces: ['pressure', 'pressureCurve']),
+    'speed': (title: 'Speed curve', x: 'Slow → fast', replaces: ['speedThin']),
+  };
+
   /// The controls of the numbers of the kind, the usual ones and the advanced ones.
   (List<Widget>, List<Widget>) _knobs() {
-    final usual = <Widget>[], advanced = <Widget>[];
-    for (final k in BrushDesc.knobsOf(_draft.kind)) {
+    final usual = <Widget>[];
+    final byGroup = <String?, List<Widget>>{};
+    final knobs = BrushDesc.knobsOf(_draft.kind);
+    final hidden = <String>{
+      for (final e in _curves.entries)
+        if (_draft['${e.key}At0'] != null) ...e.value.replaces,
+    };
+    for (final k in knobs) {
+      if (k.own || hidden.contains(k.key)) continue;
       if (k.key == 'nibFlatness' && _draft['nibAngle'] == null) continue;
-      final out = k.advanced ? advanced : usual;
+      if (k.key == 'dashGap' && (_draft['dash'] ?? 0) <= 0) continue;
+      if (k.key == 'shadowDistance' && (_draft['shadow'] ?? 0) <= 0) continue;
+      if (k.key == 'shadowBlur' && (_draft['shadow'] ?? 0) <= 0) continue;
+      if (k.key == 'glowHue' && (_draft['glow'] ?? 0) <= 0) continue;
+      if (k.key == 'outlineTone' && (_draft['outline'] ?? 0) <= 0) continue;
+      final out = k.advanced ? (byGroup[k.group] ??= <Widget>[]) : usual;
       if (k.optional) {
         final on = _draft[k.key] != null;
         out.add(SwitchListTile(
@@ -234,7 +293,59 @@ class _BrushDesignerState extends State<BrushDesigner> {
         out.add(_slider(k));
       }
     }
+    // (the curves go with the pen: they are shown when the kind has the numbers of them)
+    for (final e in _curves.entries) {
+      if (knobs.any((k) => k.key == '${e.key}At0')) (byGroup['Pen response'] ??= <Widget>[]).add(_curveControl(e.key, e.value.title, e.value.x));
+    }
+    final advanced = <Widget>[];
+    for (final g in [..._groupOrder, null]) {
+      final widgets = byGroup[g];
+      if (widgets == null || widgets.isEmpty) continue;
+      if (g != null) {
+        advanced.add(Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 2),
+          child: Text(tr(g), key: ValueKey('brush-group-$g'), style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.primary)),
+        ));
+      }
+      advanced.addAll(widgets);
+    }
     return (usual, advanced);
+  }
+
+  /// A curve for the pen (see [BrushParams.pressurePoints]): a switch, and when it is on five points to drag.
+  Widget _curveControl(String prefix, String title, String xLabel) {
+    final keys = [for (final step in BrushDesc.curveSteps) '${prefix}At$step'];
+    final on = _draft[keys.first] != null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SwitchListTile(
+        key: ValueKey('brush-curve-$prefix-on'),
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: Text(tr('Draw the response as a curve ({name})', {'name': tr(title)})),
+        value: on,
+        onChanged: (v) => _set(_draft.withValues({for (var i = 0; i < keys.length; i++) keys[i]: v ? _curveStart(prefix, i / (keys.length - 1)) : null})),
+      ),
+      if (on)
+        _CurveEditor(
+          key: ValueKey('brush-curve-$prefix'),
+          values: [for (final k in keys) _draft[k] ?? 1.0],
+          min: 0.1,
+          max: 2,
+          caption: tr(xLabel),
+          onChanged: (v) => _set(_draft.withValues({for (var i = 0; i < keys.length; i++) keys[i]: v[i]})),
+        ),
+    ]);
+  }
+
+  /// Where the curve begins when it is turned on: what the numbers it takes the place of give at [x] (0 to 1), so that the line looks as it did.
+  double _curveStart(String prefix, double x) {
+    final double v;
+    if (prefix == 'pressure') {
+      v = pressureFactor(math.pow(x, _draft['pressureCurve'] ?? 1).toDouble(), _draft['pressure'] ?? 0);
+    } else {
+      v = (1 - (_draft['speedThin'] ?? 0) * 0.35 * (x * 2 - 1).clamp(-1.0, 2.0)).clamp(0.3, 1.6);
+    }
+    return (v.clamp(0.1, 2.0) * 100).round() / 100;
   }
 
   final _advanced = ExpansibleController();
@@ -245,6 +356,7 @@ class _BrushDesignerState extends State<BrushDesigner> {
   List<Widget> _knobsSection() {
     final (usual, advanced) = _knobs();
     return [
+      if (_draft.kind == BrushKind.mix) ..._partsSection(),
       ...usual,
       if (advanced.isNotEmpty)
         ExpansionTile(
@@ -259,12 +371,40 @@ class _BrushDesignerState extends State<BrushDesigner> {
     ];
   }
 
+  /// The two brushes a mix is made of, each chosen from the brushes of the library and the ones to start from (a mix cannot be a part).
+  List<Widget> _partsSection() {
+    final choices = <String, BrushDesc>{};
+    for (final d in [for (final b in _items) b.desc, ...BrushDesc.starting, ..._draft.parts]) {
+      if (d.kind != BrushKind.mix) choices.putIfAbsent(d.id, () => d);
+    }
+    Widget pick(int index, String label) => Row(children: [
+          SizedBox(width: 130, child: Text(tr(label), overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: DropdownButton<String>(
+              key: ValueKey('brush-part-$index'),
+              isExpanded: true,
+              value: _draft.parts[index].id,
+              items: [
+                for (final e in choices.entries)
+                  DropdownMenuItem(value: e.key, child: Text.rich(TextSpan(text: '${tr(e.value.name)} (${tr(_kindLabel(e.value.kind))})'), overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (id) {
+                final d = choices[id];
+                if (d != null) _set(_draft.withPart(index, d));
+              },
+            ),
+          ),
+        ]);
+    return [pick(0, 'First brush'), pick(1, 'Second brush')];
+  }
+
   static String _kindLabel(BrushKind k) => switch (k) {
         BrushKind.ink => 'Ink',
         BrushKind.roller => 'Roller',
         BrushKind.soft => 'Soft',
         BrushKind.charcoal => 'Charcoal',
         BrushKind.stamp => 'Stamp',
+        BrushKind.mix => 'Mix',
       };
 
   @override
@@ -340,6 +480,9 @@ class _BrushDesignerState extends State<BrushDesigner> {
             Wrap(spacing: 8, runSpacing: 4, children: [
               OutlinedButton.icon(key: const ValueKey('brush-import'), onPressed: _import, icon: const Icon(Icons.file_open_outlined), label: Text(tr('Import .strokedesc'))),
               OutlinedButton.icon(key: const ValueKey('brush-export'), onPressed: _export, icon: const Icon(Icons.ios_share), label: Text(tr('Export .strokedesc'))),
+              OutlinedButton.icon(key: const ValueKey('brush-copy-code'), onPressed: _copyCode, icon: const Icon(Icons.copy_outlined), label: Text(tr('Copy as text'))),
+              OutlinedButton.icon(key: const ValueKey('brush-paste-code'), onPressed: _pasteCode, icon: const Icon(Icons.content_paste_outlined), label: Text(tr('Paste from text'))),
+              if (_editing != null) OutlinedButton.icon(key: const ValueKey('brush-save-copy'), onPressed: _saveCopy, icon: const Icon(Icons.copy_all_outlined), label: Text(tr('Save as a copy'))),
               if (_editing != null && editingListed != null)
                 TextButton(
                   key: const ValueKey('brush-toggle-listed'),
@@ -403,18 +546,7 @@ class _PreviewPainter extends CustomPainter {
     );
     final shape = brush.shape(stroke);
     if (shape == null) return;
-    Color shown(double o) => o >= 1 ? color : color.withValues(alpha: color.a * o);
-    final soft = shape.soft;
-    if (soft != null) {
-      raster.paint(canvas, stroke, soft, identityHashCode(brush));
-      return;
-    }
-    final blend = shape.multiply ? BlendMode.multiply : BlendMode.srcOver;
-    canvas.drawPath(shape.path, Paint()..color = shown(shape.opacity)..blendMode = blend);
-    for (final layer in shape.layers) {
-      final tint = layer.colorOf(color);
-      canvas.drawPath(layer.path, Paint()..color = layer.opacity >= 1 ? tint : tint.withValues(alpha: tint.a * layer.opacity)..blendMode = blend);
-    }
+    paintBrushShape(canvas, stroke, shape, identityHashCode(brush), raster: raster);
   }
 
   @override
@@ -480,4 +612,84 @@ class _NumberBoxState extends State<_NumberBox> {
           onSubmitted: (_) => _send(),
         ),
       );
+}
+
+/// A curve of five points spaced evenly along the way in (a pen's pressure, a hand's speed), each dragged up or down: how thick the line
+/// is there compared to the width that is set. The line across the picture is the width as it is set (1).
+class _CurveEditor extends StatefulWidget {
+  final List<double> values;
+  final double min, max;
+  final String caption;
+  final ValueChanged<List<double>> onChanged;
+
+  const _CurveEditor({super.key, required this.values, required this.min, required this.max, required this.caption, required this.onChanged});
+
+  static const _height = 110.0, _pad = 14.0;
+
+  @override
+  State<_CurveEditor> createState() => _CurveEditorState();
+}
+
+class _CurveEditorState extends State<_CurveEditor> {
+  /// The point that is being dragged.
+  int _active = 0;
+
+  double _value(double y) => (widget.min + (1 - (y - _CurveEditor._pad) / (_CurveEditor._height - 2 * _CurveEditor._pad)) * (widget.max - widget.min)).clamp(widget.min, widget.max);
+
+  void _set(double y) {
+    final next = List.of(widget.values);
+    next[_active] = (_value(y) * 100).round() / 100;
+    widget.onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      LayoutBuilder(
+        builder: (context, box) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // (dragging up and down only: a drag that is free would lose to the scrolling of the dialog, which is up and down as well)
+          onVerticalDragDown: (d) {
+            final step = (box.maxWidth - 2 * _CurveEditor._pad) / (widget.values.length - 1);
+            _active = ((d.localPosition.dx - _CurveEditor._pad) / step).round().clamp(0, widget.values.length - 1);
+            _set(d.localPosition.dy);
+          },
+          onVerticalDragUpdate: (d) => _set(d.localPosition.dy),
+          child: SizedBox(
+            height: _CurveEditor._height,
+            width: double.infinity,
+            child: CustomPaint(painter: _CurvePainter(widget.values, widget.min, widget.max, scheme.primary, scheme.outlineVariant, scheme.surfaceContainerHighest)),
+          ),
+        ),
+      ),
+      Text(widget.caption, style: Theme.of(context).textTheme.bodySmall),
+    ]);
+  }
+}
+
+class _CurvePainter extends CustomPainter {
+  final List<double> values;
+  final double min, max;
+  final Color line, grid, fill;
+
+  _CurvePainter(this.values, this.min, this.max, this.line, this.grid, this.fill);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(8)), Paint()..color = fill);
+    final w = size.width - 2 * _CurveEditor._pad;
+    double y(double v) => _CurveEditor._pad + (1 - (v - min) / (max - min)) * (size.height - 2 * _CurveEditor._pad);
+    // (the width that is set is the line across the middle)
+    final set = y(1);
+    canvas.drawLine(Offset(_CurveEditor._pad, set), Offset(size.width - _CurveEditor._pad, set), Paint()..color = grid);
+    final points = [for (var i = 0; i < values.length; i++) Offset(_CurveEditor._pad + w * i / (values.length - 1), y(values[i]))];
+    canvas.drawPath(Path()..addPolygon(points, false), Paint()..color = line..style = PaintingStyle.stroke..strokeWidth = 2);
+    for (final p in points) {
+      canvas.drawCircle(p, 6, Paint()..color = line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CurvePainter old) => !listEquals(old.values, values) || old.line != line;
 }

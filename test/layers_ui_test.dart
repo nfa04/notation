@@ -238,4 +238,41 @@ void main() {
     expect(find.byKey(const ValueKey('find-panel')), findsNothing);
     await settleSave(tester);
   });
+
+  testWidgets('the panel sets a blend mode and a clip on the chosen layer, and puts layers in a group that folds away', (tester) async {
+    await open(tester, layers: LayerStack(const [NoteLayer('sky', 'Sky'), NoteLayer('sea', 'Sea')]));
+    await openLayers(tester);
+    // the layer drawn on is the base one: choose Sea, then its blend mode
+    await tester.tap(find.byKey(const ValueKey('layer-sea')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('layer-blend')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('layer-blend-multiply')).last, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('layer-clip')));
+    await tester.pumpAndSettle();
+
+    // Sea into a new group; the group row shows, and folding hides Sea
+    await tester.tap(find.byKey(const ValueKey('layer-menu-sea')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('layer-new-group-sea')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Group 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('layer-row-sea')), findsOneWidget);
+    final fold = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('group-fold-'));
+    await tester.tap(fold);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('layer-row-sea')), findsNothing, reason: 'folded away');
+    await tester.tap(fold);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('layer-row-sea')), findsOneWidget);
+
+    await settleSave(tester);
+    final note = (await tester.runAsync(() => repo.loadNote(id)))!;
+    final sea = note.layers.layers.firstWhere((l) => l.id == 'sea');
+    expect(sea.blend, LayerBlend.multiply);
+    expect(sea.clip, isTrue);
+    expect(sea.group, isNotEmpty);
+    expect(note.layers.layers.where((l) => l.isGroup), hasLength(1));
+  });
 }

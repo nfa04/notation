@@ -6,10 +6,38 @@ const double _minCanvasZoom = 0.05, _maxCanvasZoom = 8.0;
 /// two fingers on a trackpad, the middle mouse button) and zoomed. The strokes, text boxes and pictures are on page 0 as on any
 /// page; only how that page is shown differs, so everything that works on a page works here.
 extension _EditorCanvas on _FixedPageNoteEditorState {
-  /// The part of the surface that is on the screen, and how many screen pixels a unit of it is.
+  /// The part of the surface that is on the screen (all of it, when the canvas is turned), and how many screen pixels a unit of it is.
   ({Rect rect, double scale}) _viewWindow() {
     final scale = _pageScale;
-    return (rect: _viewTopLeft & Size(_viewportW / scale, _viewportH / scale), scale: scale);
+    if (_viewTurn == 0) return (rect: _viewTopLeft & Size(_viewportW / scale, _viewportH / scale), scale: scale);
+    final corners = [for (final a in [Offset.zero, Offset(_viewportW, 0), Offset(0, _viewportH), Offset(_viewportW, _viewportH)]) _areaToCanvas(a)];
+    final xs = corners.map((c) => c.dx), ys = corners.map((c) => c.dy);
+    return (rect: Rect.fromLTRB(xs.reduce(math.min), ys.reduce(math.min), xs.reduce(math.max), ys.reduce(math.max)), scale: scale);
+  }
+
+  /// The middle of the window, in the area: what the canvas turns about.
+  Offset get _viewMiddle => Offset(_viewportW / 2, _viewportH / 2);
+
+  /// The point of the canvas under [area] (a point of the page area), the canvas turned or not.
+  Offset _areaToCanvas(Offset area) => _viewTopLeft + (turnedBy(area - _viewMiddle, -_viewTurn) + _viewMiddle) / _pageScale;
+
+  /// The point of the canvas at the top left of the area: where things put "at the top of what is in view" go.
+  Offset get _viewCorner => _areaToCanvas(Offset.zero);
+
+  /// Moves the window so that the point [canvas] of the canvas is under [area].
+  void _placeUnder(Offset canvas, Offset area) {
+    _viewTopLeft = _clampView(canvas - (turnedBy(area - _viewMiddle, -_viewTurn) + _viewMiddle) / _pageScale);
+    _viewTick.value++;
+  }
+
+  /// Turns the canvas to [turn] (radians), the point under [focal] staying where it is. Near a quarter turn it settles on it, so that
+  /// the canvas is easily put straight again.
+  void _turnCanvas(double turn, Offset focal) {
+    final settled = settledTurn(turn);
+    if (settled == _viewTurn) return;
+    final under = _areaToCanvas(focal);
+    setState(() => _viewTurn = settled);
+    _placeUnder(under, focal);
   }
 
   /// [at] moved so that the window stays on the surface.
@@ -28,7 +56,7 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
 
   /// The window on the canvas moves by [screenDelta] (the content follows the finger).
   void _panCanvas(Offset screenDelta) {
-    final moved = _clampView(_viewTopLeft - screenDelta / _pageScale);
+    final moved = _clampView(_viewTopLeft - turnedBy(screenDelta, -_viewTurn) / _pageScale);
     if (moved == _viewTopLeft) return;
     _viewTopLeft = moved;
     _viewTick.value++;
@@ -36,10 +64,9 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
 
   /// Zooms to [target], keeping the point of the canvas that is under [focal] (in the area) where it is.
   void _zoomCanvas(double target, Offset focal) {
-    final under = _viewTopLeft + focal / _pageScale;
+    final under = _areaToCanvas(focal);
     setState(() => _zoom = target);
-    _viewTopLeft = _clampView(under - focal / _pageScale);
-    _viewTick.value++;
+    _placeUnder(under, focal);
   }
 
   /// Puts [point] of the canvas in the middle of the window.
@@ -68,6 +95,7 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
   void _canvasScaleStart(ScaleStartDetails d) {
     _scaleGo = _canPanCanvas;
     _scaleBaseZoom = _zoom;
+    _scaleBaseTurn = _viewTurn;
     _scaleCount = d.pointerCount;
   }
 
@@ -77,9 +105,13 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
       // (a finger came or went: the scale starts from 1 again)
       _scaleCount = d.pointerCount;
       _scaleBaseZoom = _zoom;
+      _scaleBaseTurn = _viewTurn - d.rotation; // (the turn too goes on from here)
     }
     _panCanvas(d.focalPointDelta);
-    if (d.pointerCount > 1 && _canZoom) _setZoom(_scaleBaseZoom * d.scale, _localInArea(d.focalPoint));
+    if (d.pointerCount > 1 && _canZoom) {
+      _setZoom(_scaleBaseZoom * d.scale, _localInArea(d.focalPoint));
+      _turnCanvas(_scaleBaseTurn + d.rotation, _localInArea(d.focalPoint));
+    }
   }
 
   /// A finger (or the pen, when the tool is not the pen) moves the canvas; not while something is being drawn or dragged.
@@ -157,6 +189,7 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
       // a trackpad: pinching zooms (two fingers moving arrive as scrolling, with the wheel, below)
       onPointerPanZoomStart: (_) {
         _panZoomStartZoom = _zoom;
+        _panZoomStartTurn = _viewTurn;
         _panZoomLastScale = 1;
       },
       onPointerPanZoomUpdate: (e) {
@@ -164,6 +197,7 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
           _panZoomLastScale = e.scale;
           _setZoom(_panZoomStartZoom * e.scale, _localInArea(e.position));
         }
+        if (e.rotation != 0 && !_zoomLocked) _turnCanvas(_panZoomStartTurn + e.rotation, _localInArea(e.position));
       },
       child: GestureDetector(
         // (the mouse drags the canvas too while it selects; with the pen tool it draws, and the wheel or the middle button move it)
@@ -189,7 +223,12 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
                   child: RepaintBoundary(child: _pageContent(0)),
                   builder: (context, page) {
                     final s = _pageScale, at = _viewTopLeft;
-                    return Transform(transform: Matrix4(s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1, 0, -at.dx * s, -at.dy * s, 0, 1), child: page);
+                    final window = Matrix4(s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1, 0, -at.dx * s, -at.dy * s, 0, 1);
+                    if (_viewTurn == 0) return Transform(transform: window, child: page);
+                    // (turned about the middle of the window)
+                    final m = _viewMiddle;
+                    final turn = Matrix4.translationValues(m.dx, m.dy, 0)..rotateZ(_viewTurn)..translateByDouble(-m.dx, -m.dy, 0, 1);
+                    return Transform(transform: turn..multiply(window), child: page);
                   },
                 ),
               ),

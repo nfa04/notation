@@ -3,6 +3,20 @@ part of 'fixed_page_note_editor.dart';
 /// A colour for the PDF; [opacity] replaces the colour's own alpha when given.
 pw.PdfColor _pdfColor(Color c, [double? opacity]) => pw.PdfColor(c.r, c.g, c.b, opacity ?? c.a);
 
+/// The PDF's blend mode for a layer's [LayerBlend].
+pw.PdfBlendMode _pdfBlendOf(LayerBlend b) => switch (b) {
+      LayerBlend.normal => pw.PdfBlendMode.normal,
+      LayerBlend.multiply => pw.PdfBlendMode.multiply,
+      LayerBlend.screen => pw.PdfBlendMode.screen,
+      LayerBlend.overlay => pw.PdfBlendMode.overlay,
+      LayerBlend.softLight => pw.PdfBlendMode.softLight,
+      LayerBlend.darken => pw.PdfBlendMode.darken,
+      LayerBlend.lighten => pw.PdfBlendMode.lighten,
+      LayerBlend.colorDodge => pw.PdfBlendMode.colorDodge,
+      LayerBlend.colorBurn => pw.PdfBlendMode.colorBurn,
+      LayerBlend.difference => pw.PdfBlendMode.difference,
+    };
+
 /// The least height of a text box in the PDF: the height it has in the editor
 /// when that is known, else what it was pulled to (0: as tall as its text).
 double exportBoxHeight(double pulledTo, double? shown) => math.max(pulledTo, shown ?? 0);
@@ -94,7 +108,14 @@ extension _PdfExport on _FixedPageNoteEditorState {
               return pw_widgets.CustomPaint(
               size: pw.PdfPoint(_paperWidth, pageHeight),
               painter: (pw.PdfGraphics canvas, pw.PdfPoint size) {
+                var blendNow = LayerBlend.normal;
                 for (final st in list) {
+                // a layer laid over the others by a blend mode: its lines are drawn with it (a clipped layer is not clipped here)
+                final blend = _layers.byId(st.layer).blend;
+                if (blend != blendNow) {
+                  canvas.setGraphicState(pw.PdfGraphicState(blendMode: _pdfBlendOf(blend)));
+                  blendNow = blend;
+                }
                 // a line of a brush (the roller, a brush of an extension): the pieces of its shape (made from the line as it is in
                 // the note, which knows its shape already: a see-through layer's line is a copy, with the same points)
                   final shape = st.brush == penBrushId ? null : brushShape(shownStroke[st.id] ??st);
@@ -185,6 +206,7 @@ extension _PdfExport on _FixedPageNoteEditorState {
                     ..restoreContext();
                   drawLabelOnPdf(canvas, size.y, st, labelFonts);
                 }
+                if (blendNow != LayerBlend.normal) canvas.setGraphicState(pw.PdfGraphicState(blendMode: pw.PdfBlendMode.normal));
               },
             );
             }),

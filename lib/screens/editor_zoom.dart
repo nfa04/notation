@@ -324,6 +324,21 @@ extension _EditorZoom on _FixedPageNoteEditorState {
               icon: const Icon(Icons.fit_screen_outlined, size: 18),
               onPressed: _fitCanvas,
             ),
+          if (_infinite && _viewTurn != 0)
+            Tooltip(
+              message: tr('The canvas is turned: tap to put it straight'),
+              child: TextButton.icon(
+                key: const ValueKey('canvas-straighten'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: Transform.rotate(angle: _viewTurn, child: const Icon(Icons.navigation_outlined, size: 16)),
+                label: Text('${(_viewTurn * 180 / math.pi).round()}°'),
+                onPressed: _zoomLocked ? null : () => _turnCanvas(0, _viewMiddle),
+              ),
+            ),
           if ((_zoom - 1).abs() > 0.01)
             Padding(
               padding: const EdgeInsets.only(right: 4),

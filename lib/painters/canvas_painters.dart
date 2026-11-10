@@ -110,18 +110,80 @@ class UnifiedInkPainter extends CustomPainter {
   bool shouldRepaint(covariant UnifiedInkPainter oldDelegate) => true;
 }
 
-/// Draws [strokes] on their [layers]: the bottom layer first, a hidden layer not at all, and a see-through layer as a whole (what is
-/// on it does not show through itself). With no layers, or only the plain one, it is [paintStrokes].
+/// Draws [strokes] on their [layers]: the bottom layer first, a hidden layer not at all, and a layer with a way of its own (see-through,
+/// laid over the others by a blend mode, clipped to the layer below, or a group of layers) as a whole. With no layers, or only the
+/// plain one, it is [paintStrokes].
+///
+/// A layer that is clipped shows only where the layer below it (the next one that is not clipped, in the same group) has drawn; a layer
+/// whose base is not among the drawn layers ([only]) is not clipped. A blend mode acts on what is drawn under the layer in this same
+/// picture (the other layers' lines), not on pictures or the paper, which lie in layers of their own.
 void paintLayered(Canvas canvas, Iterable<DrawingStroke> strokes, double pressureSensitivity, LayerStack? layers, {DrawingStroke? skip, Set<int>? only}) {
   if (layers == null || layers.isPlain) return paintStrokes(canvas, strokes, pressureSensitivity, skip: skip);
-  for (final (layer, list) in layers.grouped(strokes, only: only)) {
-    if (layer.opacity < 1) {
-      canvas.saveLayer(null, Paint()..color = Color.fromRGBO(255, 255, 255, layer.opacity));
-      paintStrokes(canvas, list, pressureSensitivity, skip: skip);
-      canvas.restore();
+  final buckets = [for (final _ in layers.layers) <DrawingStroke>[]];
+  for (final s in strokes) {
+    buckets[layers.indexOf(s.layer)].add(s);
+  }
+  // whether the layer at [i] is among those drawn here, and whether anything of it (a group: of its layers) is
+  bool included(int i) => layers.layers[i].isGroup || only == null || only.contains(i);
+  bool hasInk(int i) {
+    if (!layers.isShown(i) || !included(i)) return false;
+    final l = layers.layers[i];
+    return l.isGroup ? layers.membersOf(l.id).any(hasInk) : buckets[i].isNotEmpty;
+  }
+
+  void content(int i) {
+    final l = layers.layers[i];
+    if (l.isGroup) {
+      series(layers.membersOf(l.id), content: content, included: included, hasInk: hasInk, layers: layers, canvas: canvas);
     } else {
-      paintStrokes(canvas, list, pressureSensitivity, skip: skip);
+      paintStrokes(canvas, buckets[i], pressureSensitivity, skip: skip);
     }
+  }
+
+  series(layers.topLevel, content: content, included: included, hasInk: hasInk, layers: layers, canvas: canvas);
+}
+
+/// The layers at [places] (one level of the stack, bottom first) drawn in order, each with its opacity and blend, a clipped one inside
+/// the group of the layer it is clipped to.
+void series(List<int> places, {required void Function(int) content, required bool Function(int) included, required bool Function(int) hasInk, required LayerStack layers, required Canvas canvas}) {
+  Paint paintOf(NoteLayer l) => Paint()
+    ..color = Color.fromRGBO(255, 255, 255, l.opacity)
+    ..blendMode = l.blend.mode;
+  bool plainLayer(NoteLayer l) => l.opacity >= 1 && l.blend == LayerBlend.normal;
+  void node(int i) {
+    final l = layers.layers[i];
+    if (plainLayer(l)) return content(i);
+    canvas.saveLayer(null, paintOf(l));
+    content(i);
+    canvas.restore();
+  }
+
+  // (a layer whose base is hidden or has nothing on it shows nothing; one whose base is not drawn here is not clipped)
+  final here = [for (final i in places) if (included(i)) i];
+  for (var k = 0; k < here.length; k++) {
+    final base = here[k];
+    final clipped = <int>[];
+    while (k + 1 < here.length && layers.layers[here[k + 1]].clip) {
+      clipped.add(here[++k]);
+    }
+    if (!hasInk(base)) continue;
+    if (clipped.isEmpty) {
+      node(base);
+      continue;
+    }
+    final b = layers.layers[base];
+    canvas.saveLayer(null, plainLayer(b) ? Paint() : paintOf(b));
+    content(base);
+    for (final c in clipped.where(hasInk)) {
+      final l = layers.layers[c];
+      canvas.saveLayer(null, plainLayer(l) ? Paint() : paintOf(l));
+      content(c);
+      canvas.saveLayer(null, Paint()..blendMode = BlendMode.dstIn); // (only where the base is)
+      content(base);
+      canvas.restore();
+      canvas.restore();
+    }
+    canvas.restore();
   }
 }
 
@@ -164,6 +226,12 @@ void paintStrokes(Canvas canvas, Iterable<DrawingStroke> strokes, double pressur
     if (stroke.label != null) labelled = stroke;
     final plain = stroke.color.a >= 1 && stroke.dash == StrokeDash.solid && stroke.fill == null;
     final shape = stroke.brush == penBrushId ? null : brushShape(stroke);
+    if (shape != null && (shape.next != null || shape.under.isNotEmpty)) {
+      // (a shadow, a glow, an outline, or two brushes in one: drawn one after the other, never together with the lines round it)
+      flush();
+      paintBrushShape(canvas, stroke, shape, identityHashCode(Brushes.byId(stroke.brush)));
+      continue;
+    }
     if (shape != null) {
       Color shown(double opacity) => opacity >= 1 ? stroke.color : stroke.color.withValues(alpha: stroke.color.a * opacity);
       // (lines that darken what they lie on are never drawn together as one path: each is a layer of its own)
@@ -217,6 +285,50 @@ void paintStrokes(Canvas canvas, Iterable<DrawingStroke> strokes, double pressur
   }
   flush();
   if (labelled != null) paintLabel(canvas, labelled);
+}
+
+/// Draws all of [shape], which a brush made of [stroke]: what is behind the line, the line itself, its layers, and then the shape of
+/// the second brush if it is a mix. Each part is drawn on its own (the lines are not merged into one path as handwriting is).
+/// A shape that is drawn on a raster ([SoftLayers]) goes through [raster], the one all lines share if it is null.
+void paintBrushShape(Canvas canvas, DrawingStroke stroke, BrushShape shape, int brushKey, {SoftRaster? raster}) {
+  final line = shape.line ?? stroke;
+  final blend = shape.multiply ? BlendMode.multiply : BlendMode.srcOver;
+  Paint layerPaint(BrushLayer layer) {
+    final tint = layer.colorOf(line.color);
+    return Paint()
+      ..color = layer.opacity >= 1 ? tint : tint.withValues(alpha: tint.a * layer.opacity)
+      ..blendMode = blend;
+  }
+
+  Color shown(double opacity) => opacity >= 1 ? line.color : line.color.withValues(alpha: line.color.a * opacity);
+  for (final layer in shape.under) {
+    canvas.drawPath(layer.path, layerPaint(layer));
+  }
+  final soft = shape.soft;
+  if (soft != null) {
+    if (raster != null) {
+      raster.paint(canvas, line, soft, brushKey);
+    } else {
+      paintSoft(canvas, line, soft, brushKey);
+    }
+  } else if (shape.filled) {
+    canvas.drawPath(shape.path, Paint()..color = shown(shape.opacity)..blendMode = blend);
+    for (final layer in shape.layers) {
+      canvas.drawPath(layer.path, layerPaint(layer));
+    }
+  } else {
+    canvas.drawPath(
+        dashed(shape.path, line.dash, line.width),
+        Paint()
+          ..color = shown(shape.opacity)
+          ..strokeWidth = line.width
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..style = PaintingStyle.stroke
+          ..blendMode = blend);
+  }
+  final next = shape.next;
+  if (next != null) paintBrushShape(canvas, stroke, next, brushKey, raster: raster);
 }
 
 /// How wide [text] is in letters of [size] in the font the labels are drawn in.
@@ -369,7 +481,7 @@ class InkLayerPainter extends CustomPainter {
       final recorder = PictureRecorder();
       final c = Canvas(recorder);
       final chunks = <int, Picture>{};
-      if (layers != null && !layers!.isPlain && layers!.anySeeThrough) {
+      if (layers != null && !layers!.isPlain && layers!.composes) {
         // (a see-through layer is drawn as a whole: it cannot be made of chunks of lines from the layers below and above it)
         paintLayered(c, [for (final s in strokes) if (!identical(s, skip)) s], pressureSensitivity, layers, only: only);
       } else {

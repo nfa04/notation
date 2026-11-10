@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import 'brush.dart';
@@ -44,6 +45,9 @@ enum BrushKind {
 
   /// The same small shape stamped again and again along the line ([StampBrush]).
   stamp,
+
+  /// Two other designed brushes drawn on the same line, one over the other ([MixBrush]); it holds them as [BrushDesc.parts].
+  mix,
 }
 
 /// One number a brush is described by: its name in the file, what the person sees it called, its range and what it is when nothing
@@ -53,16 +57,19 @@ enum BrushKind {
 /// is sparse: the id of a brush that was made before it was there is then the id it still has, and the lines drawn with it keep their
 /// look. (A number that is not sparse is part of the id always; those are the numbers the kinds had to begin with.)
 ///
-/// An [advanced] one is shown under *Advanced*. [choices], if there are any, name the whole numbers from [min] to [max] (a shape, a
-/// blend); the knob then moves in whole steps.
+/// An [advanced] one is shown under *Advanced*, under the heading [group] if it has one. [choices], if there are any, name the whole
+/// numbers from [min] to [max] (a shape, a blend); the knob then moves in whole steps. A knob with an [own] control (the points of a
+/// curve) is not given a slider.
 class BrushKnob {
   final String key;
   final String label;
   final double min, max, standard;
-  final bool optional, sparse, advanced;
+  final bool optional, sparse, advanced, own;
   final List<String>? choices;
+  final String? group;
 
-  const BrushKnob(this.key, this.label, this.min, this.max, this.standard, {this.optional = false, this.sparse = false, this.advanced = false, this.choices});
+  const BrushKnob(this.key, this.label, this.min, this.max, this.standard,
+      {this.optional = false, this.sparse = false, this.advanced = false, this.own = false, this.choices, this.group});
 
   /// The text for [value]: the name of the choice, or the number.
   String show(double value) {
@@ -84,14 +91,18 @@ class BrushDesc {
   /// The value of every [BrushKnob] of the kind (an optional one that is off is not there), rounded to thousandths.
   final Map<String, double> params;
 
-  const BrushDesc._(this.kind, this.name, this.params);
+  /// For a [BrushKind.mix]: the two brushes it draws, the first one's thickness being the one that is set. Empty for any other kind.
+  final List<BrushDesc> parts;
+
+  const BrushDesc._(this.kind, this.name, this.params, this.parts);
 
   /// The most characters of a name.
   static const maxName = 40;
 
   /// A brush of [kind] with [params]: a number outside the range of its knob is brought into it, one that is not given is the
-  /// knob's standard, and numbers the kind does not have are left out.
-  factory BrushDesc(BrushKind kind, String name, [Map<String, double> params = const {}]) {
+  /// knob's standard, and numbers the kind does not have are left out. A mix is given its two [parts] (none: an ink and a charcoal);
+  /// the parts of any other kind are left out. Throws [BrushDescException] for a mix of anything but two brushes that are not mixes.
+  factory BrushDesc(BrushKind kind, String name, [Map<String, double> params = const {}, List<BrushDesc> parts = const []]) {
     final clean = <String, double>{};
     for (final k in knobsOf(kind)) {
       final v = params[k.key];
@@ -104,7 +115,13 @@ class BrushDesc {
     }
     var n = name.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (n.length > maxName) n = n.substring(0, maxName).trim();
-    return BrushDesc._(kind, n.isEmpty ? defaultName(kind) : n, Map.unmodifiable(clean));
+    var kept = const <BrushDesc>[];
+    if (kind == BrushKind.mix) {
+      if (parts.isEmpty) parts = [BrushDesc(BrushKind.ink, ''), BrushDesc(BrushKind.charcoal, '')];
+      if (parts.length != 2 || parts.any((p) => p.kind == BrushKind.mix)) throw const BrushDescException('A mixed brush is made of two brushes that are not mixes themselves.');
+      kept = List.unmodifiable(parts);
+    }
+    return BrushDesc._(kind, n.isEmpty ? defaultName(kind) : n, Map.unmodifiable(clean), kept);
   }
 
   static double _round(double v) => (v * 1000).round() / 1000;
@@ -116,10 +133,14 @@ class BrushDesc {
         BrushKind.soft => 'Soft brush',
         BrushKind.charcoal => 'Charcoal brush',
         BrushKind.stamp => 'Stamp brush',
+        BrushKind.mix => 'Mixed brush',
       };
 
   /// The numbers of [kind], in the order the designer shows them.
   static List<BrushKnob> knobsOf(BrushKind kind) => _knobs[kind]!;
+
+  // (the headings of the advanced numbers)
+  static const _pen = 'Pen response', _shape = 'Shape', _colour = 'Colour', _line = 'Line style', _blending = 'Blending';
 
   static const _knobs = <BrushKind, List<BrushKnob>>{
     BrushKind.ink: [
@@ -131,14 +152,26 @@ class BrushDesc {
       BrushKnob('jitter', 'Rough edges', 0, 1, 0),
       BrushKnob('nibAngle', 'Flat nib angle', 0, 179, 40, optional: true),
       BrushKnob('nibFlatness', 'Nib flatness', 0.05, 1, 0.15),
-      BrushKnob('pressureCurve', 'Pressure curve', 0.3, 3, 1, sparse: true, advanced: true),
-      BrushKnob('speedThin', 'Thinner when fast', 0, 1, 0, sparse: true, advanced: true),
-      BrushKnob('startTaper', 'Pointed start', 0, 1, 0.5, optional: true, sparse: true, advanced: true),
-      BrushKnob('endTaper', 'Pointed end', 0, 1, 0.5, optional: true, sparse: true, advanced: true),
-      BrushKnob('waver', 'Hand wobble', 0, 1, 0, sparse: true, advanced: true),
-      BrushKnob('lightness', 'Lighter and darker', 0, 1, 0, sparse: true, advanced: true),
-      BrushKnob('hue', 'Colour drift', 0, 60, 0, sparse: true, advanced: true),
+      BrushKnob('pressureCurve', 'Pressure curve', 0.3, 3, 1, sparse: true, advanced: true, group: _pen),
+      BrushKnob('speedThin', 'Thinner when fast', 0, 1, 0, sparse: true, advanced: true, group: _pen),
+      BrushKnob('startTaper', 'Pointed start', 0, 1, 0.5, optional: true, sparse: true, advanced: true, group: _shape),
+      BrushKnob('endTaper', 'Pointed end', 0, 1, 0.5, optional: true, sparse: true, advanced: true, group: _shape),
+      BrushKnob('waver', 'Hand wobble', 0, 1, 0, sparse: true, advanced: true, group: _shape),
+      BrushKnob('lightness', 'Lighter and darker', 0, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('hue', 'Colour drift', 0, 60, 0, sparse: true, advanced: true, group: _colour),
       _blend,
+      ..._pressureCurve,
+      ..._speedCurve,
+      BrushKnob('stabilise', 'Steady hand', 0, 1, 0, sparse: true, advanced: true, group: _pen),
+      BrushKnob('gradientHue', 'Colour turn along the line', -180, 180, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('gradientLight', 'Lighter or darker along the line', -1, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('rainbow', 'Rainbow (turn length, 0: off)', 0, 40, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('fade', 'Fade (out +, in −)', -1, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('pressureShade', 'Darker where pressed', -1, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('speedShade', 'Lighter where fast', -1, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('dash', 'Dash length (0: solid)', 0, 8, 0, sparse: true, advanced: true, group: _line),
+      BrushKnob('dashGap', 'Gap between dashes', 0.2, 8, 1.5, sparse: true, advanced: true, group: _line),
+      ..._effects,
     ],
     BrushKind.roller: [
       BrushKnob('width', 'Thickness', 1, 12, 5),
@@ -146,9 +179,9 @@ class BrushDesc {
       BrushKnob('streaks', 'Streaks', 0, 1.5, 1),
       BrushKnob('ridge', 'Edge ridges', 0, 1, 0.35),
       BrushKnob('dryness', 'Dry lanes', 0, 0.8, 0.3),
-      BrushKnob('streakLength', 'Streak length', 0.3, 3, 1, sparse: true, advanced: true),
-      BrushKnob('laneWidth', 'Lane width', 0.4, 3, 1, sparse: true, advanced: true),
-      BrushKnob('ridgeWidth', 'Ridge width', 0.02, 0.4, 0.14, sparse: true, advanced: true),
+      BrushKnob('streakLength', 'Streak length', 0.3, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('laneWidth', 'Lane width', 0.4, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('ridgeWidth', 'Ridge width', 0.02, 0.4, 0.14, sparse: true, advanced: true, group: _shape),
       _blend,
     ],
     BrushKind.soft: [
@@ -157,9 +190,9 @@ class BrushDesc {
       BrushKnob('softness', 'Softness', 0, 1, 0.6),
       BrushKnob('speckle', 'Spray specks', 0, 10, 0),
       BrushKnob('wobble', 'Uneven edges', 0, 1, 0),
-      BrushKnob('speckleSize', 'Speck size', 0.3, 3, 1, sparse: true, advanced: true),
-      BrushKnob('speckleSpread', 'Speck reach', 0.3, 3, 1, sparse: true, advanced: true),
-      BrushKnob('blur', 'Blur amount', 0, 2, 1, sparse: true, advanced: true),
+      BrushKnob('speckleSize', 'Speck size', 0.3, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('speckleSpread', 'Speck reach', 0.3, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('blur', 'Blur amount', 0, 2, 1, sparse: true, advanced: true, group: _shape),
     ],
     BrushKind.charcoal: [
       BrushKnob('width', 'Thickness', 0.5, 10, 3),
@@ -169,10 +202,10 @@ class BrushDesc {
       BrushKnob('body', 'Body', 0, 0.6, 0.1),
       BrushKnob('dryness', 'Gaps in the streaks', 0, 0.8, 0.3),
       BrushKnob('dust', 'Dust', 0, 3, 1),
-      BrushKnob('grainSize', 'Grain size', 0.4, 3, 1, sparse: true, advanced: true),
-      BrushKnob('runLength', 'Streak length', 0.3, 3, 1, sparse: true, advanced: true),
-      BrushKnob('dustSpread', 'Dust reach', 0.3, 3, 1, sparse: true, advanced: true),
-      BrushKnob('dustSize', 'Dust size', 0.3, 3, 1, sparse: true, advanced: true),
+      BrushKnob('grainSize', 'Grain size', 0.4, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('runLength', 'Streak length', 0.3, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('dustSpread', 'Dust reach', 0.3, 3, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('dustSize', 'Dust size', 0.3, 3, 1, sparse: true, advanced: true, group: _shape),
     ],
     BrushKind.stamp: [
       BrushKnob('width', 'Thickness', 0.5, 12, 4, sparse: true),
@@ -181,18 +214,57 @@ class BrushDesc {
       BrushKnob('scatter', 'Scatter', 0, 2, 0, sparse: true),
       BrushKnob('sizeJitter', 'Size variation', 0, 1, 0.2, sparse: true),
       BrushKnob('opacity', 'Opacity', 0.05, 1, 1, sparse: true),
-      BrushKnob('pressure', 'Pressure', 0, 1, 0.5, sparse: true, advanced: true),
-      BrushKnob('squash', 'Flatness', 0.1, 1, 1, sparse: true, advanced: true),
-      BrushKnob('angle', 'Angle', 0, 179, 0, sparse: true, advanced: true),
-      BrushKnob('angleJitter', 'Angle variation', 0, 1, 0, sparse: true, advanced: true),
-      BrushKnob('follow', 'Turns with', 0, 1, 0, sparse: true, advanced: true, choices: ['The page', 'The line']),
-      BrushKnob('lightness', 'Lighter and darker', 0, 1, 0, sparse: true, advanced: true),
-      BrushKnob('hue', 'Colour drift', 0, 60, 0, sparse: true, advanced: true),
+      BrushKnob('pressure', 'Pressure', 0, 1, 0.5, sparse: true, advanced: true, group: _pen),
+      BrushKnob('squash', 'Flatness', 0.1, 1, 1, sparse: true, advanced: true, group: _shape),
+      BrushKnob('angle', 'Angle', 0, 179, 0, sparse: true, advanced: true, group: _shape),
+      BrushKnob('angleJitter', 'Angle variation', 0, 1, 0, sparse: true, advanced: true, group: _shape),
+      BrushKnob('follow', 'Turns with', 0, 1, 0, sparse: true, advanced: true, group: _shape, choices: ['The page', 'The line']),
+      BrushKnob('lightness', 'Lighter and darker', 0, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('hue', 'Colour drift', 0, 60, 0, sparse: true, advanced: true, group: _colour),
       _blend,
+      BrushKnob('gradientHue', 'Colour turn along the line', -180, 180, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('gradientLight', 'Lighter or darker along the line', -1, 1, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('rainbow', 'Rainbow (turn length, 0: off)', 0, 40, 0, sparse: true, advanced: true, group: _colour),
+      BrushKnob('fade', 'Fade (out +, in −)', -1, 1, 0, sparse: true, advanced: true, group: _colour),
+      ..._effects,
+    ],
+    BrushKind.mix: [
+      BrushKnob('sizeB', 'Thickness of the second', 0.2, 4, 1),
+      BrushKnob('underneath', 'The second is', 0, 1, 0, choices: ['Over the first', 'Under the first']),
     ],
   };
 
-  static const _blend = BrushKnob('blend', 'Where lines cross', 0, 1, 0, sparse: true, advanced: true, choices: ['Normal', 'Darker']);
+  static const _blend = BrushKnob('blend', 'Where lines cross', 0, 1, 0, sparse: true, advanced: true, group: _blending, choices: ['Normal', 'Darker']);
+
+  /// The five points of the pressure curve and of the speed curve (see [BrushParams.pressurePoints]); each is there or none is.
+  static const _pressureCurve = [
+    BrushKnob('pressureAt0', 'Pressure: lightest touch', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('pressureAt25', 'Pressure: light', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('pressureAt50', 'Pressure: middle', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('pressureAt75', 'Pressure: firm', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('pressureAt100', 'Pressure: hardest press', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+  ];
+  static const _speedCurve = [
+    BrushKnob('speedAt0', 'Speed: standing still', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('speedAt25', 'Speed: slow', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('speedAt50', 'Speed: usual', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('speedAt75', 'Speed: fast', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+    BrushKnob('speedAt100', 'Speed: very fast', 0.1, 2, 1, optional: true, sparse: true, advanced: true, own: true, group: _pen),
+  ];
+
+  /// What is drawn behind a line (see [LineEffects]).
+  static const _effects = [
+    BrushKnob('shadow', 'Shadow', 0, 1, 0, sparse: true, advanced: true, group: _line),
+    BrushKnob('shadowDistance', 'Shadow distance', 0, 3, 0.8, sparse: true, advanced: true, group: _line),
+    BrushKnob('shadowBlur', 'Shadow blur', 0, 1, 0, sparse: true, advanced: true, group: _line),
+    BrushKnob('glow', 'Glow', 0, 2, 0, sparse: true, advanced: true, group: _line),
+    BrushKnob('glowHue', 'Glow colour turn', -180, 180, 0, sparse: true, advanced: true, group: _line),
+    BrushKnob('outline', 'Border', 0, 2, 0, sparse: true, advanced: true, group: _line),
+    BrushKnob('outlineTone', 'Border colour', 0, 2, 0, sparse: true, advanced: true, group: _line, choices: ['Darker', 'Lighter', 'Opposite']),
+  ];
+
+  /// The brush parts of a mix and the points of a curve are not sliders: `pressureAt…` and `speedAt…` are set together.
+  static const curveSteps = ['0', '25', '50', '75', '100'];
 
   /// The value of [key].
   double? operator [](String key) => params[key];
@@ -207,10 +279,26 @@ class BrushDesc {
     } else {
       next[key] = value;
     }
-    return BrushDesc(kind, name, next);
+    return BrushDesc(kind, name, next, parts);
   }
 
-  BrushDesc named(String newName) => BrushDesc(kind, newName, params);
+  /// This brush with several numbers set at once (a null value switches a number off, as in [withValue]).
+  BrushDesc withValues(Map<String, double?> values) {
+    final next = Map.of(params);
+    for (final e in values.entries) {
+      if (e.value == null) {
+        next.remove(e.key);
+      } else {
+        next[e.key] = e.value!;
+      }
+    }
+    return BrushDesc(kind, name, next, parts);
+  }
+
+  BrushDesc named(String newName) => BrushDesc(kind, newName, params, parts);
+
+  /// This mix with its part [index] (0 or 1) another brush.
+  BrushDesc withPart(int index, BrushDesc part) => BrushDesc(kind, name, params, [for (var i = 0; i < parts.length; i++) i == index ? part : parts[i]]);
 
   /// The id a stroke keeps: [customBrushPrefix] and a number made of the kind and the numbers (not the name). The same design is the
   /// same id on every device and in every version of the app; the number is made with sums and remainders only, so that it comes out
@@ -222,6 +310,9 @@ class BrushDesc {
       final v = params[k.key];
       // (a number added after the first version is left out at its standard: see BrushKnob.sparse)
       if (v != null && !(k.sparse && !k.optional && v == k.standard)) text.write(';${k.key}=${v.toStringAsFixed(3)}');
+    }
+    for (final p in parts) {
+      text.write(';part=${p.id}');
     }
     var a = 17, b = 29;
     for (final u in text.toString().codeUnits) {
@@ -288,9 +379,40 @@ class BrushDesc {
             lightness: _p('lightness'),
             hue: _p('hue'),
             multiply: _p('blend') >= 0.5,
+            flow: _flow(),
+            effects: _lineEffects(),
           ),
         );
+      case BrushKind.mix:
+        return MixBrush(id, name, parts[0].build(), parts[1].build(), sizeB: _p('sizeB'), underneath: _p('underneath') >= 0.5);
     }
+  }
+
+  ColourFlow _flow() => ColourFlow(
+        gradientHue: _p('gradientHue'),
+        gradientLight: _p('gradientLight'),
+        rainbow: _p('rainbow'),
+        fade: _p('fade'),
+        pressureShade: kind == BrushKind.ink ? _p('pressureShade') : 0,
+        speedShade: kind == BrushKind.ink ? _p('speedShade') : 0,
+      );
+
+  LineEffects _lineEffects() => LineEffects(
+        dash: kind == BrushKind.ink ? _p('dash') : 0,
+        dashGap: kind == BrushKind.ink ? _p('dashGap') : 1.5,
+        shadow: _p('shadow'),
+        shadowDistance: _p('shadowDistance'),
+        shadowBlur: _p('shadowBlur'),
+        glow: _p('glow'),
+        glowHue: _p('glowHue'),
+        outline: _p('outline'),
+        outlineTone: _p('outlineTone'),
+      );
+
+  /// The points of the curve whose numbers are `<prefix>At0` … `<prefix>At100`, or null if the brush has none.
+  List<double>? _curve(String prefix) {
+    if (curveSteps.every((k) => params['${prefix}At$k'] == null)) return null;
+    return [for (final k in curveSteps) params['${prefix}At$k'] ?? 1.0];
   }
 
   BrushParams _inkParams() => BrushParams(
@@ -310,6 +432,11 @@ class BrushDesc {
         lightness: _p('lightness'),
         hue: _p('hue'),
         multiply: _p('blend') >= 0.5,
+        pressurePoints: _curve('pressure'),
+        speedPoints: _curve('speed'),
+        stabilise: _p('stabilise'),
+        flow: _flow(),
+        effects: _lineEffects(),
       );
 
   /// A soft brush: the same line drawn in layers, each narrower, whose opacities add up to a bell curve ([softness] 0 is flat with
@@ -353,6 +480,7 @@ class BrushDesc {
         'name': name,
         'kind': kind.name,
         'params': {for (final e in params.entries) e.key: e.value},
+        if (parts.isNotEmpty) 'parts': [for (final p in parts) p.toJson()],
       };
 
   Uint8List toBytes() => Uint8List.fromList(utf8.encode('${const JsonEncoder.withIndent('  ').convert(toJson())}\n'));
@@ -367,10 +495,17 @@ class BrushDesc {
     if (version > strokeDescVersion) {
       throw BrushDescException('This brush file is from a newer version of Notation (file version $version); update the app to use it.');
     }
-    return BrushDesc._read(json['kind'], json['params'], json['name']);
+    final parts = json['parts'];
+    return BrushDesc._read(json['kind'], json['params'], json['name'], parts is List ? [for (final p in parts) BrushDesc.fromJson(_notAMix(p))] : const []);
   }
 
-  factory BrushDesc._read(Object? kindName, Object? raw, Object? name) {
+  /// [part] as it is, if it does not say it is a mix (the parts of a mix are read one level deep and no deeper).
+  static Object? _notAMix(Object? part, [String kindKey = 'kind']) {
+    if (part is Map && part[kindKey] == BrushKind.mix.name) throw const BrushDescException('A mixed brush is made of two brushes that are not mixes themselves.');
+    return part;
+  }
+
+  factory BrushDesc._read(Object? kindName, Object? raw, Object? name, [List<BrushDesc> parts = const []]) {
     final kind = BrushKind.values.where((k) => k.name == kindName).firstOrNull;
     if (kind == null) throw BrushDescException('This brush file has a kind of brush this app does not know ("$kindName").');
     if (raw != null && raw is! Map) throw const BrushDescException('The numbers of this brush are not in the form the app writes.');
@@ -381,17 +516,51 @@ class BrushDesc {
       if (v is! num || !v.isFinite) throw BrushDescException('"${k.key}" has to be a number.');
       params[k.key] = v.toDouble();
     }
-    return BrushDesc(kind, name is String ? name : '', params);
+    return BrushDesc(kind, name is String ? name : '', params, parts);
   }
 
   /// The brush as a line of a live session carries it: `k` (kind), `n` (name) and `p` (numbers), no format and no version (the
   /// session has its own; a line from a newer version that this cannot read is drawn as the pen).
-  Map<String, Object?> toCompactJson() => {'k': kind.name, 'n': name, 'p': {for (final e in params.entries) e.key: e.value}};
+  Map<String, Object?> toCompactJson() =>
+      {'k': kind.name, 'n': name, 'p': {for (final e in params.entries) e.key: e.value}, if (parts.isNotEmpty) 'parts': [for (final p in parts) p.toCompactJson()]};
 
   /// A brush from [toCompactJson]. Throws [BrushDescException] for anything else.
   factory BrushDesc.fromCompactJson(Object? json) {
     if (json is! Map) throw const BrushDescException('This is not a brush.');
-    return BrushDesc._read(json['k'], json['p'], json['n']);
+    final parts = json['parts'];
+    return BrushDesc._read(json['k'], json['p'], json['n'], parts is List ? [for (final p in parts) BrushDesc.fromCompactJson(_notAMix(p, 'k'))] : const []);
+  }
+
+  /// What a brush starts with when it is shared as a line of text.
+  static const codePrefix = 'notation-brush:';
+
+  /// The brush as one line of text that can be sent in a message and pasted into the designer of another device (see [fromCode]):
+  /// [codePrefix] and the compact JSON of the brush, URL-safe base64.
+  String toCode() => '$codePrefix${base64Url.encode(utf8.encode(jsonEncode(toCompactJson()))).replaceAll('=', '')}';
+
+  /// A brush from text that was copied from [toCode], or the text of a `.strokedesc`. Throws [BrushDescException] for anything else.
+  factory BrushDesc.fromCode(String text) {
+    final t = text.trim();
+    if (t.length > strokeDescMaxBytes * 2) throw const BrushDescException('This is too long to be a brush.');
+    if (t.startsWith('{')) return BrushDesc.parse(t);
+    if (!t.startsWith(codePrefix)) throw const BrushDescException('This is not a brush (the text is not a brush code).');
+    final String json;
+    try {
+      var body = t.substring(codePrefix.length).replaceAll(RegExp(r'\s'), '');
+      while (body.length % 4 != 0) {
+        body += '=';
+      }
+      json = utf8.decode(base64Url.decode(body));
+    } on FormatException {
+      throw const BrushDescException('This is not a brush (the code is damaged).');
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(json);
+    } on FormatException {
+      throw const BrushDescException('This is not a brush (the code is damaged).');
+    }
+    return BrushDesc.fromCompactJson(decoded);
   }
 
   /// A brush from the text of a `.strokedesc`.
@@ -418,7 +587,7 @@ class BrushDesc {
   }
 
   @override
-  bool operator ==(Object other) => other is BrushDesc && other.kind == kind && other.name == name && _same(other.params, params);
+  bool operator ==(Object other) => other is BrushDesc && other.kind == kind && other.name == name && _same(other.params, params) && listEquals(other.parts, parts);
 
   static bool _same(Map<String, double> a, Map<String, double> b) {
     if (a.length != b.length) return false;
@@ -429,7 +598,7 @@ class BrushDesc {
   }
 
   @override
-  int get hashCode => Object.hash(kind, name, Object.hashAllUnordered(params.entries.map((e) => Object.hash(e.key, e.value))));
+  int get hashCode => Object.hash(kind, name, Object.hashAllUnordered(params.entries.map((e) => Object.hash(e.key, e.value))), Object.hashAll(parts));
 
   // ---- where to start from
 
@@ -457,6 +626,18 @@ class BrushDesc {
     BrushDesc(BrushKind.stamp, 'Stars', const {'width': 6, 'shape': 3, 'spacing': 1.2, 'scatter': 0.2, 'angleJitter': 1, 'lightness': 0.5, 'hue': 40}),
     BrushDesc(BrushKind.stamp, 'Leaves', const {'width': 7, 'shape': 4, 'spacing': 0.8, 'scatter': 0.3, 'follow': 1, 'angleJitter': 0.15, 'hue': 30}),
     BrushDesc(BrushKind.stamp, 'Sponge', const {'width': 5, 'spacing': 0.25, 'scatter': 0.8, 'sizeJitter': 0.8, 'opacity': 0.5}),
+    BrushDesc(BrushKind.ink, 'Dashed line', const {'width': 1.5, 'dash': 3, 'dashGap': 1.5}),
+    BrushDesc(BrushKind.ink, 'Dotted line', const {'width': 2, 'dash': 1, 'dashGap': 1}),
+    BrushDesc(BrushKind.ink, 'Neon', const {'width': 1.5, 'smoothing': 0.8, 'glow': 1.2, 'glowHue': 40}),
+    BrushDesc(BrushKind.ink, 'Rainbow', const {'width': 3, 'smoothing': 0.8, 'rainbow': 14}),
+    BrushDesc(BrushKind.ink, 'Comet', const {'width': 3, 'smoothing': 0.8, 'taper': 0.6, 'fade': 0.9}),
+    BrushDesc(BrushKind.ink, 'Drop shadow', const {'width': 2, 'smoothing': 0.8, 'shadow': 0.5, 'shadowBlur': 0.5}),
+    BrushDesc(BrushKind.ink, 'Sticker', const {'width': 3, 'smoothing': 0.8, 'outline': 0.8, 'outlineTone': 1}),
+    BrushDesc(BrushKind.mix, 'Ink and charcoal', const {}, [BrushDesc(BrushKind.ink, 'Ink', {'width': 1.2, 'pressure': 0.7, 'smoothing': 0.8}), BrushDesc(BrushKind.charcoal, 'Charcoal')]),
+    BrushDesc(BrushKind.mix, 'Marker with stars', const {'underneath': 1, 'sizeB': 1.5}, [
+      BrushDesc(BrushKind.ink, 'Marker', {'width': 3, 'smoothing': 0.6, 'opacity': 0.5}),
+      BrushDesc(BrushKind.stamp, 'Stars', {'width': 3, 'shape': 3, 'spacing': 1.5, 'hue': 40, 'lightness': 0.5}),
+    ]),
   ]);
 }
 

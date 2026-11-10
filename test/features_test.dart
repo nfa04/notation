@@ -129,7 +129,7 @@ void main() {
       final f = FeatureSettings(store.read, store.write);
       await f.load();
       // (citations, diagrams, the creative tools and the buttons of the note came after such a list was saved, so the person never chose against them)
-      expect(f.enabled, {Feature.tables, Feature.citations, Feature.diagrams, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.alignLines, Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud});
+      expect(f.enabled, {Feature.tables, Feature.citations, Feature.diagrams, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.alignLines, Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud, Feature.colorPicker, Feature.fillBucket});
       store.values[FeatureSettings.enabledKey] = 'not json';
       final g = FeatureSettings(store.read, store.write);
       await g.load();

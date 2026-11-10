@@ -599,9 +599,11 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                   if (!_penDown) {
                     setState(() => _penDown = true); // freezes the page list
                   }
+                  if (_picksWith(event)) return _pickDown(event.position, event.pointer); // (the pen's side button, set to pick a colour)
                   if (_erasesWith(event)) {
                     return _eraseAt(pageIndex, event.localPosition);
                   }
+                  if (_bucketOn && !_lassosWith(event)) return _fillAt(pageIndex, event.localPosition, Size(_paperWidth, pageHeight)); // (the bucket: a touch fills, nothing is drawn)
                   _downAt = event.localPosition;
                   _downTime = DateTime.now();
                   _travel = 0;
@@ -681,6 +683,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                 },
                 onPointerMove: (event) {
                   if (!_drawsWith(event)) return;
+                  if (event.pointer == _pickPointer) return _pickMove(event.position);
                   if (_erasesWith(event)) {
                     _currentActiveStroke = null;
                     return _eraseAt(pageIndex, event.localPosition);
@@ -726,6 +729,11 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                   }
                 },
                 onPointerUp: (event) {
+                  if (event.pointer == _pickPointer) {
+                    _stylusDown = false;
+                    unawaited(_pickUp());
+                    return;
+                  }
                   _commitErase();
                   if (_penGrab != null) {
                     _stylusDown = false;
