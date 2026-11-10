@@ -54,7 +54,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
   /// text box, drawing or picture there joins the selection or leaves it.
   void _shiftTapAt(int page, Offset at) {
     final box = _lastWhere(_textBoxesPerPage[page] ?? const <TextBoxWidgetModel>[], (b) => !_inGutter(b) && _boxEditable(b) && _boxRect(b).contains(at));
-    final stroke = box != null ? null : _lastWhere(_strokesPerPage[page] ?? const <DrawingStroke>[], (st) => _layers.editable(st) && st.isNear(at, 10));
+    final stroke = box != null ? null : _lastWhere(_strokesPerPage[page] ?? const <DrawingStroke>[], (st) => _layers.editable(st) && st.pickedAt(at, 10));
     final image = box != null || stroke != null ? null : _lastWhere(_imagesPerPage[page] ?? const <ImageItem>[], (m) => _imageEditable(m) && (m.position & m.size).contains(at));
     if (box == null && stroke == null && image == null) return;
     setState(() => _toggleInSelection(page, stroke: stroke, box: box, image: image));
@@ -507,6 +507,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
   }
 
   Widget _toolbarsOverPage(int pageIndex) {
+    if (_xform != null) return _transformBar(pageIndex);
     final box = _activeSelectedBox;
     final b = box != null && (_textBoxesPerPage[pageIndex]?.contains(box) ?? false) && !_inGutter(box) ? box : null;
     final r = _selectedStrokePage == pageIndex ? _selectionBounds() : null;
@@ -636,6 +637,14 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                       visualDensity: VisualDensity.compact,
                       onPressed: _editLabel,
                     ),
+                  if (_mayTransform)
+                    IconButton(
+                      key: const ValueKey('transform-selection'),
+                      icon: const Icon(Icons.transform),
+                      tooltip: tr('Transform: distort, perspective, skew, rotate, warp'),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _beginTransform,
+                    ),
                   if (_mayArrange) _arrangeButton(),
                   ..._groupButtons(),
                   if (_mayEditCurve)
@@ -682,6 +691,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
   }
 
   Widget _selectionOverlay(int pageIndex) {
+    if (_xform != null) return _transformOverlay(pageIndex); // (a free transform is going on: its frame and handles take the place)
     if (_selectedStrokePage == pageIndex) {
       _selection.removeWhere(
         (st) => !(_strokesPerPage[pageIndex]?.contains(st) ?? false),

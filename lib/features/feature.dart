@@ -44,6 +44,7 @@ enum Feature {
   layers(FeatureGroup.creative, 'Layers', 'Draw on layers that can be hidden, locked, reordered and made see-through, and move drawings between them.', Icons.layers_outlined),
   symmetry(FeatureGroup.creative, 'Symmetry drawing', 'Draw with a mirror or around a centre: what you draw is repeated on the other side or in turns (mandalas, patterns).', Icons.flip),
   colorPicker(FeatureGroup.creative, 'Eyedropper', 'Pick a color from anything on the page (a drawing, a picture, a PDF) for the pen: tap the button or press I, then touch the color.', Icons.colorize_outlined),
+  freeTransform(FeatureGroup.creative, 'Free transform', 'Bend selected drawings: distort them by the corners, give them perspective, skew them, turn them by any angle or warp them with a net. The whole change is one step to take back.', Icons.transform),
   fillBucket(FeatureGroup.creative, 'Fill bucket', 'Fill a closed area of a drawing with the pen color by touching it: the area is found from the lines round it, and small gaps in them can be closed. The fill is a shape under the lines, so it can be recolored or moved later.', Icons.format_color_fill),
   stabiliser(FeatureGroup.creative, 'Line stabiliser', 'Smooths a shaky hand: the line follows the pen with a little delay, for clean lettering and line art.', Icons.timeline),
 
@@ -138,7 +139,7 @@ enum UseArea {
         UseArea.humanities => {Feature.diagrams, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.themeImages, Feature.handwriting},
         UseArea.languages => {Feature.lookup, Feature.flashcards, Feature.assistant, Feature.handwriting},
         UseArea.society => {Feature.diagrams, Feature.tables, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.automations},
-        UseArea.arts => {Feature.diagrams, Feature.shapes, Feature.straighten, Feature.themeImages, Feature.handwriting, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket},
+        UseArea.arts => {Feature.diagrams, Feature.shapes, Feature.straighten, Feature.themeImages, Feature.handwriting, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket, Feature.freeTransform},
         UseArea.together => {Feature.live, Feature.history},
       };
 }
@@ -166,7 +167,7 @@ class FeatureSettings extends ChangeNotifier {
 
   /// The tools that came after the lists of tools were first saved. A list saved without a record of what it knew leaves these on
   /// (a new tool is there for a person who never chose against it).
-  static const _added = {Feature.citations, Feature.diagrams, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.alignLines, Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud, Feature.colorPicker, Feature.fillBucket};
+  static const _added = {Feature.citations, Feature.diagrams, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.alignLines, Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud, Feature.colorPicker, Feature.fillBucket, Feature.freeTransform};
 
   final Future<String?> Function(String key) _read;
   final Future<void> Function(String key, String value) _write;

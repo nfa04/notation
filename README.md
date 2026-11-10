@@ -684,6 +684,13 @@ Tools of their own group in *Settings → Tools* (`Feature.brushes`, `symmetry`,
   (PNG, base64): text boxes and the written document (drawn as the editor draws them, formulas included), a PDF page under the lines,
   a brush that blurs (`BrushShape.soft`) and a line with text along it. A clipped layer is not clipped (as in the PDF). The ruling of
   an infinite canvas is left out. `exportSvgTo` on the editor state is the hook for automations and tests.
+- **Free transform** (`lib/models/free_transform.dart`, `lib/screens/editor_free_transform.dart`; `Feature.freeTransform`): the transform button in the
+  tools over a selection bends the selected drawings. *Distort* pulls the four corners anywhere, *Perspective* pulls a corner and the next one
+  mirrors it (a trapezoid), *Skew* slides an edge along itself, *Rotate* turns about the middle by any angle (Shift: 15° steps) and *Warp* bends
+  the drawing with a 4 × 4 net (a cubic through the net points; long steps get extra points first, pressures are interpolated). Distort,
+  perspective, skew and rotate are one perspective map (`Homography`), so straight lines stay straight; a shape that would fold is not followed.
+  Changing the kind keeps what was done; the whole go is one step to take back, "start again" and "cancel" return to the lines at the start.
+  Connectors, text boxes and pictures in the selection are not bent. A fill of the bucket can be selected by touching inside it (`pickedAt`).
 - **Onion skin** (`lib/painters/onion_skin.dart`, `lib/screens/editor_onion_skin.dart`; `Feature.flipbook`, paged notes only): the
   layers-shaped button in the drawing bar lets up to three earlier pages show through behind the lines (red, 30 / 18 / 10 %) and,
   if chosen, the next page (green, 25 %), to draw the frames of an animation that the flipbook then plays. Each ghost is the page's

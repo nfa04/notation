@@ -547,7 +547,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     final strokes =
                         _strokesPerPage[pageIndex] ?? const <DrawingStroke>[];
                     final i = strokes.lastIndexWhere(
-                      (st) => _layers.editable(st) && st.isNear(e.localPosition, 10),
+                      (st) => _layers.editable(st) && st.pickedAt(e.localPosition, 10),
                     );
                     if (_addingToSelection) {
                       // Shift: the drawing joins what is selected, or leaves it; a tap on nothing keeps the selection as it is
@@ -583,6 +583,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
               Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (event) {
+                  if (_xform != null) return; // (a free transform is going on: the pen draws nothing)
                   if (!_drawsWith(event)) return;
                   if (event.kind == PointerDeviceKind.mouse && (event.buttons & kMiddleMouseButton) != 0) return; // (it moves the canvas)
                   // the side button of the pen, set to run a trigger: it does that and does not draw
@@ -823,7 +824,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                           (_strokesPerPage[pageIndex] ??
                                   const <DrawingStroke>[])
                               .lastWhere(
-                                (st) => _layers.editable(st) && st.isNear(_downAt, 10),
+                                (st) => _layers.editable(st) && st.pickedAt(_downAt, 10),
                                 orElse: () => DrawingStroke(
                                   color: Colors.black,
                                   width: 0,

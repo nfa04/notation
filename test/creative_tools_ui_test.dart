@@ -83,7 +83,7 @@ void main() {
   testWidgets('with the tool off the pen and the roller are the only brushes (so the button is still there for those two)', (tester) async {
     final store = <String, String>{};
     final features = FeatureSettings((k) async => store[k], (k, v) async => store[k] = v);
-    await features.apply({...FeaturePresets.everything}..removeAll([Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket]));
+    await features.apply({...FeaturePresets.everything}..removeAll([Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket, Feature.freeTransform]));
     await open(tester, features: features);
     await tester.ensureVisible(find.byKey(const ValueKey('brush-picker')));
     await tester.tap(find.byKey(const ValueKey('brush-picker')));

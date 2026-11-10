@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +96,25 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('undo-button')));
     await tester.pumpAndSettle();
     expect(strokes(), hasLength(1));
+  });
+
+  testWidgets('a fill can be picked by a touch inside it (its line is not there to be touched), and then bent', (tester) async {
+    await open(tester);
+    await drawBox(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    await tap(tester, const Offset(250, 200));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG); // (the bucket off)
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('transform-selection')), findsNothing);
+
+    final g = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await g.down(onPage(tester, const Offset(250, 200)));
+    await g.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('transform-selection')), findsOneWidget, reason: 'the fill under the touch is selected');
+    expect(find.byKey(const ValueKey('resize-br')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('outside the shape the paper is filled round it, and a page with no lines says so', (tester) async {

@@ -144,6 +144,7 @@ import '../models/stroke_label.dart';
 import '../models/canvas_view.dart';
 import '../models/collage.dart';
 import '../models/color_sample.dart';
+import '../models/free_transform.dart';
 import '../models/region_fill.dart';
 import '../models/connector.dart';
 import '../images/picture_edit.dart';
@@ -285,6 +286,7 @@ part 'editor_groups.dart';
 part 'editor_eyedropper.dart';
 part 'editor_fill_bucket.dart';
 part 'editor_onion_skin.dart';
+part 'editor_free_transform.dart';
 
 /// What the clipboard holds that a note can take: a picture, files (pictures
 /// copied in a file manager) or text.
@@ -1267,6 +1269,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     int page,
   })? _resizeStart;
   Offset _resizePulled = Offset.zero;
+
+  /// The free transform that is going on (see `editor_free_transform.dart`); null when none is.
+  _TransformSession? _xform;
   Offset _downAt = Offset.zero;
   DateTime _downTime = DateTime.now();
   double _travel = 0;

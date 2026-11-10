@@ -41,6 +41,11 @@ enum FillGap {
 /// A fill that the bucket made: a closed shape with a fill and no line of its own.
 bool isBucketFill(DrawingStroke s) => s.fill != null && s.color.a == 0 && s.link == null;
 
+/// Picking a drawing by a touch: its line within [radius] or, for a fill of the bucket (whose line cannot be seen), anywhere in its area.
+extension StrokePicking on DrawingStroke {
+  bool pickedAt(Offset at, double radius) => isNear(at, radius) || (isBucketFill(this) && pointInPolygon(at, points));
+}
+
 /// The area that the lines of [walls] close round [at], for a fill that goes under them. The lines are drawn on a grid as wide as they
 /// are ([width] counts, thin lines are widened to about two cells), a gap of up to [gap] units between them is closed, and the area
 /// is what can be reached from [at]. The fill is then pushed under the lines (as far as their middle), so that no sliver of paper is
