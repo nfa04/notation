@@ -239,9 +239,19 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
+  # Two runners, so the two builds do not share one small disk: the split APKs and the universal one (all three CPU kinds in one file).
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: notation-android
+            build_args: --split-per-abi --target-platform android-arm,android-arm64,android-x64
+          - artifact: notation-android-universal
+            # the version code of the arm64 split (pubspec build number + 2000), see "Build the APKs"
+            build_args: --build-number=ARM64
     steps:
       - uses: actions/checkout@v4
       # A free runner of a private repository has 2 cores, 7 GB of memory and 14 GB of disk. The build of a laptop takes 2 minutes and
@@ -274,20 +284,25 @@ jobs:
             echo "No signing secrets: the APK is signed with the debug key."
           fi
       # without android/key.properties the release build is signed with the debug key: it installs, but it cannot go to a store.
-      # arm64 only: that is every current phone (an emulator on a PC would need an x64 build too). --split-per-abi is what leaves
-      # the other ABIs' libraries of the plugins out of the APK: without it the APK is 182 MB instead of 96 MB.
+      # One APK per CPU kind: arm64 (every current phone), arm (32-bit phones and tablets) and x64 (emulators, Chromebooks, x86 Android).
+      # --split-per-abi is what leaves the other ABIs' libraries of the plugins out of each APK: without it one APK is 260 MB instead of ~100 MB.
+      # The universal APK gets the version code the arm64 split gets (--split-per-abi adds 2000 to the pubspec build number, 1000 for arm,
+      # 4000 for x64; the universal one gets no offset). Android only installs over an app with the same or a lower version code, so with the
+      # same code a phone (arm64) can go from the universal APK to the split one and back. Only --build-number=ARM64 is replaced here.
       # The loop writes the memory and disk use into the log every minute, so a failure shows what it ran out of.
       - name: Build the APKs
         run: |
           ( while sleep 60; do echo "[monitor] $(date +%T) memory available: $(free -m | awk '/Mem/{print $7}') MB, swap used: $(free -m | awk '/Swap/{print $3}') MB, disk free: $(df -h --output=avail / | tail -1 | tr -d ' ')"; done ) &
           monitor=$!
           trap 'kill $monitor' EXIT
-          flutter build apk --release --split-per-abi --target-platform android-arm64
+          build=$(sed -n 's/^version: [0-9.]*+\([0-9]*\).*/\1/p' pubspec.yaml)
+          args="${{ matrix.build_args }}"
+          flutter build apk --release ${args/ARM64/$((build + 2000))}
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
-          name: notation-android
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          name: ${{ matrix.artifact }}
+          path: build/app/outputs/flutter-apk/*-release.apk
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
           compression-level: 0

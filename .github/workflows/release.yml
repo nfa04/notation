@@ -33,7 +33,10 @@ jobs:
           cp dl/notation-ios/*.ipa out/Notation-ios-unsigned.ipa
           cp dl/notation-macos/*.zip out/Notation-macos.zip
           cp dl/notation-macos/*.dmg out/Notation-macos.dmg
-          cp dl/notation-android/*.apk out/Notation-android-arm64.apk
+          cp dl/notation-android/app-arm64-v8a-release.apk out/Notation-android-arm64.apk
+          cp dl/notation-android/app-armeabi-v7a-release.apk out/Notation-android-arm32.apk
+          cp dl/notation-android/app-x86_64-release.apk out/Notation-android-x64.apk
+          cp dl/notation-android-universal/app-release.apk out/Notation-android-universal.apk
           cp dl/notation-linux-flatpak/*.flatpak out/Notation-linux-x86_64.flatpak
           cp dl/notation-windows-setup/*.exe out/Notation-windows-x64-setup.exe
           (cd dl/notation-windows-x64 && zip -qr ../../out/Notation-windows-x64.zip .)
