@@ -61,7 +61,9 @@ extension _EditorZoom on _FixedPageNoteEditorState {
     if (e.kind != PointerDeviceKind.stylus) return null;
     final range = e.pressureMax - e.pressureMin;
     if (range <= 0) return null;
-    final p = ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0);
+    final raw = ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0);
+    // (a pen that reports its lean: 0 upright, pi/2 flat)
+    final p = widget.stylus?.response(raw, lean: (e.tilt / (math.pi / 2)).clamp(0.0, 1.0)) ?? raw;
     _lastPressure = first || _lastPressure == null ? p : _lastPressure! * 0.6 + p * 0.4;
     return _lastPressure;
   }

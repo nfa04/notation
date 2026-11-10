@@ -24,6 +24,18 @@ void main() {
     expect(pressureFactor(0, 0.5), closeTo(0.675, 1e-9));
   });
 
+  test('the pressure curve keeps the ends and bends the middle; tilt adds thickness', () {
+    expect(StylusSettings.shaped(0, 0.7), 0);
+    expect(StylusSettings.shaped(1, -0.7), 1);
+    expect(StylusSettings.shaped(0.5, 0), closeTo(0.5, 1e-9));
+    expect(StylusSettings.shaped(0.5, 1), lessThan(0.2));
+    expect(StylusSettings.shaped(0.5, -1), greaterThan(0.75));
+    final s = StylusSettings.inMemory(tilt: 0.5);
+    expect(s.response(0.4), closeTo(0.4, 1e-9));
+    expect(s.response(0.4, lean: 1), closeTo(0.9, 1e-9));
+    expect(s.response(0.9, lean: 1), 1);
+  });
+
   test('the settings are kept', () async {
     final repo = SettingsRepository(await AppDatabase.open(path: inMemoryDatabasePath));
     final a = StylusSettings(repo);
@@ -32,6 +44,8 @@ void main() {
     await a.setFingers(FingerMode.scroll);
     await a.setSensitivity(0.9);
     await a.setHoverRing(false);
+    await a.setCurve(0.4);
+    await a.setTilt(0.3);
     final b = StylusSettings(repo);
     await b.load();
     expect(b.pressure, isFalse);
@@ -39,6 +53,8 @@ void main() {
     expect(b.barrel, BarrelAction.lasso);
     expect(b.fingers, FingerMode.scroll);
     expect(b.sensitivity, 0.9);
+    expect(b.curve, 0.4);
+    expect(b.tilt, 0.3);
     expect(b.hoverRing, isFalse);
   });
 

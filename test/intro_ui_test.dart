@@ -264,6 +264,7 @@ void main() {
         id = await repo.createNote();
       });
       Future<void> open() async {
+        await tester.runAsync(() => repo.settings.set('draw_bar_more', '1')); // (the rarely used tools are folded away by default)
         await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: UniqueKey(), noteId: id, repository: repo, features: features)));
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
         await tester.pumpAndSettle();

@@ -3,6 +3,9 @@ part of 'fixed_page_note_editor.dart';
 /// The pages of the note as pictures (PNG) in a size to choose: for the web, a screen, print, or a post, a slide or a story. A page is
 /// drawn the way the editor shows it, but out of sight: the paper and its lines (or the page of the PDF), the written document, the
 /// pictures, highlights, lines and text boxes (formulas included) in the order of the layers; hidden layers are left out.
+/// The name that stands for the paper (with the page of a PDF, the written document and the highlights) among the layers of an export.
+const _paperLayer = '\u0000paper';
+
 extension _EditorImageExport on _FixedPageNoteEditorState {
   /// The pages there are to export: the blank notebook without the empty page it always shows after the last used one.
   List<int> get _picturePages => _infinite ? const [0] : [for (var i = 0; i < (_isBlank ? math.max(1, _lastUsedBlankPage + 1) : _totalPages); i++) i];
@@ -75,26 +78,30 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
   }
 
   /// A PNG of page [i] in the size of [preset].
-  Future<Uint8List> _picturePage(int i, ImagePreset preset, {required bool seeThrough}) async {
+  ///
+  /// With [only] the picture is of one layer of the note alone, see-through (for the layers of an OpenRaster file): its lines, pictures
+  /// and text boxes at full opacity, or with [_paperLayer] the paper, the PDF page, the written document and the highlights.
+  Future<Uint8List> _picturePage(int i, ImagePreset preset, {required bool seeThrough, String? only}) async {
+    final onPaper = only == _paperLayer, onLayer = only != null && !onPaper;
     final window = _infinite ? _canvasPicture() : null;
     final size = window?.size ?? Size(_paperWidth, _heightOf(i));
     final plan = planImage(preset, size);
 
     final boxes = [
       for (final b in _textBoxesPerPage[i] ?? const <TextBoxWidgetModel>[])
-        if (b.controller.text.trim().isNotEmpty && _layers.byId(b.layer).visible && !_inGutter(b)) b,
+        if (b.controller.text.trim().isNotEmpty && (onLayer ? b.layer == only : (!onPaper && _layers.byId(b.layer).visible)) && !_inGutter(b)) b,
     ];
-    final strokes = [for (final s in _strokesPerPage[i] ?? const <DrawingStroke>[]) if (s.points.length >= 2) s];
-    final highlights = _highlightsPerPage[i] ?? const <PdfHighlight>[];
+    final strokes = [for (final s in _strokesPerPage[i] ?? const <DrawingStroke>[]) if (s.points.length >= 2 && !onPaper && (!onLayer || s.layer == only)) s];
+    final highlights = onLayer ? const <PdfHighlight>[] : (_highlightsPerPage[i] ?? const <PdfHighlight>[]);
     final stacking = _stackingOf(i);
-    final document = _isDocumentPage(i);
+    final document = _isDocumentPage(i) && !onLayer;
 
     final pictures = <(ImageItem, ui.Image)>[];
     ui.Image? paperPage;
     final shots = <WidgetPicture>[];
     try {
       for (final m in _imagesPerPage[i] ?? const <ImageItem>[]) {
-        if (!_layers.byId(m.layer).visible) continue;
+        if (onPaper || (onLayer ? m.layer != only : !_layers.byId(m.layer).visible)) continue;
         final file = File(m.path);
         if (!await file.exists()) continue;
         try {
@@ -107,7 +114,7 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
         }
       }
       // the page of the PDF, as sharp as the picture is
-      if (!_isBlank && _pdfDocument != null && i < _pdfDocument!.pages.length) {
+      if (!onLayer && !_isBlank && _pdfDocument != null && i < _pdfDocument!.pages.length) {
         paperPage = await renderPageImage(_pdfDocument!.pages[i], plan.page.width.round());
       }
       if (!mounted) throw StateError('the note was closed');
@@ -153,7 +160,7 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
             Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
             m.position & m.size,
             Paint()
-              ..color = Color.fromRGBO(255, 255, 255, _layers.byId(m.layer).opacity)
+              ..color = Color.fromRGBO(255, 255, 255, onLayer ? 1 : _layers.byId(m.layer).opacity)
               ..filterQuality = FilterQuality.medium,
           );
         }
@@ -162,7 +169,7 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
       void drawBoxes(Canvas canvas, Iterable<TextBoxWidgetModel> list) {
         for (final box in list) {
           final shot = boxShots[box];
-          if (shot != null) drawShot(canvas, shot, box.position, _layers.byId(box.layer).opacity);
+          if (shot != null) drawShot(canvas, shot, box.position, onLayer ? 1 : _layers.byId(box.layer).opacity);
         }
       }
 
@@ -170,6 +177,12 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
         final bounds = window ?? Offset.zero & size;
         if (window != null) canvas.translate(-window.left, -window.top);
         canvas.clipRect(bounds);
+        if (onLayer) {
+          drawPictures(canvas, pictures);
+          paintStrokes(canvas, strokes, sensitivity);
+          drawBoxes(canvas, boxes);
+          return;
+        }
         if (!seeThrough) canvas.drawRect(bounds, Paint()..color = Colors.white);
         if (paperPage != null) {
           canvas.drawImageRect(paperPage, Rect.fromLTWH(0, 0, paperPage.width.toDouble(), paperPage.height.toDouble()), bounds, Paint()..filterQuality = FilterQuality.medium);
@@ -189,6 +202,7 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
             ..color = h.color
             ..blendMode = BlendMode.multiply);
         }
+        if (onPaper) return;
         paintLayered(canvas, strokes, sensitivity, _layers, only: _usualInk(stacking));
         drawBoxes(canvas, [for (final b in boxes) if (_boxUsual(stacking, b)) b]);
         // (the parts that lie over those by their layers)
@@ -202,7 +216,7 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
               drawBoxes(canvas, [for (final b in boxes) if (_layers.indexOf(b.layer) == part.layer) b]);
           }
         }
-      }, around: seeThrough ? null : Colors.white);
+      }, around: seeThrough || onLayer ? null : Colors.white);
     } finally {
       for (final p in pictures) {
         p.$2.dispose();

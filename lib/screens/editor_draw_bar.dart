@@ -78,6 +78,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
     final straighten = await widget.repository.settings.get('straighten_lines');
     final onionBack = int.tryParse(await widget.repository.settings.get('onion_back') ?? '');
     final onionNext = await widget.repository.settings.get('onion_next');
+    final more = await widget.repository.settings.get('draw_bar_more');
     final stabiliser = double.tryParse(
       await widget.repository.settings.get('stabiliser_strength') ?? '',
     );
@@ -96,6 +97,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         _activeToolbarProfile = profiles.active;
         _customColors = saved;
         _straighten = straighten != '0';
+        _moreTools = more == '1';
         _onionBack = (onionBack ?? 0).clamp(0, 3);
         _onionNext = onionNext == '1';
         _stabiliserStrength = (stabiliser ?? 0).clamp(0.0, 1.0);
@@ -556,15 +558,6 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           onPressed: _undoStack.canRedo ? _redoDrawing : null,
         ),
       ),
-      Center(
-        heightFactor: 1,
-        child: IconButton(
-          key: const ValueKey('clear-page'),
-          icon: const Icon(Icons.cleaning_services_outlined, size: 22),
-          tooltip: tr('Clear the drawings and highlights on this page'),
-          onPressed: _clearPage,
-        ),
-      ),
       const ToolGroupDivider(width: 32, height: 24),
       if (_availableBrushes.length > 1) Center(heightFactor: 1, child: _brushButton()),
       if (_on(Feature.highlighter))
@@ -589,10 +582,6 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
       if ((widget.extensions?.drawTools ?? const []).isNotEmpty)
         Center(heightFactor: 1, child: _drawToolButton()),
       if (_on(Feature.layers)) Center(heightFactor: 1, child: _layersButton()),
-      if (_on(Feature.flipbook) && !_infinite) Center(heightFactor: 1, child: _onionButton()),
-      if (_on(Feature.guides)) Center(heightFactor: 1, child: _guidesButton()),
-      if (_on(Feature.stabiliser)) Center(heightFactor: 1, child: _stabiliserButton()),
-      if (_on(Feature.symmetry)) Center(heightFactor: 1, child: _symmetryButton()),
       const SizedBox(height: 8),
       const SizedBox(height: 8),
       if (_on(Feature.shapes)) ...[
@@ -700,6 +689,14 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             ),
           ),
         ),
+      Center(
+        heightFactor: 1,
+        child: IconButton(
+          icon: const Icon(Icons.add_circle_outline, size: 22),
+          tooltip: tr('Add a color (hold an added color to remove it)'),
+          onPressed: _addCustomColor,
+        ),
+      ),
       if (_on(Feature.colorPicker))
         Center(
           heightFactor: 1,
@@ -728,14 +725,6 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         ),
         if (_bucketOn) Center(heightFactor: 1, child: _fillGapButton()),
       ],
-      Center(
-        heightFactor: 1,
-        child: IconButton(
-          icon: const Icon(Icons.add_circle_outline, size: 22),
-          tooltip: tr('Add a color (hold an added color to remove it)'),
-          onPressed: _addCustomColor,
-        ),
-      ),
       const ToolGroupDivider(width: 32, height: 24),
       Center(
         heightFactor: 1,
@@ -786,6 +775,34 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         ),
       ),
       const SizedBox(height: 8),
+      const SizedBox(height: 8),
+      const ToolGroupDivider(width: 32, height: 24),
+      Center(
+        heightFactor: 1,
+        child: IconButton(
+          key: const ValueKey('more-tools'),
+          icon: Icon(_moreTools ? Icons.expand_less : Icons.more_horiz, size: 22),
+          tooltip: _moreTools ? tr('Fewer tools') : tr('More tools: guides, stabiliser, symmetry, onion skin, straightening, clear the page'),
+          onPressed: () {
+            setState(() => _moreTools = !_moreTools);
+            unawaited(widget.repository.settings.set('draw_bar_more', _moreTools ? '1' : '0'));
+          },
+        ),
+      ),
+      if (_moreTools) ...[
+      Center(
+        heightFactor: 1,
+        child: IconButton(
+          key: const ValueKey('clear-page'),
+          icon: const Icon(Icons.cleaning_services_outlined, size: 22),
+          tooltip: tr('Clear the drawings and highlights on this page'),
+          onPressed: _clearPage,
+        ),
+      ),
+      if (_on(Feature.flipbook) && !_infinite) Center(heightFactor: 1, child: _onionButton()),
+      if (_on(Feature.guides)) Center(heightFactor: 1, child: _guidesButton()),
+      if (_on(Feature.stabiliser)) Center(heightFactor: 1, child: _stabiliserButton()),
+      if (_on(Feature.symmetry)) Center(heightFactor: 1, child: _symmetryButton()),
       if (_on(Feature.straighten))
         Center(
           heightFactor: 1,
@@ -809,9 +826,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             },
           ),
         ),
-      const SizedBox(height: 8),
       if (_on(Feature.plots)) ...[
-        const ToolGroupDivider(width: 32, height: 24),
         Center(
           heightFactor: 1,
           child: IconButton(
@@ -821,6 +836,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             onPressed: _addEmptyPlot,
           ),
         ),
+      ],
       ],
     ];
     return Container(

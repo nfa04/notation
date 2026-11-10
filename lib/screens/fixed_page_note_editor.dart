@@ -10,6 +10,7 @@ import 'package:archive/archive.dart' show Archive, ArchiveFile, CompressionType
 import '../export/file_dialogs.dart';
 import '../export/image_export.dart';
 import '../export/pdf_brush.dart';
+import '../export/ora_export.dart';
 import '../export/svg_export.dart';
 import '../export/pdf_ink_text.dart';
 import '../export/pdf_label.dart';
@@ -287,6 +288,7 @@ part 'editor_eyedropper.dart';
 part 'editor_fill_bucket.dart';
 part 'editor_onion_skin.dart';
 part 'editor_free_transform.dart';
+part 'editor_ora_export.dart';
 
 /// What the clipboard holds that a note can take: a picture, files (pictures
 /// copied in a file manager) or text.
@@ -723,6 +725,22 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     return File(path).existsSync() ? null : 'nothing was written';
   }
 
+  /// Saves the page as an OpenRaster file with layers at [path] (a ZIP of them for several pages); null, or what went wrong.
+  Future<String?> exportOraTo(String path, {bool allPages = false, bool seeThrough = false, ImagePreset preset = ImagePreset.web}) async {
+    await ready;
+    if (!mounted) return 'the note was closed';
+    _exportTo = path;
+    _exportError = null;
+    try {
+      final pages = _picturePages;
+      await _exportOraPages(preset, allPages ? pages : [pages.contains(_visiblePage().$1) ? _visiblePage().$1 : pages.first], seeThrough: seeThrough);
+    } finally {
+      _exportTo = null;
+    }
+    if (_exportError != null) return _exportError;
+    return File(path).existsSync() ? null : 'nothing was written';
+  }
+
   /// Saves the pages as SVG at [path] (an SVG for one page, else a ZIP of them); null, or what went wrong.
   Future<String?> exportSvgTo(String path, {bool allPages = false, bool seeThrough = false}) async {
     await ready;
@@ -1106,6 +1124,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   /// Lines drawn nearly straight come out straight (a setting, on by default).
   bool _straighten = true;
+
+  /// The draw bar shows its rarely used tools (guides, stabiliser, symmetry, onion skin, straightening, clearing the page, a plot).
+  bool _moreTools = false;
 
   /// How steady the line is kept (0: the pen as it is, 1: a long string; saved with the settings), and the stabiliser of the line
   /// being drawn.
