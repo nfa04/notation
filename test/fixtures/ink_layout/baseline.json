@@ -180,8 +180,8 @@
   "drawings": true
  },
  "doodle_between_0": {
-  "lines": false,
-  "rows": false,
+  "lines": true,
+  "rows": true,
   "drawings": true
  },
  "doodle_between_1": {
@@ -235,8 +235,8 @@
   "drawings": false
  },
  "doodle_inline_5": {
-  "lines": false,
-  "rows": false,
+  "lines": true,
+  "rows": true,
   "drawings": false
  },
  "physics_0": {
@@ -270,8 +270,8 @@
   "drawings": true
  },
  "dense_0": {
-  "lines": false,
-  "rows": false,
+  "lines": true,
+  "rows": true,
   "drawings": true
  },
  "dense_1": {
@@ -280,8 +280,8 @@
   "drawings": true
  },
  "dense_2": {
-  "lines": false,
-  "rows": false,
+  "lines": true,
+  "rows": true,
   "drawings": true
  },
  "dense_3": {
@@ -330,8 +330,8 @@
   "drawings": true
  },
  "dense_doodle_0": {
-  "lines": false,
-  "rows": false,
+  "lines": true,
+  "rows": true,
   "drawings": true
  },
  "dense_doodle_1": {
@@ -345,8 +345,8 @@
   "drawings": false
  },
  "dense_doodle_3": {
-  "lines": false,
-  "rows": false,
+  "lines": true,
+  "rows": true,
   "drawings": false
  },
  "dense_doodle_4": {

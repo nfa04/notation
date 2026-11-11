@@ -436,11 +436,14 @@ List<InkCluster> _rowsByBands(InkCluster cluster) {
     // (lines that run uphill or downhill touch at their ends, though they are clear of each other along their slant: two of them are a band
     // not much taller than one straight line, and are cut along the slant)
     // (and lines written close together touch with their tails, a band not much taller than one line: those too are looked for, carefully)
-    final slope = _slopeOf(band.pieces, boxes, letter);
-    if (band.box.height > 2.2 * letter && band.strokes.length > 1) {
+    // (measured by the body of the writing: in joined-up writing a word is one stroke, ascenders and descenders and all, and the letter
+    // size taken from the heights of the strokes is about twice what the lines are apart for)
+    final unit = _lineUnit(band.strokes, boxes, letter);
+    final slope = _slopeOf(band.pieces, boxes, unit);
+    if (band.box.height > 2.2 * unit && band.strokes.length > 1) {
       // (straight across as ever for a band far taller than a line, and carefully along its slant: whichever tells more lines apart)
       final straight = band.box.height > 4.5 * letter ? _byCentres(band.pieces, boxes, 1.1 * letter, letter) : [band.strokes];
-      final careful = _byCentres(band.pieces, boxes, 1.1 * letter, letter, slope: slope, onlyLines: true);
+      final careful = _byCentres(band.pieces, boxes, 1.1 * unit, unit, slope: slope, onlyLines: true, tall: [for (final t in tall) boxes[t]!]);
       parts.addAll(careful.length > straight.length ? careful : straight);
     } else {
       parts.add(band.strokes);
@@ -499,6 +502,14 @@ List<List<DrawingStroke>> _dotsOnStems(List<DrawingStroke> strokes, Map<DrawingS
   for (final dot in strokes) {
     final d = boxes[dot]!;
     if (d.height > 0.4 * letter || d.width > 0.4 * letter) continue;
+    // (a dot stands alone at its height: a small stroke with letters of its size right beside it is a letter, the e of a word; strokes that
+    // reach far past it, a t beside the i or a tail from the line above, do not count)
+    final beside = strokes.any((s) {
+      final b = boxes[s]!;
+      final dx = math.max(0.0, math.max(b.left - d.right, d.left - b.right));
+      return s != dot && dx <= 0.3 * letter && b.top >= d.top - 0.5 * letter && b.bottom <= d.bottom + 0.5 * letter && b.height > d.height;
+    });
+    if (beside) continue;
     DrawingStroke? stem;
     var nearest = double.infinity;
     for (final s in strokes) {
@@ -719,10 +730,13 @@ bool _underBar(Rect bar, _Band other, Map<DrawingStroke, Rect> boxes, double let
 /// The middles of the pieces, top to bottom, are cut at their widest gap when that is a real step from one line to the next: at least
 /// [gap] (about a letter) wide, or a good part of a letter with a good many pieces on both sides and the two lines a line spacing apart
 /// (a few strays from the line above, a descender or a high letter, do not leave a gap as wide as a letter). The parts are cut again.
-List<List<DrawingStroke>> _byCentres(List<List<DrawingStroke>> pieces, Map<DrawingStroke, Rect> boxes, double gap, double letter, {double slope = 0, bool onlyLines = false}) {
+List<List<DrawingStroke>> _byCentres(List<List<DrawingStroke>> pieces, Map<DrawingStroke, Rect> boxes, double gap, double letter, {double slope = 0, bool onlyLines = false, List<Rect> tall = const []}) {
   Rect boxOf(List<DrawingStroke> p) => p.map((s) => boxes[s]!).reduce((a, b) => a.expandToInclude(b));
   // (the height of a middle along the slant of the lines)
-  double level(List<DrawingStroke> p) => boxOf(p).center.dy - slope * boxOf(p).center.dx;
+  // (carefully, by where most of its ink is: the middle of a box moves with every ascender and descender of a joined-up word)
+  final inkLevel = <List<DrawingStroke>, double>{};
+  double middleOf(List<DrawingStroke> p) => onlyLines ? inkLevel.putIfAbsent(p, () => _medianY(p)) : boxOf(p).center.dy;
+  double level(List<DrawingStroke> p) => middleOf(p) - slope * boxOf(p).center.dx;
   final everything = [for (final p in pieces) ...p];
   final anchors = [for (final p in pieces) if (boxOf(p).height >= 0.45 * letter) p]..sort((a, b) => level(a).compareTo(level(b)));
   final loose = [for (final p in pieces) if (boxOf(p).height < 0.45 * letter) p];
@@ -746,7 +760,9 @@ List<List<DrawingStroke>> _byCentres(List<List<DrawingStroke>> pieces, Map<Drawi
       double width(List<List<DrawingStroke>> g) => g.map(boxOf).reduce((a, b) => a.expandToInclude(b)).width;
       final across = width(side);
       // (a line of joined-up writing has a stroke a word: two of them make a short line)
-      if (math.min(above.length, below.length) < 2 || width(above) < 0.3 * across || width(below) < 0.3 * across) return [side];
+      // (or a line of a few words, as the last line of a paragraph is)
+      final wide = math.min(0.3 * across, 8 * letter);
+      if (math.min(above.length, below.length) < 2 || width(above) < wide || width(below) < wide) return [side];
     }
     final real = widest > gap;
     final robust = widest >= 0.7 * letter && math.min(above.length, below.length) >= math.max(3, 0.2 * side.length) && middle(below) - middle(above) >= 1.6 * letter;
@@ -756,6 +772,29 @@ List<List<DrawingStroke>> _byCentres(List<List<DrawingStroke>> pieces, Map<Drawi
 
   final groups = cut(anchors);
   if (groups.length == 1) return [everything];
+  if (onlyLines) {
+    // (an exponent's middle is as high as the line above's: it is the lower line's when it touches the top end of a much taller stroke of it, `(p)³`)
+    for (var g = 0; g + 1 < groups.length; g++) {
+      for (final p in [...groups[g]]) {
+        final b = boxOf(p);
+        if (b.height > letter) continue;
+        // (the tall strokes, a big bracket, are not in the groups: they go to the line they overlap most)
+        Rect span(List<List<DrawingStroke>> g) => g.map(boxOf).reduce((a, b) => a.expandToInclude(b));
+        final upper = span(groups[g]), lower = span(groups[g + 1]);
+        double overlap(Rect a, Rect b) => math.min(a.bottom, b.bottom) - math.max(a.top, b.top);
+        final base = [...groups[g + 1].map(boxOf), ...tall.where((c) => overlap(c, lower) > overlap(c, upper))].any((c) {
+          final dx = math.max(0.0, math.max(c.left - b.right, b.left - c.right));
+          return c.height >= 2 * b.height && dx <= 0.3 * letter && b.top >= c.top - 0.3 * letter && b.bottom <= c.center.dy;
+        });
+        if (base) {
+          groups[g].remove(p);
+          groups[g + 1].add(p);
+        }
+      }
+    }
+    groups.removeWhere((g) => g.isEmpty);
+    if (groups.length == 1) return [everything];
+  }
   final extents = [for (final g in groups) g.map(boxOf).reduce((a, b) => a.expandToInclude(b))];
   for (final p in loose) {
     final b = boxOf(p);
@@ -789,22 +828,50 @@ List<List<DrawingStroke>> _byCentres(List<List<DrawingStroke>> pieces, Map<Drawi
   return [for (final g in groups) [for (final p in g) ...p]];
 }
 
+/// The height of the body of the writing in [strokes] (where most of each stroke's ink is, about the height of an x) times two, or [letter]
+/// if that is less: about a letter's height for printed writing, much less than [letter] for joined-up writing.
+double _lineUnit(List<DrawingStroke> strokes, Map<DrawingStroke, Rect> boxes, double letter) {
+  final bodies = <double>[];
+  for (final s in strokes) {
+    if (boxes[s]!.height <= 0.3 * letter || s.points.length < 4) continue;
+    final ys = [for (final p in s.points) p.dy]..sort();
+    bodies.add(ys[3 * ys.length ~/ 4] - ys[ys.length ~/ 4]);
+  }
+  if (bodies.length < 4) return letter;
+  bodies.sort();
+  return (2 * bodies[bodies.length ~/ 2]).clamp(0.4 * letter, letter);
+}
+
+/// The median height of the points of [strokes].
+double _medianY(List<DrawingStroke> strokes) {
+  final ys = [for (final s in strokes) for (final p in s.points) p.dy]..sort();
+  return ys.isEmpty ? 0 : ys[ys.length ~/ 2];
+}
+
 /// How much the lines of writing of [pieces] run uphill or downhill (down the page per unit across), from the middles of the letters: 0 when
 /// there are too few of them, or they are not spread across enough to tell.
 double _slopeOf(List<List<DrawingStroke>> pieces, Map<DrawingStroke, Rect> boxes, double letter) {
-  final middles = [
+  // (from neighbours on one line: each letter or word and the next one to its right at about its height. A fit through all of them would take
+  // a short line under a long one, on its left, for a slant)
+  // (a joined-up word is wide: the next one is next by the gap between them, not by how far apart their middles are)
+  final words = [
     for (final p in pieces)
-      if (p.length == 1 && boxes[p.single]!.height >= 0.45 * letter && boxes[p.single]!.height <= 2 * letter) boxes[p.single]!.center,
-  ];
-  if (middles.length < 6) return 0;
-  final mx = middles.map((m) => m.dx).reduce((a, b) => a + b) / middles.length, my = middles.map((m) => m.dy).reduce((a, b) => a + b) / middles.length;
-  var sxy = 0.0, sxx = 0.0;
-  for (final m in middles) {
-    sxy += (m.dx - mx) * (m.dy - my);
-    sxx += (m.dx - mx) * (m.dx - mx);
+      if (p.length == 1 && boxes[p.single]!.height >= 0.45 * letter && boxes[p.single]!.height <= 3 * letter) (box: boxes[p.single]!, middle: _medianY(p)),
+  ]..sort((a, b) => a.box.left.compareTo(b.box.left));
+  final slopes = <double>[];
+  for (var i = 0; i < words.length; i++) {
+    for (var j = i + 1; j < words.length; j++) {
+      final a = words[i], b = words[j];
+      if (b.box.left - a.box.right > 3 * letter) break;
+      final dx = b.box.center.dx - a.box.center.dx, dy = b.middle - a.middle;
+      if (dx < letter || dy.abs() > 0.5 * letter + 0.04 * dx) continue;
+      slopes.add(dy / dx);
+      break;
+    }
   }
-  if (sxx < math.pow(4 * letter, 2) * middles.length / 4) return 0;
-  return (sxy / sxx).clamp(-0.1, 0.1);
+  if (slopes.length < 6) return 0;
+  slopes.sort();
+  return slopes[slopes.length ~/ 2].clamp(-0.1, 0.1);
 }
 
 /// Whether the stroke with [box] is a big bracket (`(`, `[`, `{` or their closing ones) of something stacked, at least [tall] high: a narrow
