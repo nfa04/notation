@@ -25,6 +25,25 @@ class InkReading {
   /// The other readings of the formula (see [InkRecognizer.recognizeAgain]), once asked for; null until then. Empty after a correction
   /// by the person: what they wrote is what it says.
   List<String>? others;
+
+  /// What the writing says as text: what the text reader made of it, except that when that is nothing but formulas (`$...$`) the
+  /// formula reader's reading is put in their place. It reads handwritten maths far better (on 200 real formulas 8 % of the
+  /// characters wrong against 29 %); a line with words and a formula in it stays as the text reader read it, since the strokes of
+  /// the formula alone are not known.
+  String? get bestText {
+    final t = text, l = latex;
+    if (t == null || l == null || l.isEmpty || !onlyMaths(t)) return t;
+    return '\$$l\$';
+  }
+}
+
+/// Whether [text] is only formulas in dollar signs (with spaces and signs of punctuation between them), as the text reader writes
+/// maths it takes for maths.
+bool onlyMaths(String text) {
+  final t = text.trim();
+  if (!t.contains(r'$')) return false;
+  final rest = t.replaceAll(RegExp(r'\$\$[^$]+\$\$|\$[^$]+\$'), '');
+  return !rest.contains(RegExp(r'[\p{L}\p{N}$]', unicode: true));
 }
 
 /// What a conversion of a selection that is not a whole block read, and the strokes it was.
@@ -116,7 +135,7 @@ class InkPrefetcher extends ChangeNotifier {
   /// The blocks of writing as they are now with what has been read of each (the formula, once read). Lines when
   /// reading by [rows].
   List<({InkCluster block, String? text, String? latex})> readings() => [
-        for (final c in _clusters()) (block: c, text: _cache[c.key]?.text, latex: _cache[c.key]?.latex),
+        for (final c in _clusters()) (block: c, text: _cache[c.key]?.bestText, latex: _cache[c.key]?.latex),
       ];
 
   bool get _hasText => _text != null && _text!.status == HandwritingStatus.installed;
@@ -184,7 +203,7 @@ class InkPrefetcher extends ChangeNotifier {
     if (!_hasMath) return false;
     if (r != null && (r.latex != null || r.mathTried || r.failed)) return false;
     // with a text reader, the text has to be read first to tell whether it looks like maths
-    if (_hasText) return r?.text != null && looksLikeMaths(c, text: r!.text);
+    if (_hasText) return r?.text != null && (onlyMaths(r!.text!) || looksLikeMaths(c, text: r.text));
     return true;
   }
 
@@ -315,7 +334,7 @@ class InkPrefetcher extends ChangeNotifier {
     if (clusters == null) return null;
     final parts = <InkCluster, String>{};
     for (final c in clusters) {
-      final t = _cache[c.key]?.text;
+      final t = _cache[c.key]?.bestText;
       if (t == null) return null;
       parts[c] = t;
     }

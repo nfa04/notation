@@ -59,16 +59,22 @@ void main() {
       expect(lines[1].box.top, 140);
     });
 
-    test('when the reading has other lines than the writing, the block is cut into as many equal rows', () {
+    test('when the reading has more lines than the writing, the neighbouring ones that fit by length are joined', () {
       final cluster = clusterStrokes(0, _twoLines()).single;
-      final lines = inkTextLines(cluster, 'one\ntwo\nthree');
-      expect(lines, hasLength(3));
-      final height = cluster.bounds.height / 3;
-      for (var i = 0; i < 3; i++) {
-        expect(lines[i].box.top, closeTo(cluster.bounds.top + i * height, 0.01));
-        expect(lines[i].box.height, closeTo(height, 0.01));
-        expect(lines[i].box.width, cluster.bounds.width);
-      }
+      // (the first line of writing is almost twice as wide as the second)
+      final lines = inkTextLines(cluster, 'hello\nthere\nbye');
+      expect(lines.map((l) => l.text), ['hello there', 'bye']);
+      expect(lines[0].box.top, 100);
+      expect(lines[1].box.top, 140);
+    });
+
+    test('when the first or last line was not read (the reading is trimmed), the others stay where they are written', () {
+      final strokes = [...word('a', 100, 100, n: 3), ...word('b', 100, 140, n: 8), ...word('c', 100, 180, n: 3)];
+      final cluster = clusterStrokes(0, strokes).single;
+      final last = inkTextLines(cluster, 'ab\nabcdefgh');
+      expect(last.map((l) => l.box.top), [100, 140], reason: 'the third line is the one left out');
+      final first = inkTextLines(cluster, 'abcdefgh\nab');
+      expect(first.map((l) => l.box.top), [140, 180], reason: 'the first line is the one left out');
     });
 
     test('an empty line of the reading takes its place and leaves no text', () {

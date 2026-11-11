@@ -19,6 +19,7 @@ import 'package:notes/ink/glm_ocr_service.dart';
 import 'package:notes/ink/ink_clusters.dart';
 import 'package:notes/ink/ink_grouping.dart';
 import 'package:notes/ink/ink_image.dart';
+import 'package:notes/ink/ink_prefetcher.dart' show onlyMaths;
 import 'package:notes/ink/math_service.dart';
 import 'package:notes/ink/onnx_glm_ocr.dart';
 import 'package:notes/models/canvas_models.dart';
@@ -131,7 +132,9 @@ void main() {
             }
             if (votes.isEmpty) continue;
             final key = votes.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
-            if (!(says[key] ?? '').contains(r'$')) continue;
+            final gotHere = ((got[key] ?? [])..sort((a, b) => a.$1.compareTo(b.$1))).map((p) => p.$2).join(' ');
+            // (the rows that are maths, and those the text reader took for maths: the app reads those with the formula reader too)
+            if (!(says[key] ?? '').contains(r'$') && !onlyMaths(gotHere)) continue;
             final latex = await formulas.recognize(row.strokes);
             formulaRead.putIfAbsent(key, () => []).add((row.bounds.left, latex));
           }
@@ -147,6 +150,18 @@ void main() {
             wanted[k] = (wanted[k] ?? 0) + want.length;
           }
           final entry = {'page': id, 'row': e.key, 'kind': rowKind, 'want': e.value, 'got': read, 'cer': want.isEmpty ? 0 : d / want.length};
+          if (formulas != null) {
+            // (what the app gives as the text: the formula reader's reading where the text reader read nothing but formulas)
+            final latex = ((formulaRead[e.key] ?? [])..sort((a, b) => a.$1.compareTo(b.$1))).map((p) => p.$2).join(' ').trim();
+            final routed = onlyMaths(read) && latex.isNotEmpty ? '\$$latex\$' : read;
+            final rd = distance(want, normalise(routed));
+            for (final k in ['$kind $rowKind (routed)', 'all $rowKind (routed)']) {
+              errors[k] = (errors[k] ?? 0) + rd;
+              wanted[k] = (wanted[k] ?? 0) + want.length;
+            }
+            entry['routed'] = routed;
+            entry['routedCer'] = want.isEmpty ? 0 : rd / want.length;
+          }
           if (formulas != null && rowKind == 'maths') {
             final parts = (formulaRead[e.key] ?? [])..sort((a, b) => a.$1.compareTo(b.$1));
             final latex = parts.map((p) => p.$2).join(' ');

@@ -193,6 +193,25 @@ void main() {
       expect(text.calls.last, contains('new'));
     });
 
+    test('a block the text reader read as nothing but formulas is given as the formula reader read it; words with a formula stay', () async {
+      final t = FakeReader((s) => s.first.id.startsWith('a') ? r'$x ^ 2 = 4$' : r'the speed $v$ is');
+      final p = make(t: t, m: maths);
+      await until(() => maths.calls.isNotEmpty && p.lookupText(page[0]!.where((s) => s.id.startsWith('a'))) != null);
+      await until(() => p.lookupText(page[0]!.where((s) => s.id.startsWith('a'))) == r'$\frac{a}{b}$');
+      expect(p.lookupText(page[0]!.where((s) => s.id.startsWith('a'))), r'$\frac{a}{b}$');
+      await until(() => p.lookupText(page[0]!.where((s) => s.id.startsWith('b'))) != null);
+      expect(p.lookupText(page[0]!.where((s) => s.id.startsWith('b'))), r'the speed $v$ is');
+      expect(p.readings().map((r) => r.text), contains(r'$\frac{a}{b}$'));
+    });
+
+    test('onlyMaths: formulas and punctuation only', () {
+      expect(onlyMaths(r'$x$'), isTrue);
+      expect(onlyMaths(r'$$x = 1$$'), isTrue);
+      expect(onlyMaths(r'$a$, $b$'), isTrue);
+      expect(onlyMaths(r'so $x$'), isFalse);
+      expect(onlyMaths('x = 1'), isFalse);
+    });
+
     test('nothing is read while the person is drawing, and it is read once they stop', () async {
       quiet = false;
       final p = make(t: text);
