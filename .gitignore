@@ -53,3 +53,6 @@ app.*.map.json
 .gradle/
 /packages/*/android/build/
 /pdf_overlay/build/
+
+# Pages of the owner's own notes for local layout tests (test/ink_layout_test.dart): never commit them
+/test/fixtures/ink_layout_private/

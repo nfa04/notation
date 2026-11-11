@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import '../llm/download.dart';
 import 'dart:io';
@@ -199,6 +200,12 @@ class SpellService extends ChangeNotifier {
       } catch (_) {}
     }
     await _refresh();
+    // a language that is on but whose files are not here (its download failed, or the settings came from another device or an
+    // earlier folder of the app) is fetched again: "on" checks, it does not quietly do nothing. It is read in once it is there
+    // (see _packChanged); without a connection it stays as it is until the next start.
+    for (final pack in packs) {
+      if (_enabled.contains(pack.language.id) && !pack.installed) unawaited(pack.install());
+    }
   }
 
   void _packChanged(DictionaryPack pack) {

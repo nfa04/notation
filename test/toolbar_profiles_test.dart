@@ -69,6 +69,7 @@ void main() {
         await db.delete('settings');
         repo = NoteRepository(db);
         await repo.settings.set('index_handwriting', '0');
+        await repo.settings.set('pdf_handwriting_text', '0');
         id = await repo.createNote();
       });
       await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo, features: features, shortcuts: ShortcutService.inMemory(mac: false))));

@@ -614,7 +614,11 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         widget.handwriting != null &&
         (await widget.repository.settings.get(inkIndexSetting) != '0' || await widget.repository.settings.get(pdfInkTextSetting) != '0' || _spellInkOn),
     saveIndex: widget.repository.text.saveInkText,
-    loadSaved: (id) async => {for (final t in await widget.repository.text.inkTexts(id)) t.key: t.text},
+    saveReads: widget.repository.text.saveInkReads,
+    loadSaved: (id) async => (
+          texts: {for (final t in await widget.repository.text.inkTexts(id)) t.key: t.text},
+          reads: await widget.repository.text.inkReads(id),
+        ),
     onProgress: _inkProgressed,
   );
 
@@ -625,6 +629,20 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// The words of the handwriting that are not spelled right, and the timer that works them out again soon after a change.
   List<InkMisspelling> _inkSpelling = const [];
   Timer? _spellTimer;
+
+  /// The misspellings of each block of writing that has been read (by its page, key and text): a reading that arrives checks only
+  /// its own block, not the whole note again. Cleared when the dictionaries change.
+  final Map<String, List<InkMisspelling>> _inkSpellByBlock = {};
+
+  /// Whether the refresh after readings arrived is due at the next frame (see [_inkProgressed]).
+  bool _inkRefreshDue = false;
+
+  /// The dictionaries changed (a word added, a language on or off): every block is checked again. A method of the state, not of an
+  /// extension, so that it is the same listener when it is taken off again.
+  void _inkDictionaryChanged() {
+    _inkSpellByBlock.clear();
+    _refreshInkSpelling();
+  }
 
   @override
   Future<String> prepareInk({required bool text, required bool math}) => _reader.prepare(text: text, math: math);
@@ -1547,7 +1565,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _shortcuts.addHandler(_onShortcut);
     WidgetsBinding.instance.addObserver(this);
     widget.features?.addListener(_syncMathCheck);
-    widget.spell?.addListener(_refreshInkSpelling);
+    widget.spell?.addListener(_inkDictionaryChanged);
     _syncMathCheck();
     _documentController.useSpelling(widget.spell);
     _titleController = TextEditingController();
@@ -1616,9 +1634,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   void didUpdateWidget(FixedPageNoteEditor old) {
     super.didUpdateWidget(old);
     if (old.spell != widget.spell) {
-      old.spell?.removeListener(_refreshInkSpelling);
-      widget.spell?.addListener(_refreshInkSpelling);
-      _refreshInkSpelling();
+      old.spell?.removeListener(_inkDictionaryChanged);
+      widget.spell?.addListener(_inkDictionaryChanged);
+      _inkDictionaryChanged();
       _documentController.useSpelling(widget.spell);
       for (final boxes in _textBoxesPerPage.values) {
         for (final b in boxes) {
@@ -2028,7 +2046,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _viewTick.dispose();
     _marksTimer?.cancel();
     _spellTimer?.cancel();
-    widget.spell?.removeListener(_refreshInkSpelling);
+    widget.spell?.removeListener(_inkDictionaryChanged);
     _metaTimer?.cancel();
     _undoTick.dispose();
     _findField.dispose();

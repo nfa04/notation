@@ -1,0 +1,362 @@
+{
+ "paragraph_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "paragraph_1": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "paragraph_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "paragraph_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "paragraph_4": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "paragraph_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "inline_formula_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "inline_formula_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "inline_formula_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "inline_formula_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "inline_formula_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "inline_formula_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "worked_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "worked_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "worked_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "worked_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "worked_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "worked_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "matrix_0": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "matrix_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "matrix_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "matrix_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "matrix_4": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "matrix_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "label_0": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "label_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "label_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "label_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "label_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "label_5": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_beside_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_beside_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_beside_2": {
+  "lines": false,
+  "rows": false,
+  "drawings": false
+ },
+ "doodle_beside_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_beside_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_beside_5": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "doodle_between_0": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "doodle_between_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_between_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_between_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_between_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_between_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "doodle_inline_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_inline_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_inline_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_inline_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_inline_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "doodle_inline_5": {
+  "lines": false,
+  "rows": false,
+  "drawings": false
+ },
+ "physics_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "physics_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "physics_2": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "physics_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "physics_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "physics_5": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "dense_0": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "dense_1": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "dense_2": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "dense_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "dense_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "dense_5": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "formula_inside_0": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "formula_inside_1": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "formula_inside_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "formula_inside_3": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "formula_inside_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "formula_inside_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "dense_doodle_0": {
+  "lines": false,
+  "rows": false,
+  "drawings": true
+ },
+ "dense_doodle_1": {
+  "lines": false,
+  "rows": true,
+  "drawings": true
+ },
+ "dense_doodle_2": {
+  "lines": true,
+  "rows": true,
+  "drawings": false
+ },
+ "dense_doodle_3": {
+  "lines": false,
+  "rows": false,
+  "drawings": false
+ },
+ "dense_doodle_4": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ },
+ "dense_doodle_5": {
+  "lines": true,
+  "rows": true,
+  "drawings": true
+ }
+}

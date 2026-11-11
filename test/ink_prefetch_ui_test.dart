@@ -8,6 +8,7 @@ import 'package:notes/data/app_database.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'close_editor.dart';
 
 import 'ink_prefetch_test.dart' show FakeReader, word;
 
@@ -25,6 +26,7 @@ void main() {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       repo = NoteRepository(db);
       await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+      await repo.settings.set('pdf_handwriting_text', '0');
       id = await repo.createNote();
       final note = (await repo.loadNote(id))!;
       note.strokes[0] = word('w', 300, 300);
@@ -33,8 +35,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo, handwriting: text, math: math, inkIdle: const Duration(milliseconds: 40)),
     ));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await tester.pumpAndSettle();
+    await settleEditor(tester);
   }
 
   Future<void> selectWriting(WidgetTester tester) async {
@@ -65,7 +66,7 @@ void main() {
     late String said;
     await tester.runAsync(() async => said = await editor.prepareInk(text: true, math: false));
     expect(said, contains('ahead of time'));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await letRead(tester, 400);
     expect(text.calls, hasLength(1), reason: 'read while the person did nothing');
     expect(text.calls.single, ['w0', 'w1', 'w2', 'w3']);
 
@@ -78,6 +79,7 @@ void main() {
     expect(find.text('Reading the handwriting...'), findsNothing, reason: 'no waiting');
     expect(tester.widget<TextField>(find.byKey(const ValueKey('recognized-text'))).controller!.text, 'ready text');
     expect(text.calls, hasLength(1), reason: 'the reader was not asked again');
+    await closeEditor(tester);
   });
 
   testWidgets('without the automation, converting reads the writing then, as it always did', (tester) async {
@@ -99,7 +101,7 @@ void main() {
     await open(tester, text: text, math: math);
     final editor = tester.state(find.byType(FixedPageNoteEditor)) as InkPreparer;
     await tester.runAsync(() => editor.prepareInk(text: true, math: true));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await letRead(tester, 400);
     expect(math.calls, hasLength(1), reason: 'the text had a sign of maths in it');
 
     await selectWriting(tester);
@@ -110,6 +112,7 @@ void main() {
     expect(find.text('Recognized formula (LaTeX)'), findsOneWidget);
     expect(tester.widget<TextField>(find.byKey(const ValueKey('recognized-text'))).controller!.text, 'x^{2}=4');
     expect(math.calls, hasLength(1));
+    await closeEditor(tester);
   });
 
   testWidgets('the editor says why it cannot read ahead when there are no readers or no models', (tester) async {

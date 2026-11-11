@@ -15,6 +15,8 @@ import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 const left = Rect.fromLTWH(100, 100, 120, 40);
 const right = Rect.fromLTWH(400, 120, 120, 40);
 const below = Rect.fromLTWH(110, 300, 120, 40);
@@ -458,5 +460,6 @@ void editorTests() {
     final freed = strokes().single;
     expect(freed.link!.to.isFree, isTrue);
     expect(freed.link!.from.item, 'A');
+    await closeEditor(tester);
   });
 }

@@ -21,10 +21,11 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
 
   List<MathMark> _currentMarks() {
     final ink = _ink;
+    final read = ink?.readings() ?? const [];
     final marks = _marker.mark([
-      for (final r in ink?.readings() ?? const []) (page: r.block.page, key: r.block.key, rect: r.block.bounds, latex: r.latex),
+      for (final r in read) (page: r.block.page, key: r.block.key, rect: r.block.bounds, latex: r.latex),
     ], others: {
-      for (final r in ink?.readings() ?? const []) r.block.key: ink!.othersOf(r.block.key),
+      for (final r in read) r.block.key: ink!.othersOf(r.block.key),
     });
     // a line that is marked as a mistake is read once more, another way, in the background: the writing may have been misread
     for (final m in marks) {

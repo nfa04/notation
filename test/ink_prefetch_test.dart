@@ -166,6 +166,22 @@ void main() {
       expect(p.reads, 2);
     });
 
+    test('the blocks that come first by [order] are read first, and a lone bar is taken as read without the reader', () async {
+      page = {
+        0: [...word('a', 100, 100)],
+        3: [...word('b', 100, 100), DrawingStroke(id: 'bar', color: Colors.black, width: 3, points: [const Offset(100, 600), const Offset(160, 601)])],
+      };
+      prefetch = InkPrefetcher(strokes: () => page, canRun: () => quiet, idle: const Duration(milliseconds: 40), order: (c) => (c.page - 3).abs())
+        ..configure(text: text);
+      addTearDown(prefetch.dispose);
+      await until(() => text.calls.length >= 2);
+      expect(text.calls.first, everyElement(startsWith('b')), reason: 'the page in view (3) first');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(text.calls, hasLength(2), reason: 'the bar is not read');
+      expect(prefetch.waiting, 0);
+      expect(prefetch.readings().where((r) => r.block.ids.contains('bar')).single.text, '');
+    });
+
     test('only what changed is read again', () async {
       final p = make(t: text);
       await until(() => text.calls.length >= 2);

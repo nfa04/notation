@@ -38,12 +38,7 @@ void main() {
   final vocabulary = GlmVocabulary.parse(File('assets/glm_ocr/vocab.txt').readAsStringSync());
   Future<List<String>> read(List<GlmPicture> pics) async {
     final watch = Stopwatch()..start();
-    final tokens = await readPicturesGlm(
-      visionPath: '$modelDir/vision.onnx',
-      textPath: '$modelDir/text.onnx',
-      embeddingsPath: '$modelDir/embeddings.bin',
-      pictures: pics,
-    );
+    final tokens = await GlmOnnxReader(keepOpen: Duration.zero).read('$modelDir/vision.onnx', '$modelDir/text.onnx', '$modelDir/embeddings.bin', pics);
     debugPrint('read ${pics.length} lines in ${watch.elapsedMilliseconds} ms (${(watch.elapsedMilliseconds / pics.length).round()} ms a line)');
     return [for (final t in tokens) vocabulary.decode(t)];
   }

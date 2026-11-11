@@ -11,9 +11,20 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
   void _refreshInkSpelling() {
     if (!mounted) return;
     final spell = widget.spell;
-    final next = _spellInkOn
-        ? misspelledInk([for (final r in _ink?.readings() ?? const []) (block: r.block, text: r.text)], spell!.checker)
-        : const <InkMisspelling>[];
+    final next = <InkMisspelling>[];
+    if (_spellInkOn) {
+      final seen = <String>{};
+      for (final r in _ink?.readings() ?? const <({InkCluster block, String? text, String? latex})>[]) {
+        final text = r.text;
+        if (text == null) continue;
+        final key = '${r.block.page}\u0000${r.block.key}\u0000$text';
+        seen.add(key);
+        next.addAll(_inkSpellByBlock[key] ??= misspelledInk([(block: r.block, text: text)], spell!.checker));
+      }
+      _inkSpellByBlock.removeWhere((k, _) => !seen.contains(k));
+    } else {
+      _inkSpellByBlock.clear();
+    }
     final same = next.length == _inkSpelling.length && !next.asMap().entries.any((e) => e.value.key != _inkSpelling[e.key].key || e.value.word != _inkSpelling[e.key].word || e.value.rect != _inkSpelling[e.key].rect);
     if (!same) setState(() => _inkSpelling = next);
   }

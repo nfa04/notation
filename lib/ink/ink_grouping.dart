@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import '../models/canvas_models.dart';
+import 'ink_clusters.dart' show linesOfWriting;
 
 /// A few words of one line, read by the model in one go.
 class InkChunk {
@@ -47,48 +48,13 @@ List<List<InkChunk>> groupIntoLines(
   if (drawn.isEmpty) return const [];
   final boxes = {for (final s in drawn) s: strokeBounds(s)};
 
-  // lines: a stroke joins the line it overlaps vertically
-  drawn.sort((a, b) => boxes[a]!.center.dy.compareTo(boxes[b]!.center.dy));
-  final lines = <({List<DrawingStroke> strokes, Rect box})>[];
-  for (final s in drawn) {
-    final box = boxes[s]!;
-    var placed = false;
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      final overlap = math.min(box.bottom, line.box.bottom) - math.max(box.top, line.box.top);
-      final smaller = math.min(math.max(box.height, 1), math.max(line.box.height, 1));
-      if (overlap / smaller > 0.5) {
-        lines[i] = (strokes: [...line.strokes, s], box: line.box.expandToInclude(box));
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) lines.add((strokes: [s], box: box));
-  }
-
-  // a dot or an accent floats above its letter without touching its line:
-  // small strokes that sit close to a line and over it belong to it
-  var merged = true;
-  while (merged) {
-    merged = false;
-    outer:
-    for (var i = 0; i < lines.length; i++) {
-      for (var j = 0; j < lines.length; j++) {
-        if (i == j) continue;
-        final small = lines[i].box, big = lines[j].box;
-        if (small.height > 0.35 * big.height) continue;
-        final gap = math.max(0.0, math.max(small.top, big.top) - math.min(small.bottom, big.bottom));
-        final overOrUnder = small.left < big.right && big.left < small.right;
-        if (overOrUnder && gap < 0.5 * big.height) {
-          lines[j] = (strokes: [...lines[j].strokes, ...lines[i].strokes], box: big.expandToInclude(small));
-          lines.removeAt(i);
-          merged = true;
-          break outer;
-        }
-      }
-    }
-  }
-  lines.sort((a, b) => a.box.top.compareTo(b.box.top));
+  // lines: the rows of writing as the maths check finds them (bands of strokes whose heights overlap; the parts of a fraction, an
+  // accent, a dot, a subscript go with their line; a stroke much taller than a letter, a bracket, joins nothing). Lines used to be
+  // grown stroke by stroke, and a bracket over two lines or a long tail made a whole block of writing one "line", read as one
+  // squeezed picture.
+  final lines = [
+    for (final row in linesOfWriting(drawn)) (strokes: row, box: row.map((s) => boxes[s]!).reduce((a, b) => a.expandToInclude(b))),
+  ]..sort((a, b) => a.box.top.compareTo(b.box.top));
 
   return [
     for (final line in lines)

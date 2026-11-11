@@ -27,6 +27,13 @@ class InkReading {
   List<String>? others;
 }
 
+/// What a conversion of a selection that is not a whole block read, and the strokes it was.
+class _Picked {
+  final Set<String> ids;
+  String? text, latex;
+  _Picked(this.ids);
+}
+
 /// Reads handwriting ahead of time. While the note is being worked on, the strokes that lie close together are
 /// grouped ([clusterStrokes]) and, after things have been quiet for a moment, each group whose ink changed is read in
 /// the background, one at a time, with the handwriting reader and, where it looks like a formula, the formula reader.
@@ -54,6 +61,9 @@ class InkPrefetcher extends ChangeNotifier {
   /// A rest after each piece read, so that the screen keeps up while the models work.
   final Duration pause;
 
+  /// Which blocks come first (lower first; null: in the order of the pages). The editor reads the page in view first.
+  final int Function(InkCluster block)? order;
+
   InkPrefetcher({
     required this.strokes,
     bool Function()? canRun,
@@ -61,6 +71,7 @@ class InkPrefetcher extends ChangeNotifier {
     this.perBurst = 12,
     this.wanted,
     this.pause = Duration.zero,
+    this.order,
   }) : canRun = canRun ?? (() => true);
 
   InkRecognizer? _text;
@@ -77,6 +88,15 @@ class InkPrefetcher extends ChangeNotifier {
 
   /// How many clusters were read (text or formula) since this started.
   int reads = 0;
+
+  /// Whether reading waits (what was read at an earlier time is being loaded, see [seed]); [release] lets it go on.
+  bool holding = false;
+
+  void release() {
+    if (!holding) return;
+    holding = false;
+    changed();
+  }
 
   /// The readers to use ([text]: handwriting, [math]: formulas), null for none. A reader that is not installed is not used.
   ///
@@ -111,6 +131,7 @@ class InkPrefetcher extends ChangeNotifier {
   /// The ink changed (or may have): a look at what is left to read comes after things have been quiet for [idle].
   void changed() {
     if (_disposed) return;
+    _stampsChecked.clear(); // (a stroke may have been moved or changed in place: the next grouping looks at the stamps)
     _dirty = true;
     _timer?.cancel();
     if (!active) return;
@@ -128,10 +149,34 @@ class InkPrefetcher extends ChangeNotifier {
     if (_readBy != null && _mathModelName() != _readBy) changed();
   }
 
-  List<InkCluster> _clusters() => [
-        for (final e in strokes().entries)
-          ...clusterStrokes(e.key, e.value, rows: _rows),
-      ];
+  List<InkCluster> _clusters() => _rows ? _rowClusters() : _blocks();
+
+  /// The clusters of each page, grouped again only where a page changed.
+  final _pages = PageClusters();
+
+  /// The kinds of grouping (by block: false, by rows: true) whose strokes were checked to the stamp since the ink last [changed].
+  final Set<bool> _stampsChecked = {};
+
+  List<InkCluster> _grouped(bool rows) {
+    final pages = strokes();
+    _pages.keepOnly(pages.keys);
+    final stamps = _stampsChecked.add(rows);
+    return [
+      for (final e in pages.entries) ..._pages.of(e.key, e.value, rows: rows, stamps: stamps),
+    ];
+  }
+
+  List<InkCluster> _blocks() => _grouped(false);
+
+  List<InkCluster> _rowClusters() => _grouped(true);
+
+  /// The rows of [rows] that [block] is made of, top to bottom; null when they do not make it up exactly.
+  static List<InkCluster>? _rowsOf(InkCluster block, List<InkCluster> rows) {
+    final ids = block.ids;
+    final parts = [for (final r in rows) if (r.page == block.page && ids.containsAll(r.ids)) r];
+    if (parts.isEmpty || parts.fold(0, (n, r) => n + r.strokes.length) != block.strokes.length) return null;
+    return parts..sort((a, b) => a.bounds.top.compareTo(b.bounds.top));
+  }
 
   bool _needsText(InkReading? r) => _hasText && (r == null || (r.text == null && !r.failed));
 
@@ -143,13 +188,24 @@ class InkPrefetcher extends ChangeNotifier {
     return true;
   }
 
-  List<InkCluster> _todo(List<InkCluster> clusters) => [
-        for (final c in clusters)
-          if ((wanted?.call(c) ?? true) && (_needsText(_cache[c.key]) || _needsMath(c, _cache[c.key]))) c,
-      ];
+  List<InkCluster> _todo(List<InkCluster> clusters) {
+    final todo = [
+      for (final c in clusters)
+        if ((wanted?.call(c) ?? true) && (_needsText(_cache[c.key]) || _needsMath(c, _cache[c.key]))) c,
+    ];
+    final by = order;
+    if (by == null) return todo;
+    final rank = {for (final c in todo) c: by(c)};
+    mergeSort(todo, compare: (a, b) => rank[a]!.compareTo(rank[b]!)); // (stable: top to bottom within a page)
+    return todo;
+  }
+
+  /// A lone stroke that is flat (a bar, a dash, a line under something) says nothing to a reader: it is taken as read, with no text,
+  /// and no model is woken for it (2.7 s of the reader on a desktop for "---").
+  static bool _nothingToRead(InkCluster c) => c.strokes.length == 1 && c.bounds.height < 0.25 * c.bounds.width && c.bounds.height < 12;
 
   Future<void> _burst() async {
-    if (_disposed || _running) return;
+    if (_disposed || _running || holding) return; // (holding: [release] starts it)
     if (!canRun()) {
       // not now (the person is drawing): look again in a moment
       _timer = Timer(const Duration(milliseconds: 1500), _burst);
@@ -166,11 +222,17 @@ class InkPrefetcher extends ChangeNotifier {
           r.mathTried = false;
           r.others = null;
         }
+        _keptMath.clear(); // (read by the other model)
+        for (final p in _picked.values) {
+          p.latex = null;
+        }
       }
       final clusters = _clusters();
       // what is not on the page any more is forgotten
       final alive = {for (final c in clusters) c.key};
       _cache.removeWhere((k, _) => !alive.contains(k));
+      _forgetPicked();
+      _useKept(clusters);
       var done = 0;
       for (final c in _todo(clusters)) {
         if (_disposed || _dirty || !canRun() || done >= (_rows ? math.min(perBurst, 4) : perBurst)) break;
@@ -191,6 +253,12 @@ class InkPrefetcher extends ChangeNotifier {
 
   Future<void> _read(InkCluster c) async {
     final r = _cache.putIfAbsent(c.key, InkReading.new);
+    if (_nothingToRead(c)) {
+      r.text ??= '';
+      r.mathTried = true;
+      if (!_disposed) notifyListeners();
+      return;
+    }
     try {
       if (_needsText(r)) {
         r.text = (await _text!.recognize(c.strokes)).trim();
@@ -239,8 +307,10 @@ class InkPrefetcher extends ChangeNotifier {
     return covered.length == chosen.length ? whole : null;
   }
 
-  /// The text of [selection] if it has been read ahead of time, else null.
+  /// The text of [selection] if it has been read ahead of time (or converted before), else null.
   String? lookupText(Iterable<DrawingStroke> selection) {
+    final picked = _picked[_selectionKey(selection)]?.text;
+    if (picked != null) return picked;
     final clusters = _clustersOf(selection);
     if (clusters == null) return null;
     final parts = <InkCluster, String>{};
@@ -263,6 +333,8 @@ class InkPrefetcher extends ChangeNotifier {
 
   /// The formula (LaTeX) of [selection] if it has been read ahead of time, else null. Only one block at a time.
   String? lookupMath(Iterable<DrawingStroke> selection) {
+    final picked = _picked[_selectionKey(selection)]?.latex;
+    if (picked != null) return picked;
     final clusters = _clustersOf(selection);
     if (clusters == null || clusters.length != 1) return null;
     return _cache[clusters.single.key]?.latex;
@@ -317,27 +389,132 @@ class InkPrefetcher extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// Takes readings that were kept from an earlier time (by the key of the block, which names its strokes exactly): they are there
-  /// at once, as if they had just been read, and are not read again. What was already read here is not replaced.
-  void seed(Map<String, String> texts) {
-    if (_disposed || texts.isEmpty) return;
-    for (final e in texts.entries) {
-      final r = _cache.putIfAbsent(e.key, InkReading.new);
-      r.text ??= e.value;
+  // ---- what was read at an earlier time, and what is kept of it ----
+
+  /// The text of blocks (by their key) read at an earlier time: kept by block, as the search has it, also while the maths check
+  /// reads by rows (a block's text is then given to its rows, line by line).
+  final Map<String, String> _kept = {};
+
+  /// Formulas read at an earlier time, by the key of what was read (a block, or a row of the maths check).
+  final Map<String, String> _keptMath = {};
+
+  /// What conversions of selections that are not whole blocks read (by the key of the selected strokes).
+  final Map<String, _Picked> _picked = {};
+
+  /// Takes readings that were kept from an earlier time: [texts] of blocks, [formulas] of blocks or rows, [picked] conversions of
+  /// selections (key to the ids of their strokes, the text and the formula). Each is named by the key of its strokes, which names
+  /// them exactly: it is there at once, as if it had just been read, and is not read again. What was read here is not replaced.
+  void seed({
+    Map<String, String> texts = const {},
+    Map<String, String> formulas = const {},
+    Map<String, ({Set<String> ids, String? text, String? latex})> picked = const {},
+  }) {
+    if (_disposed) return;
+    _kept.addAll(texts);
+    _keptMath.addAll(formulas);
+    for (final e in picked.entries) {
+      final p = _picked.putIfAbsent(e.key, () => _Picked(e.value.ids));
+      p.text ??= e.value.text;
+      p.latex ??= e.value.latex;
     }
-    notifyListeners();
+    if (_useKept(_clusters())) notifyListeners();
   }
 
-  /// Keeps what a conversion that was asked for read, if [selection] is exactly one block.
-  void remember(Iterable<DrawingStroke> selection, String value, {bool math = false}) {
-    final clusters = _clustersOf(selection);
-    if (clusters == null || clusters.length != 1 || value.trim().isEmpty) return;
-    final r = _cache.putIfAbsent(clusters.single.key, InkReading.new);
-    if (math) {
-      r.latex = value.trim();
-      r.mathTried = true;
+  /// Gives [clusters] that have not been read what was kept of them; says whether any got something.
+  bool _useKept(List<InkCluster> clusters) {
+    if (_kept.isEmpty && _keptMath.isEmpty) return false;
+    var any = false;
+    for (final c in clusters) {
+      final text = _kept[c.key], latex = _keptMath[c.key];
+      if (text == null && latex == null) continue;
+      final r = _cache.putIfAbsent(c.key, InkReading.new);
+      if (r.text == null && text != null) {
+        r.text = text;
+        r.failed = false;
+        any = true;
+      }
+      if (r.latex == null && latex != null) {
+        r.latex = latex;
+        r.mathTried = true;
+        any = true;
+      }
+    }
+    if (!_rows || _kept.isEmpty || clusters.every((c) => _cache[c.key]?.text != null)) return any;
+    // rows: a block's text, one line to a row, when the lines of the text are as many as its rows
+    for (final block in _blocks()) {
+      final text = _kept[block.key];
+      if (text == null) continue;
+      final rows = _rowsOf(block, clusters);
+      final lines = text.split('\n');
+      if (rows == null || rows.length != lines.length) continue;
+      for (var i = 0; i < rows.length; i++) {
+        final r = _cache.putIfAbsent(rows[i].key, InkReading.new);
+        if (r.text != null) continue;
+        r.text = lines[i].trim();
+        any = true;
+      }
+    }
+    return any;
+  }
+
+  /// What is to be kept of the readings now: the text of each block that has been read (by block, for the search; while the maths
+  /// check reads by rows, a block whose rows are all read has their text, a line to a row) and the keys of all blocks; the
+  /// formulas read and the conversions of selections whose strokes are all still there as they were.
+  ({List<({InkCluster block, String text})> texts, Set<String> blocks, Map<String, String> formulas, Map<String, ({Set<String> ids, String? text, String? latex})> picked}) toKeep() {
+    final blocks = _blocks();
+    final List<({InkCluster block, String text})> texts;
+    if (!_rows) {
+      texts = [for (final b in blocks) if (_cache[b.key]?.text case final t?) (block: b, text: t)];
     } else {
-      r.text = value.trim();
+      final rows = _rowClusters();
+      texts = [];
+      for (final b in blocks) {
+        final parts = _rowsOf(b, rows);
+        final read = parts == null ? null : [for (final r in parts) _cache[r.key]?.text];
+        final text = read != null && !read.contains(null) ? read.map((t) => t!.replaceAll('\n', ' ')).join('\n') : _kept[b.key];
+        if (text != null) texts.add((block: b, text: text));
+      }
+    }
+    _forgetPicked();
+    return (
+      texts: texts,
+      blocks: {for (final b in blocks) b.key},
+      formulas: {for (final c in _rows ? _rowClusters() : blocks) c.key: ?_cache[c.key]?.latex},
+      picked: {
+        for (final e in _picked.entries)
+          if (e.value.text != null || e.value.latex != null) e.key: (ids: e.value.ids, text: e.value.text, latex: e.value.latex),
+      },
+    );
+  }
+
+  /// The key of the writing of [selection] (its strokes that can be handwriting).
+  static String _selectionKey(Iterable<DrawingStroke> selection) => InkCluster.keyOf(selection.where(isInkStroke));
+
+  /// Drops the conversions of selections whose strokes are gone or have changed.
+  void _forgetPicked() {
+    if (_picked.isEmpty) return;
+    final now = {for (final e in strokes().entries) for (final s in e.value) s.id: s};
+    _picked.removeWhere((key, p) => !p.ids.every(now.containsKey) || InkCluster.keyOf([for (final id in p.ids) now[id]!]) != key);
+  }
+
+  /// Keeps what a conversion that was asked for read: for the block when [selection] is exactly one, else for the selection itself
+  /// (the same strokes selected again are not read again).
+  void remember(Iterable<DrawingStroke> selection, String value, {bool math = false}) {
+    if (value.trim().isEmpty) return;
+    final clusters = _clustersOf(selection);
+    if (clusters != null && clusters.length == 1) {
+      final r = _cache.putIfAbsent(clusters.single.key, InkReading.new);
+      if (math) {
+        r.latex = value.trim();
+        r.mathTried = true;
+      } else {
+        r.text = value.trim();
+      }
+    } else {
+      final ink = selection.where(isInkStroke).toList();
+      if (ink.isEmpty) return;
+      final p = _picked.putIfAbsent(InkCluster.keyOf(ink), () => _Picked({for (final s in ink) s.id}));
+      math ? p.latex = value.trim() : p.text = value.trim();
     }
     if (!_disposed) notifyListeners();
   }

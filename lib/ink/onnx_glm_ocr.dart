@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart' show WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
 import '../llm/onnx_qwen.dart' show onnxThreads;
@@ -7,40 +10,101 @@ import '../llm/onnx_session.dart';
 import 'glm_ocr.dart';
 import 'paddle_vl.dart' show withoutLoop;
 
-/// Reads the pictures with GLM-OCR in ONNX Runtime (the two networks and the table of words made by
+/// Reads pictures with GLM-OCR in ONNX Runtime (the two networks and the table of words made by
 /// `tool/handwriting_bench/glm_onnx/make_release.py`) and returns the token ids written for each, as the app reads lines of
-/// handwriting: the vision network turns the picture into one vector per 2 x 2 patches (closed again before the language model opens,
-/// to keep the memory down); the language model reads the prompt, with those vectors in the places of the picture, and writes the
-/// text token by token (greedy). It is the same model the Python of the benchmark ran, token for token.
-Future<List<List<int>>> readPicturesGlm({
-  required String visionPath,
-  required String textPath,
-  required String embeddingsPath,
-  required List<GlmPicture> pictures,
-  int maxTokens = 80,
-}) async {
-  OrtSessionOptions options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false);
+/// handwriting: the vision network turns the picture into one vector per 2 x 2 patches; the language model reads the prompt, with those
+/// vectors in the places of the picture, and writes the text token by token (greedy). It is the same model the Python of the benchmark
+/// ran, token for token.
+///
+/// Opening the two networks costs more than reading a block (2.1 s on a Ryzen 7 8845HS, about 760 MB of files), and the background
+/// reading asks for block after block: they stay open for [keepOpen] after a reading and are let go of when nothing more is asked, or
+/// at once when the system says memory is short. Both open hold about 870 MB (the language model alone about 410 MB).
+class GlmOnnxReader with WidgetsBindingObserver {
+  final Duration keepOpen;
 
-  final features = <Float32List>[];
-  final vision = await openOnnxSession(visionPath, options: options());
-  try {
-    for (final p in pictures) {
-      features.add(await _see(vision, p));
+  GlmOnnxReader({this.keepOpen = const Duration(seconds: 15)});
+
+  OrtSession? _vision, _language;
+  GlmEmbeddings? _table;
+
+  /// The files the open sessions are of (another set closes them first).
+  String? _files;
+  Timer? _idle;
+  bool _observing = false;
+  Future<void> _turn = Future.value();
+
+  OrtSessionOptions _options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false);
+
+  /// The token ids of each of [pictures]. One call at a time: the sessions are shared.
+  Future<List<List<int>>> read(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures, {int maxTokens = 80}) async =>
+      [for (final r in await readScored(visionPath, textPath, embeddingsPath, pictures, maxTokens: maxTokens)) r.tokens];
+
+  /// [read], with how sure the model was of each reading: the geometric mean of the probabilities of the tokens it chose (1 when it wrote
+  /// nothing). A drawing read as text is read with little confidence.
+  Future<List<GlmReading>> readScored(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures, {int maxTokens = 80}) {
+    final result = _turn.then((_) => _read(visionPath, textPath, embeddingsPath, pictures, maxTokens));
+    _turn = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<List<GlmReading>> _read(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures, int maxTokens) async {
+    _idle?.cancel();
+    final files = '$visionPath\u0000$textPath\u0000$embeddingsPath';
+    if (_files != files) await _close();
+    _files = files;
+    if (!_observing) {
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
     }
-  } finally {
-    await vision.close();
+    try {
+      final vision = _vision ??= await openOnnxSession(visionPath, options: _options());
+      final features = [for (final p in pictures) await _see(vision, p)];
+      final table = _table ??= await GlmEmbeddings.open(embeddingsPath);
+      final language = _language ??= await openOnnxSession(textPath, options: _options());
+      return [
+        for (var i = 0; i < pictures.length; i++)
+          await _write(language, pictures[i], features[i], table, maxTokens).then((r) => (tokens: withoutLoop(r.tokens), confidence: r.confidence)),
+      ];
+    } catch (_) {
+      await _close(); // (a session in a bad state is not used again)
+      rethrow;
+    } finally {
+      if (_files != null) {
+        if (keepOpen == Duration.zero) {
+          await _close();
+        } else {
+          _idle = Timer(keepOpen, close);
+        }
+      }
+    }
   }
 
-  final table = await GlmEmbeddings.open(embeddingsPath);
-  final language = await openOnnxSession(textPath, options: options());
-  try {
-    return [
-      for (var i = 0; i < pictures.length; i++) withoutLoop(await _write(language, pictures[i], features[i], table, maxTokens)),
-    ];
-  } finally {
-    await language.close();
-    await table.close();
+  /// Lets go of the networks (after the reading going on now, if one is).
+  Future<void> close() {
+    final done = _turn.then((_) => _close());
+    _turn = done;
+    return done;
   }
+
+  Future<void> _close() async {
+    _idle?.cancel();
+    _idle = null;
+    _files = null;
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observing = false;
+    }
+    final vision = _vision, language = _language, table = _table;
+    _vision = null;
+    _language = null;
+    _table = null;
+    await vision?.close();
+    await language?.close();
+    await table?.close();
+  }
+
+  @override
+  void didHaveMemoryPressure() => unawaited(close());
 }
 
 Future<Float32List> _see(OrtSession vision, GlmPicture p) async {
@@ -62,7 +126,7 @@ Future<Float32List> _see(OrtSession vision, GlmPicture p) async {
 /// The language model's turn: the cache stays on the native side; its first position is one of zeros that the mask hides (the graph
 /// wants a cache with something in it), and the model is given the position of every token itself (the picture's tokens have
 /// three: time, row and column).
-Future<List<int>> _write(OrtSession session, GlmPicture picture, Float32List features, GlmEmbeddings table, int maxTokens) async {
+Future<GlmReading> _write(OrtSession session, GlmPicture picture, Float32List features, GlmEmbeddings table, int maxTokens) async {
   Future<void> breathe() => Future<void>.delayed(const Duration(milliseconds: 8));
 
   final prompt = glmPrompt(picture.gridHeight, picture.gridWidth);
@@ -91,6 +155,7 @@ Future<List<int>> _write(OrtSession session, GlmPicture picture, Float32List fea
   }
 
   final result = <int>[];
+  var logProbability = 0.0;
   try {
     final first = Float32List(prompt.length * glmHidden);
     for (var i = 0; i < prompt.length; i++) {
@@ -113,6 +178,12 @@ Future<List<int>> _write(OrtSession session, GlmPicture picture, Float32List fea
         }
       }
       if (glmEndTokens.contains(best)) break;
+      // (how likely the chosen token was: its score against all of them, log-sum-exp taken from the best for the sake of the floats)
+      var sum = 0.0;
+      for (var k = 0; k < scores.length; k++) {
+        sum += math.exp((scores[k] as num).toDouble() - bestScore);
+      }
+      logProbability -= math.log(sum);
       result.add(best);
       await breathe();
       logits = await step(await table.row(best), [next, next, next], 1);
@@ -126,5 +197,8 @@ Future<List<int>> _write(OrtSession session, GlmPicture picture, Float32List fea
     letGo.add(empty.dispose());
     await Future.wait(letGo);
   }
-  return result;
+  return (tokens: result, confidence: result.isEmpty ? 1.0 : math.exp(logProbability / result.length));
 }
+
+/// What was read of one picture: its tokens, and how sure the model was of them (see [GlmOnnxReader.readScored]).
+typedef GlmReading = ({List<int> tokens, double confidence});

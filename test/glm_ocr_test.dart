@@ -98,6 +98,22 @@ void main() {
     });
   });
 
+  group('what is not writing', () {
+    test('of a drawing the reader writes an empty block of markdown or dashes, or anything with little confidence: none of it is kept', () {
+      expect(GlmOcrService.isWriting('```markdown\n\n```', 0.97), isFalse);
+      expect(GlmOcrService.isWriting('---', 0.92), isFalse);
+      expect(GlmOcrService.isWriting('Tricycle', 0.3), isFalse);
+      expect(GlmOcrService.isWriting('', 1), isFalse);
+    });
+
+    test('writing is kept, a lone number too (an answer on its own line), and a sure reading of a sign', () {
+      expect(GlmOcrService.isWriting('nach through rate', 0.98), isTrue);
+      expect(GlmOcrService.isWriting(r'$ x=\frac{1}{2} $', 0.9), isTrue);
+      expect(GlmOcrService.isWriting('4', 0.9), isTrue);
+      expect(GlmOcrService.isWriting('★', 0.68), isTrue);
+    });
+  });
+
   group('the reader', () {
     test('a line of ink becomes a picture of the sizes the model wants', () async {
       final line = [

@@ -20,6 +20,8 @@ import 'package:notes/sync/caldav_service.dart';
 import 'package:notes/sync/device_calendar_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 class _Provider extends ChangeNotifier implements TextModelProvider {
   @override
   String get id => 'fake';
@@ -149,6 +151,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('assistant-button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('assistant-panel')), findsOneWidget); // a fresh assistant
+    await closeEditor(tester); // (the fresh assistant and the note's kept readings are loaded from the database)
   });
 
   testWidgets('the assistant that answers from all notes has its own place in the menu, takes the whole page, and goes with the AI switch', (tester) async {

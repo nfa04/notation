@@ -29,9 +29,17 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
     );
   }
 
+  /// Readings arrived: the marks, the underlines and the buttons are brought up to date once, at the next frame, however many
+  /// arrived before it.
   void _inkProgressed() {
-    if (_checkOn) _marks = _currentMarks();
-    _refreshInkSpelling();
-    setState(() {}); // (the buttons over a selection show whether it is ready)
+    if (_inkRefreshDue) return;
+    _inkRefreshDue = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _inkRefreshDue = false;
+      if (!mounted) return;
+      if (_checkOn) _marks = _currentMarks();
+      _refreshInkSpelling();
+      setState(() {}); // (the buttons over a selection show whether it is ready)
+    });
   }
 }

@@ -310,3 +310,19 @@ background reader (`NoteInkReader`, which also keeps the readings for the search
 its share of the line (the reader keeps no box per word, so the underline is near the word, not exact). Words of up to two letters are left
 alone. The editor (`editor_ink_spelling.dart`) draws a wavy red line under the word and a tap offers suggestions (copied to the clipboard,
 the ink cannot be changed), "Add to dictionary" and "Ignore". A changed block has a new key, so its old underlines go until it is read again.
+
+## What is read of the handwriting is read once
+
+`NoteInkReader` keeps what the background reader read, so that a note opened again reads nothing it read before:
+
+* The text of each block of writing goes to `ink_text` (the search, the PDF text and the spell check use it), always by block, also while
+  the maths check reads by rows: the rows' text is joined, a line to a row, and given back to the rows when the note is opened again
+  (when the lines are as many as the rows). Formulas (of blocks and rows) and conversions of a selection that is not a whole block go to
+  `ink_reads`, which the search does not look at; a conversion is kept with the ids of its strokes and dropped when they change.
+* Everything is named by `InkCluster.keyOf`, made of the ids, widths and points of the strokes rounded to tenths through 32-bit numbers:
+  points are stored as 32-bit numbers, and a stroke just drawn (64-bit) must have the same key as when it is loaded again.
+* While the kept readings are loaded the prefetcher holds (`holding`), so a reading that starts early does not read them twice.
+* Nothing is kept for a locked note; the lock clears `ink_reads` with `ink_text`.
+
+A language that is on for the spell check but whose dictionary files are missing (a failed download, settings brought from another
+folder of the app) is downloaded again at the start (`SpellService.load`): it does not quietly check nothing.

@@ -1,17 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes/data/note_text_repository.dart' show InkRead;
 import 'package:notes/ink/ink_clusters.dart';
 import 'package:notes/ink/note_ink_reader.dart';
 import 'package:notes/models/canvas_models.dart';
 import 'package:notes/search/search_query.dart';
 
-import 'ink_prefetch_test.dart' show FakeReader, until, word;
+import 'ink_prefetch_test.dart' show FakeReader, scribble, until, word;
 
 void main() {
   late FakeReader text;
   late Map<int, List<DrawingStroke>> strokes;
   late List<(String, List<InkText>, Set<String>)> saved;
+  late List<List<InkRead>> savedReads;
   late int progressed;
   var kept = <String, String>{};
+  var keptReads = <InkRead>[];
   var open = true, locked = false, wanted = true;
 
   NoteInkReader reader({FakeReader? handwriting, FakeReader? math}) => NoteInkReader(
@@ -27,7 +30,8 @@ void main() {
         ready: () async {},
         indexWanted: () async => wanted,
         saveIndex: (id, read, alive) async => saved.add((id, read, alive)),
-        loadSaved: (id) async => kept,
+        saveReads: (id, reads) async => savedReads.add(reads),
+        loadSaved: (id) async => (texts: kept, reads: keptReads),
         onProgress: () => progressed++,
       );
 
@@ -35,8 +39,10 @@ void main() {
     text = FakeReader((s) => 'hello');
     strokes = {0: word('a', 100, 100)};
     saved = [];
+    savedReads = [];
     progressed = 0;
     kept = {};
+    keptReads = [];
     open = true;
     locked = false;
     wanted = true;
@@ -103,6 +109,95 @@ void main() {
     });
   });
 
+  group('the maths check, which reads by rows', () {
+    // one block of two rows of writing: "a" on top, "b" under it
+    String row(List<DrawingStroke> s) => s.first.id.startsWith('a') ? 'x = 1' : 'y = 2';
+    late FakeReader rows, formulas;
+    setUp(() {
+      strokes = {0: [...word('a', 100, 100, n: 5), ...word('b', 100, 140, n: 3)]};
+      rows = FakeReader(row);
+      formulas = FakeReader((s) => row(s).replaceAll(' ', ''));
+    });
+
+    Future<NoteInkReader> checking() async {
+      final r = reader(handwriting: rows, math: formulas)..checkOn = true;
+      await r.restore();
+      await r.start();
+      return r;
+    }
+
+    test('keeps its readings: the text by block for the search, the formulas beside it', () async {
+      final block = clusterStrokes(0, strokes[0]!).single;
+      final r = await checking();
+      r.prefetcher!.changed();
+      await until(() => formulas.calls.length == 2);
+      await r.saveReadings();
+      final (_, read, alive) = saved.single;
+      expect(read.single.key, block.key, reason: 'by block, as the search and the PDF text have it');
+      expect(read.single.text, 'x = 1\ny = 2', reason: 'a line to a row');
+      expect(alive, {block.key});
+      expect({for (final f in savedReads.single) f.latex}, {'x=1', 'y=2'});
+      r.dispose();
+    });
+
+    test('opened again, nothing is read: not the text, not the formulas', () async {
+      var r = await checking();
+      r.prefetcher!.changed();
+      await until(() => formulas.calls.length == 2);
+      await r.saveReadings();
+      r.dispose();
+      kept = {for (final t in saved.last.$2) t.key: t.text};
+      keptReads = savedReads.last;
+      rows.calls.clear();
+      formulas.calls.clear();
+
+      r = await checking();
+      r.prefetcher!.changed();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(rows.calls, isEmpty);
+      expect(formulas.calls, isEmpty);
+      expect({for (final x in r.prefetcher!.readings()) x.latex}, {'x=1', 'y=2'});
+      r.dispose();
+    });
+
+    test('a block read for the search before gives its rows their text: only the formulas are read', () async {
+      kept = {clusterStrokes(0, strokes[0]!).single.key: 'x = 1\ny = 2'};
+      final r = await checking();
+      r.prefetcher!.changed();
+      await until(() => formulas.calls.length == 2);
+      expect(rows.calls, isEmpty);
+      r.dispose();
+    });
+  });
+
+  group('conversions of a selection that is not a whole block', () {
+    test('are remembered, kept, there again when the note is opened again, and dropped when the writing changes', () async {
+      strokes = {0: [...word('a', 100, 100, n: 5), ...word('b', 100, 140, n: 3)]};
+      final part = strokes[0]!.where((s) => s.id.startsWith('b')).toList();
+      var r = reader(handwriting: text);
+      await r.restore();
+      expect(r.prefetcher!.lookupText(part), isNull, reason: 'it cuts the block');
+      r.prefetcher!.remember(part, 'second line');
+      expect(r.prefetcher!.lookupText(part), 'second line', reason: 'not read again while the note is open');
+      await r.saveReadings();
+      r.dispose();
+      expect(savedReads.single.single.text, 'second line');
+
+      keptReads = savedReads.single;
+      r = reader(handwriting: text);
+      await r.restore();
+      expect(r.prefetcher!.lookupText(part), 'second line', reason: 'nor after it was opened again');
+
+      // the writing changes: what was read of it is not what it says any more
+      strokes = {0: [...strokes[0]!.where((s) => s.id != 'b0'), scribble('b0', 300, 140)]};
+      r.prefetcher!.changed();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await r.saveReadings();
+      expect(savedReads.last, isEmpty);
+      r.dispose();
+    });
+  });
+
   group('reading for the search', () {
     test('the writing is read, kept as the readings change, and reported to the editor', () async {
       final r = reader(handwriting: text);
@@ -133,7 +228,7 @@ void main() {
       expect(saved, isEmpty);
     });
 
-    test('a locked note keeps nothing, and nor does line by line checking of maths', () async {
+    test('a locked note keeps nothing', () async {
       final r = reader(handwriting: text);
       await r.startIndex();
       r.prefetcher!.changed();
@@ -142,11 +237,7 @@ void main() {
       locked = true;
       await r.saveReadings();
       expect(saved, isEmpty);
-      locked = false;
-      r.checkOn = true;
-      await r.saveReadings();
-      expect(saved, isEmpty);
-      r.checkOn = false;
+      expect(savedReads, isEmpty);
       r.dispose();
     });
 
