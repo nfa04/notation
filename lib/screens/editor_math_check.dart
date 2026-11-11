@@ -354,9 +354,12 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
       ),
     );
     later?.cancel();
-    for (final e in edits) {
-      e.dispose();
-    }
+    // The sheet is still sliding out (a swipe down returns early) and its fields read these, so they go once it is gone.
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      for (final e in edits) {
+        e.dispose();
+      }
+    });
   }
 
   /// Checks the maths in the selection now (the button over a selection), whether or not the tool that does it

@@ -367,7 +367,8 @@ class _CalendarViewState extends State<CalendarView> {
       ),
     );
     final newTitle = title.text.trim();
-    title.dispose();
+    // The dialog is still animating out and its TextField reads the controller, so it is let go of once it is gone.
+    Future<void>.delayed(const Duration(milliseconds: 600), title.dispose);
     if (saved == true && newTitle.isNotEmpty) {
       await _run(() => _repo.updateTask(t.id, title: newTitle, dueDate: due));
     }
