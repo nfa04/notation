@@ -2518,6 +2518,7 @@ const germanTexts = <String, String>{
   'This note file is too big to open': 'Diese Notizdatei ist zu groß zum Öffnen',
   'This note file is damaged and cannot be read': 'Diese Notizdatei ist beschädigt und kann nicht gelesen werden',
   'A sound with an unusable name was left out': 'Ein Ton mit unbrauchbarem Namen wurde weggelassen',
+  'The readings of the handwriting in the file were left out': 'Die Lesungen der Handschrift in der Datei wurden weggelassen',
   'A text box in the file could not be read and was left out': 'Ein Textfeld in der Datei konnte nicht gelesen werden und wurde weggelassen',
   'A picture in the file could not be read and was left out': 'Ein Bild in der Datei konnte nicht gelesen werden und wurde weggelassen',
   'A highlight in the file could not be read and was left out': 'Eine Markierung in der Datei konnte nicht gelesen werden und wurde weggelassen',

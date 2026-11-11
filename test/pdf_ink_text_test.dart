@@ -77,6 +77,31 @@ void main() {
       expect(first.map((l) => l.box.top), [140, 180], reason: 'the first line is the one left out');
     });
 
+    test('formulas are written as a person would copy them, not as LaTeX', () {
+      expect(plainText(r'so $\frac{1}{2} x^{2} \times 3$ is'), 'so 1/2x^2×3 is');
+      expect(plainText(r'$ v_{1}=m_{2}+2 0 $'), 'v_1=m_2+20');
+      expect(plainText('no maths  here'), 'no maths here');
+      // (lines the reader wrote for a real page, with a space after every sign)
+      expect(plainText(r'$ P \left( S _ { n } > \frac { n } { 2 } \right) = \sum_ { k > n } \binom { n } { k } $'), 'P(S_n>n/2)= sum _k>n binom(n,k)');
+      expect(plainText(r'$ \operatorname{V a r} \left( y_{n} \right)=q \left( 1-q \right)=\frac{1}{4}-\left( q-\frac{1}{2} \right)^{2} $'), 'Var(y_n)=q(1-q)=1/4-(q-1/2)^2');
+      expect(plainText(r'$ B e i $ $ p=1 / 2 $ is $ E ( y_{n} )=\frac{1}{2}+(c) \rightarrow $'), 'Bei p=1/2 is E(y_n)=1/2+(c) ->');
+    });
+
+    test('LaTeX without dollar signs is taken for a formula, and stray dollar signs are dropped', () {
+      expect(plainText(r'= E ( Y _ { n } ) - ( E _ { y _ { n } } ) ^ { 2 } = E ( y _ { n } ) \times ( 1 - E ( y _ { n } ) )'), '=E(Y_n)-(E_y_n)^2=E(y_n)×(1-E(y_n))');
+      expect(plainText(r'$ \rho ( S_{n}>\mathrm{0} )\leq 1 $ 0 < n \mid 2 $'), 'rho (S_n>0) <= 1 0<n|2');
+    });
+
+    test('each word has its share of the line, the space after it included, without gaps', () {
+      final words = placeWords('hello big world', 300);
+      expect(words.map((w) => w.text), ['hello ', 'big ', 'world']);
+      expect(words.first.left, 0);
+      expect(words.last.right, closeTo(300, 0.001));
+      for (var i = 1; i < words.length; i++) {
+        expect(words[i].left, closeTo(words[i - 1].right, 0.001));
+      }
+    });
+
     test('an empty line of the reading takes its place and leaves no text', () {
       final cluster = clusterStrokes(0, _twoLines()).single;
       final lines = inkTextLines(cluster, '\nbye');

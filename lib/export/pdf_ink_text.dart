@@ -114,21 +114,107 @@ List<String> alignLines(List<String> texts, List<double> widths) {
   return out;
 }
 
+/// How wide a letter is written (narrow ones take less), to tell where a word is in a line: the reader keeps no box per word.
+double _letterWidth(String c) {
+  if ('iIl.,;:\'’!|jt ()/'.contains(c)) return 0.5;
+  if ('fr'.contains(c)) return 0.7;
+  if ('mwMW'.contains(c)) return 1.5;
+  return 1;
+}
+
+final _mathSpan = RegExp(r'\$\$([^$]+)\$\$|\$([^$]+)\$');
+
+/// Whether [t] (with no dollar signs) is LaTeX that the reader did not put between them: a command, or a sub- or superscript in braces.
+final _bareLatex = RegExp(r'\\[a-zA-Z]+|[_^]\s*\{|\{\s*[^{}\s]');
+
+/// [text] with the LaTeX the reader wrote turned into what a person would select and copy: `$\frac{1}{2}$` is `1/2`, `$S _ { n }$` is
+/// `S_n`, and the dollar signs, braces, spacing commands and the spaces the reader puts between the signs of a formula are gone. (As
+/// LaTeX the string was several times as long as the formula is written wide, so its letters were squeezed on top of each other under the
+/// ink, and a viewer showed them apart.)
+String plainText(String text) {
+  final out = StringBuffer();
+  var at = 0;
+  // (what is outside the dollar signs is LaTeX too when it has commands in it: the reader put the signs where it thought best)
+  void outside(String part) => out.write(_bareLatex.hasMatch(part) ? ' ${_plainMaths(part)} ' : part.replaceAll(r'$', ' '));
+  for (final m in _mathSpan.allMatches(text)) {
+    outside(text.substring(at, m.start));
+    out.write(' ${_plainMaths(m[1] ?? m[2]!)} ');
+    at = m.end;
+  }
+  outside(text.substring(at));
+  return out.toString().replaceAll(RegExp(r'[ \t]+'), ' ').trim();
+}
+
+/// A space that is meant (round a word like `in`), not one the reader put between the signs.
+const _meant = '\u0001';
+
+String _plainMaths(String latex) {
+  var t = latex.replaceAll(r'$', ' ');
+  String grouped(String s) {
+    final plain = s.replaceAll(RegExp(r'\s+'), '');
+    return RegExp(r'^[\w.]+$').hasMatch(plain) ? plain : '($plain)';
+  }
+
+  // (\frac{a}{b} several times over, the inner ones first)
+  final frac = RegExp(r'\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}');
+  for (var i = 0; i < 6 && frac.hasMatch(t); i++) {
+    t = t.replaceAllMapped(frac, (m) => '{${grouped(m[1]!)}/${grouped(m[2]!)}}');
+  }
+  t = t.replaceAllMapped(RegExp(r'\\binom\s*\{([^{}]*)\}\s*\{([^{}]*)\}'), (m) => '${_meant}binom(${m[1]!.trim()},${m[2]!.trim()})');
+  const symbols = {
+    'leq': '<=', 'le': '<=', 'geq': '>=', 'ge': '>=', 'neq': '!=', 'ne': '!=', 'rightarrow': '->', 'to': '->', 'leftarrow': '<-', 'Rightarrow': '=>',
+    'Leftrightarrow': '<=>', 'times': '×', 'cdot': '·', 'pm': '±', 'div': '÷', 'mid': '|', 'sim': '~', 'approx': '~=', 'infty': 'inf',
+  };
+  t = t
+      .replaceAll(RegExp(r'\\(left|right|big|Big|bigg|Bigg|displaystyle|mathrm|mathbf|mathit|text|operatorname)(?![a-zA-Z])'), '')
+      .replaceAll(RegExp(r'\\[,;:! ]|\\quad|\\qquad'), '')
+      .replaceAll(RegExp(r'\\\\|&'), _meant)
+      .replaceAllMapped(RegExp(r'\\([a-zA-Z]+)'), (m) {
+    final sign = symbols[m[1]];
+    if (sign == null) return '$_meant${m[1]}$_meant';
+    return const {'×', '·', '±', '÷', '|', '~', 'inf'}.contains(sign) ? sign : '$_meant$sign$_meant';
+  }).replaceAll(RegExp(r'[{}]'), '');
+  // (whatever space is left was the reader's: the signs of a formula run on)
+  return t.replaceAll(RegExp(r'\s+'), '').replaceAll(_meant, ' ').replaceAll(RegExp(r' +'), ' ').trim();
+}
+
+/// The words of [text] (one line) and where each one is across [width] (counting from 0): a word takes its share of the line by the
+/// letters in it, the space after it included, so that the words run on without a gap whatever the ink does.
+List<({String text, double left, double right})> placeWords(String text, double width) {
+  final words = RegExp(r'\S+\s?').allMatches(text).map((m) => m[0]!).toList();
+  final weights = [for (final w in words) w.split('').fold(0.0, (a, c) => a + _letterWidth(c))];
+  final total = weights.fold(0.0, (a, b) => a + b);
+  if (words.isEmpty || total <= 0) return const [];
+  final out = <({String text, double left, double right})>[];
+  var at = 0.0;
+  for (var i = 0; i < words.length; i++) {
+    final to = at + width * weights[i] / total;
+    out.add((text: words[i], left: at, right: to));
+    at = to;
+  }
+  return out;
+}
+
 /// Writes [lines] on [canvas] (a page [pageHeight] tall, counting up from its bottom) as text that is not drawn: a PDF viewer can select it,
-/// search it and copy it, and shows nothing for it. Each line is stretched to the width of its ink, so that a word is selected where
-/// it is written. Letters the font cannot write are left out.
+/// search it and copy it, and shows nothing for it. Each word is stretched to the place it takes in its line of ink, so that a word is
+/// selected where it is written and no letter is stretched or squeezed far from its natural width (a viewer takes a wide gap for a
+/// space and a squeezed pair for one letter). Letters the font cannot write are left out.
 void drawInkText(pw.PdfGraphics canvas, double pageHeight, Iterable<InkTextLine> lines, pw.PdfFont font) {
   for (final line in lines) {
     // (a letter that is left out leaves one space, not two)
-    final text = String.fromCharCodes(line.text.runes.where(font.isRuneSupported)).replaceAll(RegExp(r'\s+'), ' ').trim();
+    final text = plainText(String.fromCharCodes(line.text.runes.where(font.isRuneSupported)));
     if (text.isEmpty) continue;
     // as big as the line is tall: a viewer marks a line from the baseline up to the height of a capital (or more, from the descender
     // to the ascender), and the baseline is a fifth of the line above its bottom, where the tails of g and y end
     final size = line.box.height.clamp(4.0, 150.0);
-    final natural = font.stringMetrics(text).width * size;
-    if (natural <= 0) continue;
-    final stretch = (line.box.width / natural).clamp(0.05, 20.0);
-    canvas.drawString(font, size, text, line.box.left, pageHeight - line.box.bottom + size * 0.2, scale: stretch, mode: pw.PdfTextRenderingMode.invisible);
+    final words = placeWords(text, line.box.width);
+    for (var i = 0; i < words.length; i++) {
+      final w = words[i];
+      final natural = font.stringMetrics(w.text).width * size;
+      if (natural <= 0) continue;
+      final stretch = ((w.right - w.left) / natural).clamp(0.2, 5.0);
+      canvas.drawString(font, size, w.text, line.box.left + w.left, pageHeight - line.box.bottom + size * 0.2, scale: stretch, mode: pw.PdfTextRenderingMode.invisible);
+    }
   }
 }
 

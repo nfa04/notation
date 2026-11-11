@@ -104,6 +104,7 @@ class NoteFileService {
       images: images,
       imageExtensions: extensions,
       ai: await _notes.ai.of(noteId),
+      ink: InkReadingParts(texts: await _notes.text.inkTexts(noteId), reads: await _notes.text.inkReads(noteId)),
       audio: await _audioParts(noteId),
     );
     final entries = noteFileEntries(parts);
@@ -270,6 +271,23 @@ class NoteFileService {
     }
     for (final a in parsed.ai) {
       await _notes.ai.put(NoteAiRow(noteId: id, kind: a.kind, key: a.key, content: a.content, sourceHash: a.sourceHash, model: a.model, createdAt: a.createdAt));
+    }
+    // what the handwriting reader made of the strokes (the keys are the same here, so nothing is read twice); a failure here loses
+    // only that
+    if (!parsed.ink.isEmpty) {
+      try {
+        // (a note that is there already keeps the readings it has: the file's are added to them; what no longer fits its strokes is
+        // dropped when the editor keeps its readings)
+        final known = {for (final t in await _notes.text.inkTexts(id)) t.key};
+        if (parsed.ink.texts.isNotEmpty) await _notes.text.saveInkText(id, parsed.ink.texts, {...known, for (final t in parsed.ink.texts) t.key});
+        if (parsed.ink.reads.isNotEmpty) {
+          final mine = await _notes.text.inkReads(id);
+          final fromFile = {for (final r in parsed.ink.reads) r.key};
+          await _notes.text.saveInkReads(id, [...mine.where((r) => !fromFile.contains(r.key)), ...parsed.ink.reads]);
+        }
+      } catch (e) {
+        warnings.add(tr('The readings of the handwriting in the file were left out'));
+      }
     }
     if (parsed.themeImage != null) {
       final dir = await Directory(p.join(support, 'note_images')).create(recursive: true);
