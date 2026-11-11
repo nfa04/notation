@@ -255,6 +255,7 @@ class SettingsScreen extends StatelessWidget {
         sections: [
           ..._spaced([
             if (aiSwitch != null) _AiSwitchCard(aiSwitch: aiSwitch!),
+            if (repository != null && onnxPlatformAccelerators().isNotEmpty) AccelerationSettings(repository: repository!),
             if (handwriting != null) _HandwritingSettings(service: handwriting!, repository: repository),
             if (math != null) _MathSettings(service: math!),
             if (ocr != null) _OcrSettings(service: ocr!),
@@ -265,7 +266,7 @@ class SettingsScreen extends StatelessWidget {
                 description: 'Finds the person, animal or object in a photograph, so that "Find the subject" in the picture editor can take the '
                     'background out. It runs on this device (U²-Net, Apache-2.0 licence); nothing is sent away.',
               ),
-            if (ai != null) _AiSettings(ai: ai!, repository: repository),
+            if (ai != null) _AiSettings(ai: ai!),
             if (llm != null)
               _ModelSettings(
                 service: llm!,

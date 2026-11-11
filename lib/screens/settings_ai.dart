@@ -3,9 +3,8 @@ part of 'settings_screen.dart';
 /// Which AI provider answers, and what the summary prompt says.
 class _AiSettings extends StatefulWidget {
   final AiService ai;
-  final NoteRepository? repository;
 
-  const _AiSettings({required this.ai, this.repository});
+  const _AiSettings({required this.ai});
 
   @override
   State<_AiSettings> createState() => _AiSettingsState();
@@ -51,10 +50,6 @@ class _AiSettingsState extends State<_AiSettings> {
           ),
           const SizedBox(height: 12),
           for (final p in ai.providers) _provider(context, p, p.id == ai.provider?.id),
-          if (widget.repository != null && onnxPlatformAccelerators().isNotEmpty) ...[
-            const SizedBox(height: 16),
-            AccelerationSettings(repository: widget.repository!),
-          ],
           const SizedBox(height: 16),
           Text('Prompt for "Summarize"', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
