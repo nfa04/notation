@@ -206,7 +206,10 @@ void main() {
       mic.heard = const Duration(seconds: 12);
 
       await tester.tap(find.byKey(const ValueKey('lecture-button')));
-      await real(tester, 400);
+      // (the saving is real work: on a slow machine it takes longer than a fixed wait, so it is waited for)
+      for (var i = 0; i < 40 && find.textContaining('Kept the sound with 1 line').evaluate().isEmpty; i++) {
+        await real(tester, 400);
+      }
       await tester.pumpAndSettle();
       expect(mic.recording, isFalse);
       expect(find.textContaining('Kept the sound with 1 line'), findsOneWidget);
