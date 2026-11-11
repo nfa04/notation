@@ -1106,6 +1106,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       case 0:
       default:
         return DashboardView(
+          tags: _app.tags,
           automations: _app.automations,
           planner: _f(Feature.flashcards) && _f(Feature.calendar) ? _app.planner : null,
           collab: _app.collab,

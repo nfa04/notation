@@ -35,6 +35,8 @@ import '../review/weekly_review_service.dart';
 import 'weekly_review_dialog.dart';
 import '../data/card_repository.dart';
 import 'note_file_actions.dart';
+import 'import_from_apps.dart';
+import '../data/tag_repository.dart';
 import 'template_picker.dart';
 import '../templates/templates.dart';
 import 'shared_badge.dart';
@@ -87,7 +89,10 @@ class DashboardView extends StatefulWidget {
   /// The plans for exams (a button in the review of the cards); null: none.
   final StudyPlanner? planner;
 
-  const DashboardView({super.key, this.planner, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations});
+  /// The tags notes can have (the tags of imported notes are set through it); null: none are set.
+  final TagRepository? tags;
+
+  const DashboardView({super.key, this.tags, this.planner, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -457,6 +462,16 @@ class _DashboardViewState extends State<DashboardView> {
           tooltip: tr('New note from a PDF'),
           onPressed: _fromPdf,
           child: const Icon(Icons.picture_as_pdf_outlined),
+        ),
+        FloatingActionButton.small(
+          key: const ValueKey('import-from-apps'),
+          heroTag: 'import-from-apps',
+          tooltip: tr('Bring your notes from another app'),
+          onPressed: () async {
+            await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
+            if (mounted) _reload();
+          },
+          child: const Icon(Icons.move_to_inbox_outlined),
         ),
         FloatingActionButton.extended(
           heroTag: 'new-note',
