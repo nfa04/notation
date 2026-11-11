@@ -289,8 +289,15 @@ class FlutterOnnxruntimeWebPlugin extends FlutterOnnxruntimePlatform {
       providers.add('WEB_GL');
     }
     // Check for WebGPU support
-    if ((_window.navigator as JSObject).has('gpu')) {
-      providers.add('WEB_GPU');
+    // (navigator.gpu exists in browsers that have no usable GPU: only an adapter counts)
+    final gpu = (_window.navigator as JSObject).getProperty('gpu'.toJS);
+    if (gpu.isDefinedAndNotNull) {
+      try {
+        final adapter = await ((gpu as JSObject).callMethod('requestAdapter'.toJS) as JSPromise<JSAny?>).toDart;
+        if (adapter.isDefinedAndNotNull) providers.add('WEB_GPU');
+      } catch (_) {
+        // (the browser refused: no WebGPU)
+      }
     }
     // Check for WebNN support
     if ((_window.navigator as JSObject).has('ml')) {

@@ -102,14 +102,22 @@ void main() {
 
   testWidgets('a session made with lowPriority works and its threads yield; another one does not make more threads that yield', (tester) async {
     final before = await threadPriorities();
+    debugPrint('opening the low session');
     final low = await openOnnxSession(model, options: OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1, lowPriority: true));
+    debugPrint('opened; running');
     try {
       expect((await runOnce(low, 256)).length, 256 * 256);
+      debugPrint('ran once');
       final afterLow = await threadPriorities();
       debugPrint('thread priorities before: $before, after the low session: $afterLow');
       if (before != null && afterLow != null) {
         // (the four threads of the session: the one that opens it takes part in the work, the three others are started)
-        expect(yielding(afterLow) - yielding(before), greaterThanOrEqualTo(3), reason: 'the threads the low session started should yield');
+        if (Platform.isMacOS) {
+          // (there, the session has one thread only, the one that calls; no thread at normal priority may be started for it)
+          expect(afterLow.length - yielding(afterLow) - (before.length - yielding(before)), lessThanOrEqualTo(1), reason: 'no normal threads for the low session');
+        } else {
+          expect(yielding(afterLow) - yielding(before), greaterThanOrEqualTo(3), reason: 'the threads the low session started should yield');
+        }
         final normal = await openOnnxSession(model, options: OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1));
         try {
           expect((await runOnce(normal, 256)).length, 256 * 256);
@@ -121,7 +129,9 @@ void main() {
         expect(yielding((await threadPriorities())!), lessThanOrEqualTo(yielding(afterLow)));
       }
     } finally {
+      debugPrint('closing the low session');
       await low.close();
+      debugPrint('closed');
     }
   }, timeout: const Timeout(Duration(minutes: 2)));
 

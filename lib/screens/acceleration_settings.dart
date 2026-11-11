@@ -36,6 +36,7 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
 
   static String _label(String provider) => switch (provider) {
         'CORE_ML' => 'Apple Neural Engine / GPU (CoreML)',
+        'WEB_GPU' => 'Graphics card (WebGPU)',
         'NNAPI' => 'Android NPU / GPU (NNAPI)',
         _ => provider,
       };

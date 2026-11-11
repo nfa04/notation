@@ -17,8 +17,8 @@ import '../web/web_files.dart';
 /// (the provider is missing from the build, or cannot take the model), is made again on the CPU, so asking never costs a model.
 /// Models that decode token by token (their shapes change with every step) pass false: accelerators compile for fixed shapes.
 Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, bool accelerate = true}) async {
+  final providers = accelerate ? await _usableAccelerators() : const <OrtProvider>[];
   if (!kIsWeb) {
-    final providers = accelerate ? await _usableAccelerators() : const <OrtProvider>[];
     if (providers.isNotEmpty) {
       try {
         return await OnnxRuntime().createSession(path, options: _withProviders(options, providers));
@@ -30,6 +30,13 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
   }
   final name = handOverBytes(await webFileBytes(path));
   try {
+    if (providers.isNotEmpty) {
+      try {
+        return await OnnxRuntime().createSession(name, options: _withProviders(options, providers));
+      } catch (e) {
+        debugPrint('onnx: ${providers.first.name} would not take $path ($e), using wasm');
+      }
+    }
     return await OnnxRuntime().createSession(name, options: options);
   } finally {
     forgetBytes(name);
@@ -66,10 +73,10 @@ Future<List<OrtProvider>> _usableAccelerators() async {
   return have.isEmpty ? const [] : [...have, OrtProvider.CPU];
 }
 
-/// The accelerators the runtime we ship can use on this platform, best first, the CPU last. Linux and Windows are empty on
+/// The accelerators the runtime we ship can use on this platform (in the browser: WebGPU, vendored with the jsep files of web/ort), best first, the CPU last. Linux and Windows are empty on
 /// purpose: the runtime builds bundled there are the CPU ones (the GPU builds are separate downloads), so asking would only fail.
 List<OrtProvider> onnxPlatformAccelerators() {
-  if (kIsWeb) return const [];
+  if (kIsWeb) return const [OrtProvider.WEB_GPU, OrtProvider.CPU]; // the graphics card, through the browser (WebGPU)
   switch (defaultTargetPlatform) {
     case TargetPlatform.iOS:
     case TargetPlatform.macOS:
