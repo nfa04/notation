@@ -18,13 +18,18 @@ import '../web/web_files.dart';
 /// Models that decode token by token (their shapes change with every step) pass false: accelerators compile for fixed shapes.
 Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, bool accelerate = true}) async {
   final providers = accelerate ? await _usableAccelerators() : const <OrtProvider>[];
+  final model = path.split('/').last;
   if (!kIsWeb) {
     if (providers.isNotEmpty) {
       try {
-        return await OnnxRuntime().createSession(path, options: _withProviders(options, providers));
+        final session = await OnnxRuntime().createSession(path, options: _withProviders(options, providers));
+        _report(model, providers.first.name);
+        return session;
       } catch (e) {
-        debugPrint('onnx: ${providers.first.name} would not take $path ($e), using the CPU');
+        _report(model, 'CPU (${providers.first.name} refused: $e)');
       }
+    } else {
+      _report(model, 'CPU (${accelerate ? (onnxAccelerationEnabled ? 'no accelerator here' : 'switched off') : 'decoder'})');
     }
     return OnnxRuntime().createSession(path, options: options);
   }
@@ -32,16 +37,29 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
   try {
     if (providers.isNotEmpty) {
       try {
-        return await OnnxRuntime().createSession(name, options: _withProviders(options, providers));
+        final session = await OnnxRuntime().createSession(name, options: _withProviders(options, providers));
+        _report(model, providers.first.name);
+        return session;
       } catch (e) {
-        debugPrint('onnx: ${providers.first.name} would not take $path ($e), using wasm');
+        _report(model, 'wasm (${providers.first.name} refused: $e)');
       }
+    } else {
+      _report(model, 'wasm (${accelerate ? (onnxAccelerationEnabled ? 'no accelerator here' : 'switched off') : 'decoder'})');
     }
     return await OnnxRuntime().createSession(name, options: options);
   } finally {
     forgetBytes(name);
     await releaseWebFile(path);
   }
+}
+
+/// What each model was opened on, newest last (shown in the settings, and printed: in a browser it is in the console).
+final onnxSessionReport = <String, String>{};
+
+void _report(String model, String on) {
+  onnxSessionReport.remove(model);
+  onnxSessionReport[model] = on;
+  debugPrint('onnx: $model on $on');
 }
 
 /// Switch for all hardware acceleration (the setting 'Run models on', and tests). Sessions already open keep what they were made with.

@@ -75,6 +75,11 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
         selected: {has ? _cpuOnly : true},
         onSelectionChanged: (v) => _choose(v.first),
       ),
+      if (onnxSessionReport.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(tr('Models opened so far'), style: Theme.of(context).textTheme.labelMedium),
+        for (final e in onnxSessionReport.entries) Text.verbatim('${e.key}: ${e.value}', style: muted),
+      ],
       const SizedBox(height: 6),
       Text(tr('Applies to models opened from now on; restart the app to switch all of them. Models that write text word by word always use the processor.'), style: muted),
     ]);

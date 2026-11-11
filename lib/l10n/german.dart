@@ -3332,6 +3332,7 @@ const germanTexts = <String, String>{
   'Looking for your other devices. They have to be looking too: press "Sync now" there, or turn on the automatic sync.': 'Suche nach deinen anderen Geräten. Sie müssen auch suchen: Drücke dort „Jetzt synchronisieren“ oder schalte die automatische Synchronisierung ein.',
   'Better': 'Besser',
   'Faster': 'Schneller',
+  'Models opened so far': 'Bisher geöffnete Modelle',
   'Run models on': 'Modelle ausführen auf',
   'Looking for an accelerator…': 'Suche nach einem Beschleuniger …',
   'Available on this device: {names}': 'Auf diesem Gerät verfügbar: {names}',
