@@ -40,4 +40,41 @@ void main() {
     expect(sameNoteContent(bytes, more), isTrue);
     expect(noteContentDigest(bytes), noteContentDigest(more));
   });
+
+  test('a note without readings writes no ink section and imports none', () async {
+    final repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+    final id = await repo.createNote(title: 'Plain');
+    final dir = await Directory.systemTemp.createTemp('ink_readings_');
+    addTearDown(() => dir.delete(recursive: true));
+    final files = NoteFileService(repo, supportDirectory: () async => dir);
+    final bytes = (await files.exportBytes(id))!;
+    expect(decodeNoteFile(bytes).ink.isEmpty, isTrue);
+    final copy = await files.importBytes(bytes);
+    expect(await repo.text.inkTexts(copy.noteId), isEmpty);
+    expect(await repo.text.inkReads(copy.noteId), isEmpty);
+  });
+
+  test('a note that is replaced by one from another device keeps the readings it has and gains those of the file', () async {
+    final repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+    final from = await repo.createNote(title: 'Tablet');
+    await repo.text.saveInkText(from, [InkText(key: 'shared', page: 0, text: 'tablet reading', bounds: const Rect.fromLTRB(0, 0, 1, 1))], {'shared'});
+    await repo.text.saveInkReads(from, [(key: 'f1', ids: '', text: null, latex: 'a+b')]);
+    final dir = await Directory.systemTemp.createTemp('ink_readings_');
+    addTearDown(() => dir.delete(recursive: true));
+    final files = NoteFileService(repo, supportDirectory: () async => dir);
+    final bytes = (await files.exportBytes(from))!;
+
+    final here = await repo.createNote(title: 'Laptop');
+    await repo.text.saveInkText(here, [
+      InkText(key: 'shared', page: 0, text: 'laptop reading', bounds: const Rect.fromLTRB(0, 0, 1, 1)),
+      InkText(key: 'mine', page: 1, text: 'only here', bounds: const Rect.fromLTRB(0, 0, 2, 2)),
+    ], {'shared', 'mine'});
+    await repo.text.saveInkReads(here, [(key: 'f2', ids: '', text: null, latex: 'c+d')]);
+    await files.restoreInto(here, bytes);
+
+    final texts = {for (final t in await repo.text.inkTexts(here)) t.key: t.text};
+    expect(texts, {'shared': 'tablet reading', 'mine': 'only here'});
+    final reads = {for (final r in await repo.text.inkReads(here)) r.key: r.latex};
+    expect(reads, {'f1': 'a+b', 'f2': 'c+d'});
+  });
 }
