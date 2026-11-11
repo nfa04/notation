@@ -149,10 +149,16 @@ void main() {
       await line(tester, const Offset(300, 500));
       mic.heard = const Duration(seconds: 20);
       await tester.tap(find.byKey(const ValueKey('lecture-button')));
-      await real(tester, 400);
+      // (the file, the recording and its marks are written one after the other, each needing real time: on a slow machine more
+      // than a fixed wait gives, so it is waited for until they are there)
+      var marks = <String, SoundPoint>{};
+      for (var waited = 0; waited < 20000 && marks.length < 2; waited += 250) {
+        await real(tester, 250);
+        marks = (await tester.runAsync(() => audio.marksOf(id)))!;
+      }
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 5));
-      expect((await tester.runAsync(() => audio.marksOf(id)))!, hasLength(2));
+      expect(marks, hasLength(2));
 
       await tester.tap(find.byKey(const ValueKey('audio-button')));
       await tester.pump();
@@ -160,7 +166,9 @@ void main() {
       await tester.pumpAndSettle();
       final sound = (await tester.runAsync(() => audio.list(id)))!.single;
       await tester.tap(find.byKey(ValueKey('audio-play-${sound.id}')));
-      await real(tester, 400);
+      for (var waited = 0; waited < 20000 && !player.playing; waited += 250) {
+        await real(tester, 250);
+      }
       await tester.pumpAndSettle();
       expect(player.playing, isTrue);
       // the panel is put away, the note is in view
@@ -257,10 +265,16 @@ void main() {
       await tester.pumpAndSettle();
       mic.heard = const Duration(seconds: 20);
       await tester.tap(find.byKey(const ValueKey('lecture-button')));
-      await real(tester, 400);
+      // (the file, the recording and its marks are written one after the other, each needing real time: on a slow machine more
+      // than a fixed wait gives, so it is waited for until they are there)
+      var marks = <String, SoundPoint>{};
+      for (var waited = 0; waited < 20000 && marks.length < 2; waited += 250) {
+        await real(tester, 250);
+        marks = (await tester.runAsync(() => audio.marksOf(id)))!;
+      }
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 5));
-      expect((await tester.runAsync(() => audio.marksOf(id)))!, hasLength(2));
+      expect(marks, hasLength(2));
 
       await tester.tap(find.byKey(const ValueKey('audio-button')));
       await tester.pump();
