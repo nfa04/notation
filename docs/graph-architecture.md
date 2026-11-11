@@ -98,6 +98,40 @@ Two modes, because they answer two questions:
 * **Facts**: one node per extracted fact, topic hubs and optionally note hubs; selecting a node shows the sentence and the
   note and page it came from, and opens the note there.
 
+## Layout, making a graph again, and the build step
+
+* *Build*: the similarity of all pairs (the one quadratic step, 96 % of the build) runs over one array of the vectors (zero-padded to a
+  multiple of four), tile by tile so that a tile stays in the cache, four numbers at a time (`Float32x4` on native; the browser build keeps
+  a scalar loop because the types are emulated there). 6000 nodes of 384 numbers: 10 s before, 2.7 s after (JIT, synthetic vectors).
+  `test/graph_nearest_test.dart` checks the edges against a loop over all pairs.
+* *Layout* (`graph_layout.dart`): stops when the nodes hardly move, then pushes apart dots that touch (`test/graph_layout_test.dart`).
+  A graph made again starts from the places of the old one by node id (`placesOf` / `start`): new nodes begin among their placed
+  neighbours, the run is cool and short, and a graph that shares less than half of its nodes with the old one is laid out afresh.
+
+## The graph library, earlier pictures, comparing
+
+When a graph is made again (or a newer picture from another device takes its place) the picture it had goes into `graph_versions` (schema
+57; the newest five per graph, `KnowledgeRepository.keptVersions`; **this device only, not synced**; removed with the graph). The graph
+library (`lib/screens/graph_library.dart`, the button in the app bar) lists every graph with its pictures: open, rename, delete a graph;
+compare a picture with the graph in front, bring a picture back (the current one takes its place in the list, and the graph counts as
+changed, so the other devices take it over), delete a picture.
+
+`graph_diff.dart` (pure): the nodes of two graphs are told apart by id, so graphs made of the same notes line up (a fact's id is its row;
+re-extracting a changed note gives it new rows, which is why changed notes show as gone + new). It gives new / changed (title or text) /
+gone nodes, links that appeared or went between nodes both graphs have, and topics that came or went by name. Topic hubs and their
+`member` / `source` lines are left out (their ids are numbers of the run). The view shows a bar ("Compared with ...: n new, n gone, n
+changed", with a sheet that lists them), rings new nodes green and changed ones amber, and shows it by itself after "Generate again". The tab menu's "Compare
+with..." offers the earlier pictures and the other graphs of the same kind.
+
+## Naming topics, and the sentence model
+
+A topic is named by its most telling words; the generate dialog can instead have the AI model name them (`topic_namer.dart`: one request
+for up to 20 topics, "number | name" lines, titles of the 8 best joined nodes as the evidence; only when a model is ready). The model never
+decides which node is in which topic, so the graph is the same with or without it. A name is marked in the picture (`GraphCluster.named`);
+when a graph is made again a topic whose members overlap (Jaccard >= 0.6) with a named topic of the old picture keeps that name and costs
+no request. A failed request leaves the words and says why in the notice. Graphs made without the sentence model (`embedder == 'lexical'`)
+show a bar saying topics follow shared words; the generate dialog says so before making one.
+
 ## Is it possible in Flutter?
 
 Yes. Nothing here needs a native toolkit: the layout is plain Dart in an isolate; drawing is a `CustomPainter` under an

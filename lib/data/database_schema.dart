@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 56;
+const int schemaVersion = 57;
 
 const List<String> createStatements = [
   '''
@@ -158,6 +158,8 @@ const List<String> createStatements = [
   _indexFacts,
   _createFactState,
   _createSavedGraphs,
+  _createGraphVersions,
+  _createGraphVersionsIndex,
   _createEventCache,
   _createTaskEvents,
   _createSyncTombstones,
@@ -349,6 +351,22 @@ const String _createSavedGraphs = '''
     payload    TEXT NOT NULL
   )
 ''';
+
+/// The earlier pictures of a kept graph: when a graph is made again (or another device's newer picture takes its place) the old one is put
+/// here, a few of them, so that the two can be compared and the old one brought back. `graph_uid` is the graph's `uid`. Kept on this
+/// device only: they do not go through the sync.
+const String _createGraphVersions = '''
+  CREATE TABLE IF NOT EXISTS graph_versions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    graph_uid  TEXT NOT NULL,
+    mode       TEXT NOT NULL,
+    built_at   INTEGER NOT NULL,
+    nodes      INTEGER NOT NULL,
+    payload    TEXT NOT NULL
+  )
+''';
+
+const String _createGraphVersionsIndex = 'CREATE INDEX IF NOT EXISTS idx_graph_versions_uid ON graph_versions(graph_uid)';
 
 /// The graphs as version 25 kept them (one per mode), for databases that are still on it; [_moveGraphSnapshots] takes them over.
 const String _createGraphSnapshots = '''
@@ -723,6 +741,8 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  // earlier pictures of a kept graph, for comparing and going back
+  56: [_createGraphVersions, _createGraphVersionsIndex],
   // the handwriting reader says which words it was unsure of (they are underlined in yellow)
   55: ['ALTER TABLE ink_text ADD COLUMN unsure TEXT'],
   // the handwriting is cut into lines another way (a block of several lines with a bracket or a long tail was read as one squeezed

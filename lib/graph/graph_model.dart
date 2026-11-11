@@ -75,7 +75,10 @@ class GraphCluster {
   final int id;
   final String label;
   final int size;
-  const GraphCluster(this.id, this.label, this.size);
+
+  /// Whether the name was written by a model (else it is the topic's most telling words).
+  final bool named;
+  const GraphCluster(this.id, this.label, this.size, {this.named = false});
 }
 
 /// A built graph with its layout: what the view draws, and what is kept between runs.
@@ -107,7 +110,7 @@ class KnowledgeGraph {
           for (final e in edges) [e.a, e.b, _r(e.weight), e.kind.index],
         ],
         'clusters': [
-          for (final c in clusters) [c.id, c.label, c.size],
+          for (final c in clusters) [c.id, c.label, c.size, if (c.named) 1],
         ],
       });
 
@@ -141,7 +144,7 @@ class KnowledgeGraph {
           for (final e in (m['edges'] as List).cast<List>()) GraphEdge(e[0] as int, e[1] as int, (e[2] as num).toDouble(), GraphEdgeKind.values[e[3] as int]),
         ],
         clusters: [
-          for (final c in (m['clusters'] as List).cast<List>()) GraphCluster(c[0] as int, c[1] as String, c[2] as int),
+          for (final c in (m['clusters'] as List).cast<List>()) GraphCluster(c[0] as int, c[1] as String, c[2] as int, named: c.length > 3 && c[3] == 1),
         ],
       );
     } catch (_) {

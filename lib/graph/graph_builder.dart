@@ -3,6 +3,9 @@ import 'dart:typed_data';
 
 import 'graph_model.dart';
 
+/// Whether this is the browser build (the same check as `kIsWeb`, without pulling Flutter into this file).
+const _web = bool.fromEnvironment('dart.library.js_interop');
+
 /// One thing to put in the graph: a note or a fact, with the vector that says what it is about.
 class GraphInput {
   final String id;
@@ -115,23 +118,7 @@ KnowledgeGraph buildGraph(String mode, List<GraphInput> inputs, {List<(String, S
     }
   }
 
-  final vectors = [for (final i in inputs) i.vector];
-  for (var a = 0; a < n; a++) {
-    final va = vectors[a];
-    if (va == null) continue;
-    for (var b = a + 1; b < n; b++) {
-      final vb = vectors[b];
-      if (vb == null) continue;
-      var s = 0.0;
-      final len = math.min(va.length, vb.length);
-      for (var d = 0; d < len; d++) {
-        s += va[d] * vb[d];
-      }
-      if (s < settings.minSimilarity) continue;
-      offer(a, b, s);
-      offer(b, a, s);
-    }
-  }
+  _nearest(inputs, settings.minSimilarity, offer);
   for (var a = 0; a < n; a++) {
     for (var j = 0; j < bestId[a].length; j++) {
       final b = bestId[a][j];
@@ -229,6 +216,66 @@ KnowledgeGraph buildGraph(String mode, List<GraphInput> inputs, {List<(String, S
     }
   }
   return KnowledgeGraph(mode: mode, builtAt: now ?? DateTime.now(), nodes: nodes, edges: edges, clusters: clusters, embedder: embedder);
+}
+
+/// Calls [offer] for every pair of inputs with vectors whose cosine (the dot product: vectors have length 1) is at least [minSimilarity],
+/// in both directions. The same pairs as a loop over all pairs, but the vectors are copied into one array (zero-padded, which leaves a
+/// dot product of vectors of different length as it was) and compared tile by tile, so that a tile stays in the cache and the inner
+/// loop has no checks and runs four sums at a time.
+void _nearest(List<GraphInput> inputs, double minSimilarity, void Function(int from, int to, double s) offer) {
+  final n = inputs.length;
+  var width = 0;
+  for (final i in inputs) {
+    final v = i.vector;
+    if (v != null && v.length > width) width = v.length;
+  }
+  if (width == 0) return;
+  width = (width + 3) & ~3;
+  // (the nodes that have a vector, in order; `at` maps back to the input)
+  final at = <int>[for (var i = 0; i < n; i++) if (inputs[i].vector != null) i];
+  final m = at.length;
+  final matrix = Float32List(m * width);
+  for (var r = 0; r < m; r++) {
+    matrix.setRange(r * width, r * width + inputs[at[r]].vector!.length, inputs[at[r]].vector!);
+  }
+  // a tile of rows is read for every row of another tile: both together should fit in the cache (about 256 KB)
+  final tile = math.max(8, math.min(128, 131072 ~/ (width * 4)));
+  // four numbers at a time (the browser build emulates these and is slower with them than without)
+  final lanes = _web ? null : matrix.buffer.asFloat32x4List(matrix.offsetInBytes, m * width ~/ 4);
+  final quads = width ~/ 4;
+  for (var ib = 0; ib < m; ib += tile) {
+    final iEnd = math.min(m, ib + tile);
+    for (var jb = ib; jb < m; jb += tile) {
+      final jEnd = math.min(m, jb + tile);
+      for (var i = ib; i < iEnd; i++) {
+        final bi = i * width;
+        for (var j = math.max(jb, i + 1); j < jEnd; j++) {
+          final bj = j * width;
+          double s;
+          if (lanes != null) {
+            final qi = i * quads, qj = j * quads;
+            var acc = Float32x4.zero();
+            for (var d = 0; d < quads; d++) {
+              acc += lanes[qi + d] * lanes[qj + d];
+            }
+            s = acc.x + acc.y + acc.z + acc.w;
+          } else {
+            var s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
+            for (var d = 0; d < width; d += 4) {
+              s0 += matrix[bi + d] * matrix[bj + d];
+              s1 += matrix[bi + d + 1] * matrix[bj + d + 1];
+              s2 += matrix[bi + d + 2] * matrix[bj + d + 2];
+              s3 += matrix[bi + d + 3] * matrix[bj + d + 3];
+            }
+            s = (s0 + s1) + (s2 + s3);
+          }
+          if (s < minSimilarity) continue;
+          offer(at[i], at[j], s);
+          offer(at[j], at[i], s);
+        }
+      }
+    }
+  }
 }
 
 /// Label propagation: every node takes the label that most of its neighbours (by the weight of the edges) have, until nothing

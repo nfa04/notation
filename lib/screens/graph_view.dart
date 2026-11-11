@@ -7,17 +7,20 @@ import 'package:flutter/material.dart' hide Text;
 
 import '../ai/text_provider.dart';
 import '../export/file_dialogs.dart';
+import '../graph/graph_diff.dart';
 import '../graph/graph_export.dart';
 import '../graph/graph_filter.dart';
 import '../graph/graph_model.dart';
 import '../graph/graph_service.dart';
 import '../data/card_repository.dart';
-import '../data/knowledge_repository.dart' show SavedGraph;
+import '../data/knowledge_repository.dart' show GraphVersion, SavedGraph;
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../graph/study.dart';
 import 'graph_study.dart';
 import '../style/platform_dialog.dart';
+
+part 'graph_library.dart';
 
 /// The graphs of the notes or of the facts in them, each kept as a tab, so that one can switch between them without making them again.
 /// Making one is up to the person ("Generate graph", "New graph"), because it takes a while.
@@ -103,6 +106,10 @@ class _GraphViewState extends State<GraphView> {
   final _controller = TransformationController();
   Size? _fittedFor;
 
+  /// What the graph in front is compared with (and what differs), or null. Belongs to the graph [graphId] as it was when it was set.
+  ({String name, GraphDiff diff, int graphId})? _compare;
+  ({String name, GraphDiff diff, int graphId})? get _activeCompare => _compare != null && _compare!.graphId == _id ? _compare : null;
+
   /// What the graph is narrowed to; starts again with another graph.
   GraphFilter _filter = const GraphFilter();
   Map<String, String> _noteTitles = {};
@@ -176,6 +183,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
     if (id == _id) return;
     widget.service.selectedId = id;
     setState(() {
+      _compare = null;
       _selected = null;
       _topic = null;
       _filter = const GraphFilter();
@@ -252,6 +260,21 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                 ],
                 onChanged: (v) => setLocal(() => service.folderId = v),
               ),
+              if (!service.hasSentenceModel)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(tr('No sentence model is installed: topics will follow shared words, not meaning (Settings, AI and models).'), key: const ValueKey('graph-create-lexical'), style: Theme.of(context).textTheme.bodySmall),
+                ),
+              if (service.canWrite)
+                CheckboxListTile.adaptive(
+                  key: const ValueKey('graph-name-topics'),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: service.nameTopics,
+                  onChanged: (v) => setLocal(() => service.nameTopics = v ?? false),
+                  title: Text(tr('Name the topics with the AI model')),
+                  subtitle: Text(tr('One short request for every 20 topics. A topic that stays about the same keeps its name when the graph is made again.')),
+                ),
               if (mode == 'facts')
                 CheckboxListTile.adaptive(
                   key: const ValueKey('graph-note-hubs'),
@@ -459,13 +482,188 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
           // (a graph was made: its tab is in front)
           _seenMade = made;
           _graphs[madeId] = made;
+        _compare = null;
         _selected = null;
         _topic = null;
         _filter = const GraphFilter();
         _fittedFor = null;
+        // made over: say what is new since the picture before
+        if (widget.service.lastReplaced == madeId) Future.microtask(() => _compareWithLatestVersion(madeId));
       }
     }
     });
+  }
+
+  /// Shows what differs between [before] and the graph in front, under the name [name].
+  void _showCompare(String name, KnowledgeGraph before) {
+    final now = _graph, id = _id;
+    if (now == null || id == null) return;
+    setState(() => _compare = (name: name, diff: diffGraphs(before, now), graphId: id));
+  }
+
+  /// Compares graph [graphId] (in front) with the picture it had before it was made again last.
+  Future<void> _compareWithLatestVersion(int graphId) async {
+    final g = widget.service.graphs.where((g) => g.id == graphId).firstOrNull;
+    if (g == null) return;
+    final versions = await widget.service.versionsOf(g.uid);
+    if (versions.isEmpty || !mounted) return;
+    final before = await widget.service.loadVersion(versions.first.id);
+    if (before == null || !mounted || _id != graphId || _graph == null) return;
+    _showCompare(tr('the picture before ({when})', {'when': _ago(versions.first.builtAt)}), before);
+  }
+
+  /// Offers what the graph in front can be compared with: its earlier pictures and the other graphs of the same kind.
+  Future<void> _pickCompare(SavedGraph g) async {
+    final versions = await widget.service.versionsOf(g.uid);
+    final others = [for (final o in widget.service.graphs) if (o.id != g.id && o.mode == g.mode) o];
+    if (!mounted) return;
+    if (versions.isEmpty && others.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Nothing to compare with yet: make this graph again, or make a second graph of the same kind.'))));
+      return;
+    }
+    final pick = await showDialog<Object>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        key: const ValueKey('graph-compare-dialog'),
+        title: Text(tr('Compare with')),
+        children: [
+          for (final v in versions)
+            SimpleDialogOption(
+              key: ValueKey('graph-compare-version-${v.id}'),
+              onPressed: () => Navigator.pop(context, v),
+              child: Text.verbatim(tr('Earlier picture: {when} ({n} nodes)', {'when': _ago(v.builtAt), 'n': v.nodes})),
+            ),
+          for (final o in others)
+            SimpleDialogOption(
+              key: ValueKey('graph-compare-graph-${o.id}'),
+              onPressed: () => Navigator.pop(context, o),
+              child: Text.verbatim(o.name),
+            ),
+        ],
+      ),
+    );
+    if (pick is GraphVersion) {
+      final before = await widget.service.loadVersion(pick.id);
+      if (before != null && mounted) _showCompare(tr('the picture of {when}', {'when': _ago(pick.builtAt)}), before);
+    } else if (pick is SavedGraph) {
+      final before = _graphs[pick.id] ?? await widget.service.load(pick.id);
+      if (before != null && mounted) _showCompare(pick.name, before);
+    }
+  }
+
+  /// The library: all graphs and their earlier pictures. What it hands back (open, compare) is done here; what it changed itself (renames,
+  /// deletions, a picture brought back) is read again.
+  Future<void> _openLibrary() async {
+    final result = await Navigator.of(context).push<GraphLibraryResult>(MaterialPageRoute(builder: (_) => GraphLibrary(service: widget.service, frontId: _id)));
+    if (!mounted) return;
+    await widget.service.refresh(force: true);
+    _graphs.clear(); // (a picture may have been brought back, a graph renamed or removed: the front one is read again below, the others when opened)
+    if (result != null && result.action == GraphLibraryAction.open) widget.service.selectedId = result.graphId;
+    setState(() {
+      _compare = null;
+      _selected = null;
+      _topic = null;
+      _filter = const GraphFilter();
+      _fittedFor = null;
+    });
+    await _open(_id);
+    if (!mounted || result == null) return;
+    switch (result.action) {
+      case GraphLibraryAction.open:
+        break;
+      case GraphLibraryAction.compareGraph:
+        final other = widget.service.graphs.where((g) => g.id == result.graphId).firstOrNull;
+        final before = other == null ? null : (_graphs[other.id] ?? await widget.service.load(other.id));
+        if (before != null && other != null && mounted) _showCompare(other.name, before);
+      case GraphLibraryAction.compareVersion:
+        // (the picture belongs to a graph that is not in front: bring that graph to the front first)
+        if (_id != result.graphId) _selectTab(result.graphId);
+        await _open(result.graphId);
+        final version = result.versionId == null ? null : await widget.service.loadVersion(result.versionId!);
+        final when = (await widget.service.allVersions()).where((v) => v.id == result.versionId).firstOrNull;
+        if (version != null && mounted && _id == result.graphId) _showCompare(tr('the picture of {when}', {'when': when == null ? '' : _ago(when.builtAt)}), version);
+    }
+  }
+
+  Widget _compareBanner(BuildContext context, KnowledgeGraph graph, ({String name, GraphDiff diff, int graphId}) c) {
+    final scheme = Theme.of(context).colorScheme;
+    final d = c.diff;
+    return Container(
+      key: const ValueKey('graph-compare-banner'),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      padding: const EdgeInsets.only(left: 12),
+      decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(8)),
+      child: Row(children: [
+        Icon(Icons.compare_arrows, size: 18, color: scheme.onSecondaryContainer),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text.verbatim(
+              d.isEmpty
+                  ? tr('Compared with {name}: nothing differs.', {'name': c.name})
+                  : tr('Compared with {name}: {added} new, {removed} gone, {changed} changed.', {'name': c.name, 'added': d.added.length, 'removed': d.removed.length, 'changed': d.changed.length}),
+              key: const ValueKey('graph-compare-summary'),
+              style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer),
+            ),
+          ),
+        ),
+        if (!d.isEmpty) TextButton(key: const ValueKey('graph-compare-changes'), onPressed: () => _changesSheet(graph, c), child: Text(tr('Changes'))),
+        IconButton(key: const ValueKey('graph-compare-close'), tooltip: tr('Close'), icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _compare = null)),
+      ]),
+    );
+  }
+
+  /// The list of what differs: new, changed and gone nodes (a new or changed one can be tapped to go to it), and topics that came or went.
+  Future<void> _changesSheet(KnowledgeGraph graph, ({String name, GraphDiff diff, int graphId}) c) {
+    final d = c.diff;
+    const shown = 200;
+    Widget heading(String text) => Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text.verbatim(text, style: Theme.of(context).textTheme.titleSmall));
+    List<Widget> nodes(List<int> list) => [
+          for (final i in list.take(shown))
+            ListTile(
+              dense: true,
+              title: Text.verbatim(graph.nodes[i].label.isEmpty ? graph.nodes[i].detail : graph.nodes[i].label, maxLines: 2, overflow: TextOverflow.ellipsis),
+              onTap: () {
+                Navigator.pop(context);
+                _select(graph, i);
+              },
+            ),
+          if (list.length > shown) Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(trCount(list.length - shown, '...and {n} more', '...and {n} more'))),
+        ];
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        builder: (context, scroll) => ListView(
+          key: const ValueKey('graph-changes'),
+          controller: scroll,
+          children: [
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text.verbatim(tr('Compared with {name}', {'name': c.name}), style: Theme.of(context).textTheme.titleMedium)),
+            if (d.linesAdded > 0 || d.linesRemoved > 0)
+              Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 0), child: Text.verbatim(tr('{added} new links, {removed} links gone between nodes that are in both.', {'added': d.linesAdded, 'removed': d.linesRemoved}))),
+            if (d.added.isNotEmpty) ...[heading(tr('New ({n})', {'n': d.added.length})), ...nodes(d.added)],
+            if (d.changed.isNotEmpty) ...[heading(tr('Changed ({n})', {'n': d.changed.length})), ...nodes(d.changed)],
+            if (d.removed.isNotEmpty) ...[
+              heading(tr('Gone ({n})', {'n': d.removed.length})),
+              for (final n in d.removed.take(shown))
+                ListTile(
+                  dense: true,
+                  title: Text.verbatim(n.label.isEmpty ? n.detail : n.label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  subtitle: n.detail.isEmpty || n.label.isEmpty ? null : Text.verbatim(n.detail, maxLines: 3, overflow: TextOverflow.ellipsis),
+                ),
+              if (d.removed.length > shown) Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(trCount(d.removed.length - shown, '...and {n} more', '...and {n} more'))),
+            ],
+            if (d.topicsNew.isNotEmpty) ...[heading(tr('New topics')), for (final t in d.topicsNew.take(shown)) ListTile(dense: true, title: Text.verbatim(t))],
+            if (d.topicsGone.isNotEmpty) ...[heading(tr('Topics that are gone')), for (final t in d.topicsGone.take(shown)) ListTile(dense: true, title: Text.verbatim(t))],
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _rename(SavedGraph g) async {
@@ -546,6 +744,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
     if (!mounted) return;
     _graphs.remove(g.id);
     setState(() {
+      _compare = null;
       _selected = null;
       _topic = null;
       _filter = const GraphFilter();
@@ -622,6 +821,8 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                                     _rename(g);
                                   case 'again':
                                     _generate(again: g);
+                                  case 'compare':
+                                    _pickCompare(g);
                                   case 'json':
                                     _export(g, svg: false);
                                   case 'svg':
@@ -641,6 +842,11 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                                   value: 'again',
                                   enabled: !_generating,
                                   child: Text(tr('Generate again')),
+                                ),
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-compare'),
+                                  value: 'compare',
+                                  child: Text(tr('Compare with...')),
                                 ),
                                 PopupMenuItem(
                                   key: const ValueKey('graph-tab-json'),
@@ -746,6 +952,8 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                   CheckedPopupMenuItem(value: p.id, checked: p.id == widget.service.ai!.provider?.id, enabled: p.state != ProviderState.unavailable, child: Text(p.label)),
               ],
             ),
+          if (widget.service.graphs.isNotEmpty)
+            IconButton(key: const ValueKey('graph-library'), tooltip: tr('Graph library'), icon: const Icon(Icons.collections_bookmark_outlined), onPressed: _openLibrary),
           const SizedBox(width: 8),
         ],
       ),
@@ -919,17 +1127,34 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                   ],
                 ),
               ),
+              if (_activeCompare != null) _compareBanner(context, graph, _activeCompare!),
               if (graph.embedder == 'lexical')
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Made from the words alone: install the sentence model (Settings, AI and models) for a graph that follows the meaning.',
-                      key: const ValueKey('graph-lexical'),
-                      style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-                    ),
-                  ),
+                // (the picture says how it was made; whether the model is there now is asked again when the model's state changes)
+                ListenableBuilder(
+                  listenable: (widget.service.embedder is Listenable ? widget.service.embedder as Listenable : null) ?? widget.service,
+                  builder: (context, _) {
+                    final now = widget.service.hasSentenceModel;
+                    return Container(
+                      key: ValueKey(now ? 'graph-lexical-stale' : 'graph-lexical'),
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+                      decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(8)),
+                      child: Row(children: [
+                        Icon(Icons.info_outline, size: 16, color: scheme.onTertiaryContainer),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            tr(now
+                                ? 'This graph was made before the sentence model was installed, so its topics follow shared words. Make it again to use the model.'
+                                : 'Made from the words alone, so topics follow shared words, not meaning. Install the sentence model (Settings, AI and models) and make the graph again for better topics.'),
+                            style: TextStyle(fontSize: 12, color: scheme.onTertiaryContainer),
+                          ),
+                        ),
+                        if (now && _saved != null)
+                          TextButton(key: const ValueKey('graph-lexical-again'), onPressed: _generating ? null : () => _generate(again: _saved), child: Text(tr('Generate again'))),
+                      ]),
+                    );
+                  },
                 ),
               Expanded(child: _canvas(context, graph, lit)),
             ],
@@ -969,7 +1194,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
               child: RepaintBoundary(
                 child: CustomPaint(
                   size: size,
-                  painter: _GraphPainter(g, _through(g), Offset(minX, minY), _controller, _selected, lit, Theme.of(context).colorScheme, Theme.of(context).brightness),
+                  painter: _GraphPainter(g, _through(g), Offset(minX, minY), _controller, _selected, lit, Theme.of(context).colorScheme, Theme.of(context).brightness, added: _activeCompare == null ? null : {..._activeCompare!.diff.added}, changed: _activeCompare == null ? null : {..._activeCompare!.diff.changed}),
                 ),
               ),
             ),
@@ -1123,6 +1348,8 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
   }
 }
 
+bool _sameSet(Set<int>? a, Set<int>? b) => a == null || b == null ? a == b : a.length == b.length && a.containsAll(b);
+
 class _GraphPainter extends CustomPainter {
   final KnowledgeGraph graph;
   final FilteredGraph filtered;
@@ -1133,7 +1360,10 @@ class _GraphPainter extends CustomPainter {
   final ColorScheme scheme;
   final Brightness brightness;
 
-  _GraphPainter(this.graph, this.filtered, this.origin, this.controller, this.selected, this.lit, this.scheme, this.brightness) : super(repaint: controller);
+  /// Nodes that are new, or changed, against what the graph is compared with (ringed), when it is compared.
+  final Set<int>? added, changed;
+
+  _GraphPainter(this.graph, this.filtered, this.origin, this.controller, this.selected, this.lit, this.scheme, this.brightness, {this.added, this.changed}) : super(repaint: controller);
 
   static final _labels = <String, TextPainter>{};
 
@@ -1209,6 +1439,17 @@ class _GraphPainter extends CustomPainter {
       } else {
         canvas.drawCircle(p, r, fill);
       }
+      final ring = (added?.contains(i) ?? false) ? (brightness == Brightness.dark ? const Color(0xFF5BD68A) : const Color(0xFF1E8E4E)) : ((changed?.contains(i) ?? false) ? (brightness == Brightness.dark ? const Color(0xFFFFC53D) : const Color(0xFFC47F00)) : null);
+      if (ring != null) {
+        canvas.drawCircle(
+          p,
+          r + 3 / math.max(scale, 0.5),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.5 / math.max(scale, 0.5)
+            ..color = on(i) ? ring : ring.withValues(alpha: 0.3),
+        );
+      }
       if (i == selected) {
         canvas.drawCircle(
           p,
@@ -1245,5 +1486,5 @@ class _GraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GraphPainter old) => old.graph != graph || old.filtered != filtered || old.selected != selected || old.lit != lit || old.brightness != brightness;
+  bool shouldRepaint(covariant _GraphPainter old) => old.graph != graph || !_sameSet(old.added, added) || !_sameSet(old.changed, changed) || old.filtered != filtered || old.selected != selected || old.lit != lit || old.brightness != brightness;
 }

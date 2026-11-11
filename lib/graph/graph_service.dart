@@ -7,7 +7,7 @@ import '../ai/ai_service.dart';
 import '../ai/text_provider.dart';
 import '../automations/note_sorter.dart';
 import '../data/note_data.dart';
-import '../data/knowledge_repository.dart' show SavedGraph;
+import '../data/knowledge_repository.dart' show GraphVersion, SavedGraph;
 import '../data/note_repository.dart';
 import '../l10n/language.dart';
 import '../llm/embedding_service.dart';
@@ -17,6 +17,7 @@ import 'fact_extractor.dart';
 import 'graph_builder.dart';
 import 'graph_layout.dart';
 import 'graph_model.dart';
+import 'topic_namer.dart';
 
 /// Makes the graphs (see docs/graph-architecture.md) and keeps them. Nothing here runs on its own: [generate] is called by the
 /// person.
@@ -86,6 +87,12 @@ class GraphService extends ChangeNotifier {
   /// The titles of the notes by id (for the filter by note).
   Future<Map<String, String>> noteTitles() async => {for (final n in await _notes.listNotes()) n.id: n.title.isEmpty ? tr('Untitled') : n.title};
 
+  /// Whether a model writes the names of the topics (else a topic is named by its most telling words). Only when one is ready.
+  bool nameTopics = false;
+
+  /// Whether the sentence model is installed and ready: without it the graph follows shared words, not meaning.
+  bool get hasSentenceModel => embedder != null && embedderReady();
+
   double? similarity;
   int neighbours = 4;
   int minTopicSize = 2;
@@ -120,6 +127,35 @@ class GraphService extends ChangeNotifier {
     _listed = true;
     if (selectedId != null && !_saved.any((g) => g.id == selectedId)) selectedId = null;
     selectedId ??= _saved.isEmpty ? null : _saved.last.id;
+  }
+
+  // ---- earlier pictures (see [KnowledgeRepository.keptVersions])
+
+  /// The earlier pictures of the graph [uid], newest first.
+  Future<List<GraphVersion>> versionsOf(String uid) => _notes.knowledge.listGraphVersions(uid: uid);
+
+  /// The earlier pictures of every graph, newest first.
+  Future<List<GraphVersion>> allVersions() => _notes.knowledge.listGraphVersions();
+
+  Future<KnowledgeGraph?> loadVersion(int id) async {
+    final payload = await _notes.knowledge.loadGraphVersion(id);
+    return payload == null ? null : KnowledgeGraph.decode(payload);
+  }
+
+  Future<void> deleteVersion(int id) => _notes.knowledge.deleteGraphVersion(id);
+
+  /// Brings the earlier picture [id] back as its graph's picture (the current one becomes an earlier picture); the id of the graph.
+  Future<int?> restoreVersion(int id) async {
+    final graphId = await _notes.knowledge.restoreGraphVersion(id);
+    if (graphId != null) {
+      await refresh(force: true);
+      if (_lastMadeId == graphId) {
+        _lastMadeId = null;
+        _lastMade = null;
+      }
+    }
+    notifyListeners();
+    return graphId;
   }
 
   /// The picture of the kept graph [id] (null: there is none).
@@ -200,6 +236,10 @@ class GraphService extends ChangeNotifier {
   /// The kept graph the run in progress makes again (null: it makes a new one).
   int? get replacing => _replacing;
 
+  /// The kept graph the last run that finished made over (null: it made a new one), so that the view can show what changed.
+  int? get lastReplaced => _lastReplaced;
+  int? _lastReplaced;
+
   void stop() => _cancel?.cancel();
 
   /// Starts [generate] in the background and reports through the listeners; one run at a time.
@@ -226,12 +266,13 @@ class GraphService extends ChangeNotifier {
         _done = done;
         notifyListeners();
       });
+      _lastReplaced = graph == null ? null : replace;
       if (graph == null &&!cancel.cancelled) {
         _problem = mode == 'facts' && _unread > 0
             ? tr('The AI model did not write any facts that could be used. A bigger model, or another one, may do better.')
             : tr('There is nothing to make a graph of yet: the notes have no text.');
       }
-      if (graph != null && _unread > 0) _notice = trCount(_unread, 'One part of the notes gave no usable facts.', '{n} parts of the notes gave no usable facts.');
+      if (graph != null && _unread > 0) _notice = [?_notice, trCount(_unread, 'One part of the notes gave no usable facts.', '{n} parts of the notes gave no usable facts.')].join(' ');
     } catch (e) {
       _problem = '$e'.replaceFirst('Bad state: ', '');
     } finally {
@@ -271,6 +312,74 @@ class GraphService extends ChangeNotifier {
       if (state == null || state.extractor != FactExtractor.version) return false;
     }
     return true;
+  }
+
+  /// Topics of at least this many nodes are named by the model; a request holds this many topics at most.
+  static const _namesPerRequest = 20;
+
+  /// The names the model gives the topics of [graph], by topic number. A topic that has nearly the same members as one of [before] that a
+  /// model named keeps that name (so that a graph made again does not rename everything, and costs no request); the others are asked
+  /// for. A request that fails leaves those topics with their words and says so in [notice].
+  Future<Map<int, String>> _modelNames(KnowledgeGraph graph, KnowledgeGraph? before, AiCancel? cancel, void Function(String what, double? done)? progress) async {
+    final members = <int, Set<String>>{};
+    for (final n in graph.nodes) {
+      if (n.kind != GraphNodeKind.topic && n.cluster >= 0) (members[n.cluster] ??= {}).add(n.id);
+    }
+    final result = <int, String>{};
+    if (before != null) {
+      final old = <int, Set<String>>{};
+      for (final n in before.nodes) {
+        if (n.kind != GraphNodeKind.topic && n.cluster >= 0) (old[n.cluster] ??= {}).add(n.id);
+      }
+      for (final c in before.clusters) {
+        if (!c.named || old[c.id] == null) continue;
+        final was = old[c.id]!;
+        int? best;
+        var bestScore = 0.6;
+        for (final e in members.entries) {
+          if (result.containsKey(e.key)) continue;
+          final common = e.value.intersection(was).length;
+          final score = common / (e.value.length + was.length - common);
+          if (score >= bestScore) {
+            best = e.key;
+            bestScore = score;
+          }
+        }
+        if (best != null) result[best] = c.label;
+      }
+    }
+    final todo = [for (final c in graph.clusters) if (!result.containsKey(c.id) && (members[c.id]?.length ?? 0) >= 2) c];
+    final provider = ai?.provider;
+    if (todo.isEmpty || provider == null) return result;
+    // the middle of a topic tells most: its best joined nodes first
+    final byTopic = <int, List<GraphNode>>{};
+    for (final n in graph.nodes) {
+      if (n.kind != GraphNodeKind.topic && n.cluster >= 0 && n.label.isNotEmpty) (byTopic[n.cluster] ??= []).add(n);
+    }
+    for (final list in byTopic.values) {
+      list.sort((a, b) => b.size.compareTo(a.size));
+    }
+    for (var at = 0; at < todo.length; at += _namesPerRequest) {
+      if (cancel?.cancelled ?? false) return result;
+      final batch = todo.skip(at).take(_namesPerRequest).toList();
+      progress?.call(tr('Naming the topics...'), at / todo.length);
+      try {
+        final reply = await provider.complete(
+          topicNamePrompt([for (final c in batch) TopicSample(c.id + 1, c.label, [for (final n in (byTopic[c.id] ?? const <GraphNode>[]).take(8)) n.label])]),
+          maxTokens: 40 * batch.length + 60,
+          cancel: cancel,
+        );
+        final got = parseTopicNames(reply, {for (final c in batch) c.id + 1});
+        for (final e in got.entries) {
+          result[e.key - 1] = e.value;
+        }
+      } catch (e) {
+        final why = '$e'.replaceFirst('Bad state: ', '');
+        _notice = [?_notice, tr('The topics could not be named by the model ({error}); they keep their words.', {'error': why})].join(' ');
+        break;
+      }
+    }
+    return result;
   }
 
   /// Makes the graph of [mode] ('notes' or 'facts') now and keeps it as a new one, or in the place of the kept graph [replace]
@@ -365,24 +474,37 @@ class GraphService extends ChangeNotifier {
     final shared = mode == 'notes' && joinByCitations() ? sharedSources(await _notes.knowledge.noteCitations(isSource: isSource), {for (final n in notes) n.id}) : const <(String, String, int)>[];
     // (only plain data may go into the closure: the embedder holds a model and cannot be sent to the isolate)
     final modelId = emb.modelId;
+    // making a graph again keeps what is there where it was (the picture changes only where the notes did)
+    Map<String, (double, double)>? start;
+    KnowledgeGraph? before;
+    if (replace != null) {
+      before = await load(replace);
+      if (before != null && before.mode != mode) before = null;
+      if (before != null) start = placesOf(before);
+    }
     final encoded = await runApart(() {
       final g = buildGraph(mode, inputs, links: links, shared: shared, clashes: clashes, settings: settings, embedder: modelId);
-      layoutGraph(g, iterations: inputs.length > 2500 ? 70 : 150);
+      layoutGraph(g, iterations: inputs.length > 2500 ? 70 : 150, start: start);
       return g.encode();
     });
     final graph = KnowledgeGraph.decode(encoded)!;
-    // a note hub carries the title of its note
+    final names = nameTopics && canWrite ? await _modelNames(graph, before, cancel, progress) : const <int, String>{};
+    if (cancel?.cancelled ?? false) return null;
+    String topicName(GraphNode n) => names[n.cluster] ?? n.label;
+    // a note hub carries the title of its note, a topic hub the name of its topic
     final named = KnowledgeGraph(
       mode: graph.mode,
       builtAt: graph.builtAt,
       embedder: graph.embedder,
-      clusters: graph.clusters,
+      clusters: [for (final c in graph.clusters) names.containsKey(c.id) ? GraphCluster(c.id, names[c.id]!, c.size, named: true) : c],
       edges: graph.edges,
       nodes: [
         for (final n in graph.nodes)
           n.kind == GraphNodeKind.note && n.label.isEmpty
               ? (GraphNode(id: n.id, kind: n.kind, label: titles[n.noteId] ?? '', noteId: n.noteId, cluster: n.cluster, x: n.x, y: n.y, size: n.size))
-              : n,
+              : n.kind == GraphNodeKind.topic && names.containsKey(n.cluster)
+                  ? GraphNode(id: n.id, kind: n.kind, label: topicName(n), cluster: n.cluster, x: n.x, y: n.y, size: n.size)
+                  : n,
       ],
     );
     await refresh();

@@ -1,4 +1,6 @@
-import 'dart:math';import 'dart:typed_data';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -137,6 +139,7 @@ class KnowledgeRepository {
   }) async {
     final at = DateTime.now().millisecondsSinceEpoch;
     if (replace != null) {
+      await _archive(where: 'id = ?', args: [replace]);
       final changed = await _db.update(
         'saved_graphs',
         {
@@ -163,6 +166,77 @@ class KnowledgeRepository {
     });
     await _told(id);
     return id;
+  }
+
+  /// How many earlier pictures are kept for each graph.
+  static const keptVersions = 5;
+
+  /// Puts the picture of the graph that [where] finds into `graph_versions` (before it is replaced), and drops the oldest ones past
+  /// [keptVersions]. Nothing when there is no such graph.
+  Future<void> _archive({required String where, required List<Object?> args}) async {
+    final rows = await _db.query('saved_graphs', columns: ['uid', 'mode', 'built_at', 'payload'], where: where, whereArgs: args);
+    if (rows.isEmpty) return;
+    final r = rows.single;
+    final uid = r['uid'] as String;
+    var nodes = 0;
+    try {
+      nodes = ((jsonDecode(r['payload'] as String) as Map)['nodes'] as List).length;
+    } catch (_) {}
+    await _db.insert('graph_versions', {'graph_uid': uid, 'mode': r['mode'], 'built_at': r['built_at'], 'nodes': nodes, 'payload': r['payload']});
+    await _db.delete(
+      'graph_versions',
+      where: 'graph_uid = ? AND id NOT IN (SELECT id FROM graph_versions WHERE graph_uid = ? ORDER BY id DESC LIMIT $keptVersions)',
+      whereArgs: [uid, uid],
+    );
+  }
+
+  /// The earlier pictures that are kept (without the pictures), newest first; of the graph [uid], or of all.
+  Future<List<GraphVersion>> listGraphVersions({String? uid}) async {
+    final rows = await _db.query(
+      'graph_versions',
+      columns: ['id', 'graph_uid', 'mode', 'built_at', 'nodes'],
+      where: uid == null ? null : 'graph_uid = ?',
+      whereArgs: uid == null ? null : [uid],
+      orderBy: 'id DESC',
+    );
+    return [
+      for (final r in rows)
+        GraphVersion(
+          id: r['id'] as int,
+          graphUid: r['graph_uid'] as String,
+          mode: r['mode'] as String,
+          builtAt: DateTime.fromMillisecondsSinceEpoch(r['built_at'] as int),
+          nodes: r['nodes'] as int,
+        ),
+    ];
+  }
+
+  Future<String?> loadGraphVersion(int id) async {
+    final rows = await _db.query('graph_versions', columns: ['payload'], where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : rows.single['payload'] as String;
+  }
+
+  Future<void> deleteGraphVersion(int id) => _db.delete('graph_versions', where: 'id = ?', whereArgs: [id]);
+
+  /// Brings an earlier picture back as the graph's picture; the one that was there takes its place in the list. Returns the id of the
+  /// graph, or null when the picture or its graph is gone. The graph counts as changed now (the other devices take it over).
+  Future<int?> restoreGraphVersion(int id) async {
+    final found = await _db.query('graph_versions', where: 'id = ?', whereArgs: [id]);
+    if (found.isEmpty) return null;
+    final v = found.single;
+    final graph = await _db.query('saved_graphs', columns: ['id'], where: 'uid = ?', whereArgs: [v['graph_uid']]);
+    if (graph.isEmpty) return null;
+    final graphId = graph.single['id'] as int;
+    await _archive(where: 'id = ?', args: [graphId]);
+    await _db.delete('graph_versions', where: 'id = ?', whereArgs: [id]);
+    await _db.update(
+      'saved_graphs',
+      {'mode': v['mode'], 'built_at': v['built_at'], 'updated_at': DateTime.now().millisecondsSinceEpoch, 'payload': v['payload']},
+      where: 'id = ?',
+      whereArgs: [graphId],
+    );
+    await _told(graphId);
+    return graphId;
   }
 
   /// Tells the listeners that the graph with the number [id] changed.
@@ -263,6 +337,7 @@ class KnowledgeRepository {
 
   Future<void> _removeGraph(String uid, int at) async {
     await _db.delete('saved_graphs', where: 'uid = ?', whereArgs: [uid]);
+    await _db.delete('graph_versions', where: 'graph_uid = ?', whereArgs: [uid]);
     final rows = await _db.query(
       'sync_tombstones',
       columns: ['deleted_at'],
@@ -288,6 +363,9 @@ class KnowledgeRepository {
       'updated_at': g.updatedAt,
       'payload': payload,
     };
+    // (the picture that is replaced is kept, unless it is the same one)
+    final there = await _db.query('saved_graphs', columns: ['payload'], where: 'uid = ?', whereArgs: [g.uid]);
+    if (there.isNotEmpty && there.single['payload'] != payload) await _archive(where: 'uid = ?', args: [g.uid]);
     final changed = await _db.update(
       'saved_graphs',
       values,
@@ -347,6 +425,20 @@ class KnowledgeRepository {
     }
     return found;
   }
+}
+
+/// An earlier picture of a kept graph (see [KnowledgeRepository.listGraphVersions]).
+class GraphVersion {
+  final int id;
+
+  /// The [SavedGraph.uid] of the graph it belonged to.
+  final String graphUid;
+  final String mode;
+
+  /// When that picture was made, and how many nodes it has.
+  final DateTime builtAt;
+  final int nodes;
+  const GraphVersion({required this.id, required this.graphUid, required this.mode, required this.builtAt, required this.nodes});
 }
 
 /// A graph that was kept: what it is called, what it was made of and when (its picture is loaded by [KnowledgeRepository.loadGraph]).
