@@ -618,7 +618,7 @@ List<NoteFileEntry> noteFileEntries(NoteFileParts parts, {DateTime? now}) {
       'ink': {
         'texts': [
           for (final t in parts.ink.texts)
-            {'key': t.key, 'page': t.page, 'text': t.text, 'l': t.bounds.left, 't': t.bounds.top, 'r': t.bounds.right, 'b': t.bounds.bottom},
+            {'key': t.key, 'page': t.page, 'text': t.text, 'l': t.bounds.left, 't': t.bounds.top, 'r': t.bounds.right, 'b': t.bounds.bottom, if (t.unsure.isNotEmpty) 'u': t.unsure},
         ],
         'reads': [
           for (final r in parts.ink.reads) {'key': r.key, if (r.ids.isNotEmpty) 'ids': r.ids, if (r.text != null) 'text': r.text, if (r.latex != null) 'latex': r.latex},
@@ -958,7 +958,7 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
     texts: [
       for (final t in _listOf(inkMap['texts']))
         if (t['key'] is String && t['text'] is String && _int(t['page']) != null && [t['l'], t['t'], t['r'], t['b']].every((v) => opt_(v) != null))
-          InkText(key: t['key'] as String, page: _int(t['page'])!, text: t['text'] as String, bounds: Rect.fromLTRB(opt_(t['l'])!, opt_(t['t'])!, opt_(t['r'])!, opt_(t['b'])!)),
+          InkText(key: t['key'] as String, page: _int(t['page'])!, text: t['text'] as String, bounds: Rect.fromLTRB(opt_(t['l'])!, opt_(t['t'])!, opt_(t['r'])!, opt_(t['b'])!), unsure: _str(t['u']) ?? ''),
     ],
     reads: [
       for (final r in _listOf(inkMap['reads']))

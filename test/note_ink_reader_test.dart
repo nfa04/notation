@@ -14,6 +14,7 @@ void main() {
   late List<List<InkRead>> savedReads;
   late int progressed;
   var kept = <String, String>{};
+  var keptUnsure = <String, String>{};
   var keptReads = <InkRead>[];
   var open = true, locked = false, wanted = true;
 
@@ -31,7 +32,7 @@ void main() {
         indexWanted: () async => wanted,
         saveIndex: (id, read, alive) async => saved.add((id, read, alive)),
         saveReads: (id, reads) async => savedReads.add(reads),
-        loadSaved: (id) async => (texts: kept, reads: keptReads),
+        loadSaved: (id) async => (texts: kept, unsure: keptUnsure, reads: keptReads),
         onProgress: () => progressed++,
       );
 
@@ -39,6 +40,7 @@ void main() {
     text = FakeReader((s) => 'hello');
     strokes = {0: word('a', 100, 100)};
     saved = [];
+    keptUnsure = {};
     savedReads = [];
     progressed = 0;
     kept = {};
@@ -83,6 +85,28 @@ void main() {
   });
 
   group('readings kept from before', () {
+    test('the words the reader was unsure of are kept with the text, and are there again without reading', () async {
+      var r = reader(handwriting: FakeReader((s) => 'a hapy dog', unsure: const ['hapy']));
+      await r.restore();
+      await r.startIndex();
+      r.prefetcher!.changed();
+      await until(() => r.prefetcher!.readings().any((x) => x.text != null));
+      final key = r.prefetcher!.readings().single.block.key;
+      expect(r.prefetcher!.unsureOf(key), {'hapy'});
+      await r.saveReadings();
+      expect(saved.single.$2.single.unsure, 'hapy');
+      r.dispose();
+
+      kept = {key: 'a hapy dog'};
+      keptUnsure = {key: 'hapy'};
+      final again = FakeReader((s) => 'never');
+      r = reader(handwriting: again);
+      await r.restore();
+      expect(r.prefetcher!.unsureOf(key), {'hapy'});
+      expect(again.calls, isEmpty);
+      r.dispose();
+    });
+
     test('are there again at once, without a reader, and are not read twice', () async {
       final key = clusterStrokes(0, strokes[0]!).single.key;
       kept = {key: 'kept words'};

@@ -47,6 +47,11 @@ class GlmOcrService extends ModelFilesService {
     'embeddings.bin': '9f74c48b8b5a645fbc438f2ee3c317a2102948149ff1deb3dfc678675b8094d5',
   };
 
+  /// A word is called unsure when the model gave one of its tokens less than this much probability (a log, e^-0.5 = 0.6). On 68 lines of
+  /// real handwriting this marked 22 % of the words, 60 % of which were read wrong (29 % of all were); under -0.7: 13 % of the words, 72 %
+  /// of them wrong.
+  static const unsureBelow = -0.5;
+
   /// A line is cut into pieces that are not wider than this many times their height: the network's work grows with the width.
   static const widestPiece = 24.0;
 
@@ -63,7 +68,7 @@ class GlmOcrService extends ModelFilesService {
     super.download,
   })  : _read = read == null
             ? _onnx.readScored
-            : ((a, b, c, d) async => [for (final t in await read(a, b, c, d)) (tokens: t, confidence: 1.0)]),
+            : ((a, b, c, d) async => [for (final t in await read(a, b, c, d)) (tokens: t, confidence: 1.0, logProbs: List.filled(t.length, 0.0))]),
         _loadVocab = loadVocab ?? (() => rootBundle.loadString('assets/glm_ocr/vocab.txt')),
         _checks = checksums ?? (repo == defaultRepo ? GlmOcrService.checksums : const {}),
         super(files: modelFiles, folderName: 'glm_ocr');
@@ -97,7 +102,11 @@ class GlmOcrService extends ModelFilesService {
 
   /// The text of each of [lines] (the strokes of one line of writing each), drawn [quality.rows] patches high. Throws if the model is
   /// not installed or cannot run.
-  Future<List<String>> readLines(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async {
+  Future<List<String>> readLines(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async =>
+      [for (final r in await readLinesScored(lines, quality: quality)) r.text];
+
+  /// [readLines], with the words of each that the model was unsure of (see [unsureBelow]).
+  Future<List<({String text, List<String> unsure})>> readLinesScored(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async {
     if (!installed) throw StateError('The handwriting model is not installed.');
     final pictures = [for (final line in lines) await renderInkForGlmOcr(line, rows: quality.rows)];
     final tokens = await _read(
@@ -111,7 +120,7 @@ class GlmOcrService extends ModelFilesService {
       for (final r in tokens)
         () {
           final text = vocabulary.decode(r.tokens);
-          return isWriting(text, r.confidence) ? text : '';
+          return isWriting(text, r.confidence) ? (text: text, unsure: vocabulary.unsureWords(r.tokens, r.logProbs, unsureBelow)) : (text: '', unsure: const <String>[]);
         }(),
     ];
   }
@@ -130,7 +139,10 @@ class GlmOcrService extends ModelFilesService {
   /// The text of each of [lines], as the chunks of words [groupIntoLines] cut them into: neighbouring chunks are put together again as
   /// long as the piece is not wider than [widestPiece] times its height, since the model reads a whole stretch better than a few words,
   /// and the pieces of one line are joined with a space.
-  Future<List<String>> readChunkedLines(List<List<InkChunk>> lines, {GlmQuality quality = GlmQuality.standard}) async {
+  Future<List<String>> readChunkedLines(List<List<InkChunk>> lines, {GlmQuality quality = GlmQuality.standard}) async => (await readChunkedLinesScored(lines, quality: quality)).lines;
+
+  /// [readChunkedLines], with the words of all the lines that the model was unsure of.
+  Future<({List<String> lines, List<String> unsure})> readChunkedLinesScored(List<List<InkChunk>> lines, {GlmQuality quality = GlmQuality.standard}) async {
     final pieces = <List<DrawingStroke>>[];
     final lineOf = <int>[];
     for (var l = 0; l < lines.length; l++) {
@@ -139,12 +151,15 @@ class GlmOcrService extends ModelFilesService {
         lineOf.add(l);
       }
     }
-    final read = await readLines(pieces, quality: quality);
+    final read = await readLinesScored(pieces, quality: quality);
     final texts = List.generate(lines.length, (_) => <String>[]);
+    final unsure = <String>[];
     for (var i = 0; i < read.length; i++) {
-      if (read[i].isNotEmpty) texts[lineOf[i]].add(read[i]);
+      if (read[i].text.isEmpty) continue;
+      texts[lineOf[i]].add(read[i].text);
+      unsure.addAll(read[i].unsure);
     }
-    return [for (final t in texts) t.join(' ')];
+    return (lines: [for (final t in texts) t.join(' ')], unsure: unsure);
   }
 
   /// The strokes of [line]'s chunks put together into pieces that are at most [widestPiece] times as wide as they are high.

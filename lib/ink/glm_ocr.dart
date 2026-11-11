@@ -147,6 +147,39 @@ class GlmVocabulary {
     }
     return utf8.decode(bytes, allowMalformed: true).trim();
   }
+
+  /// The words of [ids] (as [decode] writes them, split at white space) that the model was unsure of: those with a token whose log
+  /// probability, in [logProbs] (one for each of [ids]), is under [below]. A token that is part of several words (a mark of punctuation,
+  /// a space and the start of the next word) counts for each; a word is as unsure as its most doubtful token.
+  List<String> unsureWords(List<int> ids, List<double> logProbs, double below) {
+    final bytes = <int>[];
+    final tokenOf = <int>[];
+    for (var t = 0; t < ids.length; t++) {
+      final id = ids[t];
+      if (id < 0 || id >= pieces.length || id >= glmOrdinaryTokens) continue;
+      for (final rune in pieces[id].runes) {
+        final b = MathVocab.byteOfBpeChar[rune];
+        if (b == null) continue;
+        bytes.add(b);
+        tokenOf.add(t);
+      }
+    }
+    bool space(int b) => b == 0x20 || b == 0x0A || b == 0x09 || b == 0x0D;
+    final out = <String>[];
+    var start = 0;
+    for (var i = 0; i <= bytes.length; i++) {
+      if (i < bytes.length && !space(bytes[i])) continue;
+      if (i > start) {
+        var worst = 0.0;
+        for (var k = start; k < i; k++) {
+          if (tokenOf[k] < logProbs.length && logProbs[tokenOf[k]] < worst) worst = logProbs[tokenOf[k]];
+        }
+        if (worst < below) out.add(utf8.decode(bytes.sublist(start, i), allowMalformed: true));
+      }
+      start = i + 1;
+    }
+    return out;
+  }
 }
 
 /// The table of word vectors, read row by row from its file (it is 87 MB and a line needs a few dozen rows): the rows of

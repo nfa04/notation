@@ -30,6 +30,17 @@ void main() {
     expect(m.rect.right, inInclusiveRange(115, 140), reason: 'about half of the line, not all of it');
   });
 
+  test('words the reader was unsure of are marked so, spelled right or not, whatever marks they were written with', () {
+    final marks = checkedInk([(block: cluster, text: 'the cat\nhapy dog')], checker, unsure: {'Hapy,', 'cat.'});
+    final byWord = {for (final m in marks) m.word: m};
+    expect(byWord['hapy']!.unsure, isTrue);
+    expect(byWord['hapy']!.correct, isFalse);
+    expect(byWord['cat']!.unsure, isTrue);
+    expect(byWord['cat']!.correct, isTrue);
+    expect(byWord['dog']!.unsure, isFalse);
+    expect(checkedInk([(block: cluster, text: 'the cat\nhapy dog')], checker).any((m) => m.unsure), isFalse);
+  });
+
   test('words that are right, short words and blocks not read yet are left alone', () {
     expect(misspelledInk([(block: cluster, text: 'the cat\nxq dog')], checker), isEmpty, reason: 'two letters say nothing');
     expect(misspelledInk([(block: cluster, text: null)], checker), isEmpty);

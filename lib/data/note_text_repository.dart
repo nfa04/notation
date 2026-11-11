@@ -97,6 +97,7 @@ class NoteTextRepository {
             page: r['page_index'] as int,
             text: r['text'] as String,
             bounds: Rect.fromLTRB((r['left'] as num).toDouble(), (r['top'] as num).toDouble(), (r['right'] as num).toDouble(), (r['bottom'] as num).toDouble()),
+            unsure: (r['unsure'] as String?) ?? '',
           ),
       ];
 
@@ -124,6 +125,7 @@ class NoteTextRepository {
               'top': t.bounds.top,
               'right': t.bounds.right,
               'bottom': t.bounds.bottom,
+              'unsure': t.unsure.isEmpty ? null : t.unsure,
             },
             conflictAlgorithm: ConflictAlgorithm.replace,
           );

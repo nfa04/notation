@@ -16,6 +16,9 @@ class InkReading {
   /// The cluster as LaTeX, once read (only for what looks like a formula, see [looksLikeMaths]).
   String? latex;
 
+  /// The words of [text] the reader was unsure of (see [InkRecognizer.recognizeScored]).
+  List<String> unsure = const [];
+
   /// Whether the formula reader was asked (and did not fail), so that it is not asked again for what it did not take.
   bool mathTried = false;
 
@@ -286,7 +289,9 @@ class InkPrefetcher extends ChangeNotifier {
     }
     try {
       if (_needsText(r)) {
-        r.text = (await _text!.recognize(c.strokes)).trim();
+        final got = await _text!.recognizeScored(c.strokes);
+        r.text = got.text.trim();
+        r.unsure = got.unsure;
         reads++;
       }
       if (_needsMath(c, r)) {
@@ -368,6 +373,9 @@ class InkPrefetcher extends ChangeNotifier {
   /// Whether the text ([math]: the formula) of [selection] is ready.
   bool isReady(Iterable<DrawingStroke> selection, {bool math = false}) => (math ? lookupMath(selection) : lookupText(selection)) != null;
 
+  /// The words of the writing of the block (or row) [key] that the reader was unsure of, as they are written in [readings].
+  Set<String> unsureOf(String key) => {...?_cache[key]?.unsure};
+
   /// The other readings of the block [key] that have been made (see [lookAgain]); empty when none have, or none differ.
   List<String> othersOf(String key) => _cache[key]?.others ?? const [];
 
@@ -420,6 +428,9 @@ class InkPrefetcher extends ChangeNotifier {
   /// reads by rows (a block's text is then given to its rows, line by line).
   final Map<String, String> _kept = {};
 
+  /// The words of those texts that the reader was unsure of, by block (separated by spaces: a word has none).
+  final Map<String, String> _keptUnsure = {};
+
   /// Formulas read at an earlier time, by the key of what was read (a block, or a row of the maths check).
   final Map<String, String> _keptMath = {};
 
@@ -432,10 +443,12 @@ class InkPrefetcher extends ChangeNotifier {
   void seed({
     Map<String, String> texts = const {},
     Map<String, String> formulas = const {},
+    Map<String, String> unsure = const {},
     Map<String, ({Set<String> ids, String? text, String? latex})> picked = const {},
   }) {
     if (_disposed) return;
     _kept.addAll(texts);
+    _keptUnsure.addAll(unsure);
     _keptMath.addAll(formulas);
     for (final e in picked.entries) {
       final p = _picked.putIfAbsent(e.key, () => _Picked(e.value.ids));
@@ -455,6 +468,7 @@ class InkPrefetcher extends ChangeNotifier {
       final r = _cache.putIfAbsent(c.key, InkReading.new);
       if (r.text == null && text != null) {
         r.text = text;
+        r.unsure = _unsureWords(_keptUnsure[c.key]);
         r.failed = false;
         any = true;
       }
@@ -476,20 +490,28 @@ class InkPrefetcher extends ChangeNotifier {
         final r = _cache.putIfAbsent(rows[i].key, InkReading.new);
         if (r.text != null) continue;
         r.text = lines[i].trim();
+        r.unsure = _unsureWords(_keptUnsure[block.key]);
         any = true;
       }
     }
     return any;
   }
 
+  static List<String> _unsureWords(String? kept) => kept == null || kept.isEmpty ? const [] : kept.split(' ');
+
   /// What is to be kept of the readings now: the text of each block that has been read (by block, for the search; while the maths
   /// check reads by rows, a block whose rows are all read has their text, a line to a row) and the keys of all blocks; the
   /// formulas read and the conversions of selections whose strokes are all still there as they were.
-  ({List<({InkCluster block, String text})> texts, Set<String> blocks, Map<String, String> formulas, Map<String, ({Set<String> ids, String? text, String? latex})> picked}) toKeep() {
+  ({List<({InkCluster block, String text})> texts, Set<String> blocks, Map<String, String> formulas, Map<String, String> unsure, Map<String, ({Set<String> ids, String? text, String? latex})> picked}) toKeep() {
     final blocks = _blocks();
     final List<({InkCluster block, String text})> texts;
+    final unsure = <String, String>{};
     if (!_rows) {
       texts = [for (final b in blocks) if (_cache[b.key]?.text case final t?) (block: b, text: t)];
+      for (final b in blocks) {
+        final u = _cache[b.key]?.unsure;
+        if (u != null && u.isNotEmpty) unsure[b.key] = u.join(' ');
+      }
     } else {
       final rows = _rowClusters();
       texts = [];
@@ -498,6 +520,8 @@ class InkPrefetcher extends ChangeNotifier {
         final read = parts == null ? null : [for (final r in parts) _cache[r.key]?.text];
         final text = read != null && !read.contains(null) ? read.map((t) => t!.replaceAll('\n', ' ')).join('\n') : _kept[b.key];
         if (text != null) texts.add((block: b, text: text));
+        final u = read != null && !read.contains(null) ? {for (final r in parts!) ..._cache[r.key]!.unsure} : _unsureWords(_keptUnsure[b.key]).toSet();
+        if (u.isNotEmpty) unsure[b.key] = u.join(' ');
       }
     }
     _forgetPicked();
@@ -505,6 +529,7 @@ class InkPrefetcher extends ChangeNotifier {
       texts: texts,
       blocks: {for (final b in blocks) b.key},
       formulas: {for (final c in _rows ? _rowClusters() : blocks) c.key: ?_cache[c.key]?.latex},
+      unsure: unsure,
       picked: {
         for (final e in _picked.entries)
           if (e.value.text != null || e.value.latex != null) e.key: (ids: e.value.ids, text: e.value.text, latex: e.value.latex),
@@ -534,6 +559,7 @@ class InkPrefetcher extends ChangeNotifier {
         r.mathTried = true;
       } else {
         r.text = value.trim();
+        r.unsure = const []; // (it was not read now: what it was unsure of is not known)
       }
     } else {
       final ink = selection.where(isInkStroke).toList();

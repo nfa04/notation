@@ -30,6 +30,9 @@ abstract class InkRecognizer extends DownloadableModel {
   /// installed or cannot run on this device.
   Future<String> recognize(List<DrawingStroke> strokes);
 
+  /// [recognize], with the words of the text that the reader was unsure of (it may have misread them): none for a reader that does not say.
+  Future<({String text, List<String> unsure})> recognizeScored(List<DrawingStroke> strokes) async => (text: await recognize(strokes), unsure: const <String>[]);
+
   /// Other readings of the same writing, each from another way of looking at it (the formula reader draws the pen thinner and thicker): a
   /// person who doubts what was read can be shown them. Empty when there is no other way to look, or the model is not installed.
   Future<List<String>> recognizeAgain(List<DrawingStroke> strokes) async => const [];

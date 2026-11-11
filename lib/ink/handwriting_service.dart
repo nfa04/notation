@@ -115,15 +115,22 @@ class HandwritingService extends InkRecognizer {
 
   /// The text written by [strokes]: lines top to bottom. Throws if the model is not installed or cannot run on this device.
   @override
-  Future<String> recognize(List<DrawingStroke> strokes) async {
+  Future<String> recognize(List<DrawingStroke> strokes) async => (await recognizeScored(strokes)).text;
+
+  @override
+  Future<({String text, List<String> unsure})> recognizeScored(List<DrawingStroke> strokes) async {
     if (!installed) throw StateError('The handwriting model is not installed.');
     final lines = groupIntoLines([for (final s in strokes) if (s.color.a > 0.9 && Brushes.writes(s.brush)) s]); // not the highlighter
-    if (lines.isEmpty) return '';
+    if (lines.isEmpty) return (text: '', unsure: const <String>[]);
     if (_usesPaddle) {
-      return (await paddle!.readLines([
-        for (final line in lines) [for (final chunk in line) ...chunk.strokes],
-      ])).join('\n');
+      return (
+        text: (await paddle!.readLines([
+          for (final line in lines) [for (final chunk in line) ...chunk.strokes],
+        ])).join('\n'),
+        unsure: const <String>[],
+      );
     }
-    return (await glm.readChunkedLines(lines, quality: _quality)).join('\n');
+    final read = await glm.readChunkedLinesScored(lines, quality: _quality);
+    return (text: read.lines.join('\n'), unsure: read.unsure);
   }
 }

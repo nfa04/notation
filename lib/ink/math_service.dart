@@ -249,6 +249,9 @@ class MathService extends ModelFilesService implements InkRecognizer {
     await teller?.close();
   }
 
+  @override
+  Future<({String text, List<String> unsure})> recognizeScored(List<DrawingStroke> strokes) async => (text: await recognize(strokes), unsure: const <String>[]);
+
   /// The LaTeX for the formula in [strokes], read as a whole.
   @override
   Future<String> recognize(List<DrawingStroke> strokes) async {

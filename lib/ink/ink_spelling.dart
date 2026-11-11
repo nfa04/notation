@@ -18,11 +18,18 @@ class InkMisspelling {
   /// Whether the word is spelled right: such a word is only marked when the person asks to see what was read (to check it was taken for writing).
   final bool correct;
 
-  const InkMisspelling(this.page, this.key, this.word, this.rect, {this.correct = false});
+  /// Whether the reader was unsure of the word (it may have misread it, whether or not it is spelled right): such a word is underlined in yellow.
+  final bool unsure;
+
+  const InkMisspelling(this.page, this.key, this.word, this.rect, {this.correct = false, this.unsure = false});
 
   @override
   String toString() => 'InkMisspelling($word, $rect)';
 }
+
+/// [word] as it is compared with the words the reader was unsure of: letters and digits only, in lower case (the reader's words keep the marks of
+/// punctuation they were written with).
+String _core(String word) => word.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '').toLowerCase();
 
 /// How wide a letter is written, to tell where a word is in a line (the reader keeps no box per word): narrow letters take less.
 double _width(String c) {
@@ -51,9 +58,11 @@ final _command = RegExp(r'\\[a-zA-Z]+|[{}^_$\\]');
 
 /// Every word of the readings [blocks] (what was read of each block of writing, null where it was not read yet) that [checker] checks (the ones it does not
 /// know have [InkMisspelling.correct] false), with where they are. A word is placed by its share of the line, so the box is near the word, not exact. Words of up to
-/// two letters are left alone: handwriting is misread in them too often to say anything.
-List<InkMisspelling> checkedInk(Iterable<({InkCluster block, String? text})> blocks, SpellChecker checker) {
+/// two letters are left alone: handwriting is misread in them too often to say anything. Words that are among [unsure] (the ones the reader
+/// was not sure of, see [InkRecognizer.recognizeScored]) are marked so.
+List<InkMisspelling> checkedInk(Iterable<({InkCluster block, String? text})> blocks, SpellChecker checker, {Set<String> unsure = const {}}) {
   if (!checker.active) return const [];
+  final doubtful = {for (final w in unsure) _core(w)}..remove('');
   final out = <InkMisspelling>[];
   for (final b in blocks) {
     final text = b.text;
@@ -69,7 +78,8 @@ List<InkMisspelling> checkedInk(Iterable<({InkCluster block, String? text})> blo
         if (r.end - r.start < 3) continue;
         final left = line.box.left + line.box.width * before(r.start) / total;
         final rightEdge = line.box.left + line.box.width * before(r.end) / total;
-        out.add(InkMisspelling(b.block.page, b.block.key, line.text.substring(r.start, r.end), Rect.fromLTRB(left, line.box.top, rightEdge, line.box.bottom), correct: right));
+        final word = line.text.substring(r.start, r.end);
+        out.add(InkMisspelling(b.block.page, b.block.key, word, Rect.fromLTRB(left, line.box.top, rightEdge, line.box.bottom), correct: right, unsure: doubtful.contains(_core(word))));
       }
     }
   }

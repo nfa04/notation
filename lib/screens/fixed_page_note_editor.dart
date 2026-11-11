@@ -615,10 +615,14 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         (await widget.repository.settings.get(inkIndexSetting) != '0' || await widget.repository.settings.get(pdfInkTextSetting) != '0' || _spellInkOn),
     saveIndex: widget.repository.text.saveInkText,
     saveReads: widget.repository.text.saveInkReads,
-    loadSaved: (id) async => (
-          texts: {for (final t in await widget.repository.text.inkTexts(id)) t.key: t.text},
-          reads: await widget.repository.text.inkReads(id),
-        ),
+    loadSaved: (id) async {
+      final texts = await widget.repository.text.inkTexts(id);
+      return (
+        texts: {for (final t in texts) t.key: t.text},
+        unsure: {for (final t in texts) if (t.unsure.isNotEmpty) t.key: t.unsure},
+        reads: await widget.repository.text.inkReads(id),
+      );
+    },
     onProgress: _inkProgressed,
   );
 

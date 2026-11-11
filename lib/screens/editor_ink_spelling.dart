@@ -17,15 +17,16 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
       for (final r in _ink?.readings() ?? const <({InkCluster block, String? text, String? latex})>[]) {
         final text = r.text;
         if (text == null) continue;
-        final key = '${r.block.page}\u0000${r.block.key}\u0000$text';
+        final unsure = _ink?.unsureOf(r.block.key) ?? const <String>{};
+        final key = '${r.block.page}\u0000${r.block.key}\u0000$text\u0000${unsure.join(' ')}';
         seen.add(key);
-        next.addAll(_inkSpellByBlock[key] ??= checkedInk([(block: r.block, text: text)], spell!.checker));
+        next.addAll(_inkSpellByBlock[key] ??= checkedInk([(block: r.block, text: text)], spell!.checker, unsure: unsure));
       }
       _inkSpellByBlock.removeWhere((k, _) => !seen.contains(k));
     } else {
       _inkSpellByBlock.clear();
     }
-    final same = next.length == _inkSpelling.length && !next.asMap().entries.any((e) => e.value.key != _inkSpelling[e.key].key || e.value.word != _inkSpelling[e.key].word || e.value.correct != _inkSpelling[e.key].correct || e.value.rect != _inkSpelling[e.key].rect);
+    final same = next.length == _inkSpelling.length && !next.asMap().entries.any((e) => e.value.key != _inkSpelling[e.key].key || e.value.word != _inkSpelling[e.key].word || e.value.correct != _inkSpelling[e.key].correct || e.value.unsure != _inkSpelling[e.key].unsure || e.value.rect != _inkSpelling[e.key].rect);
     if (!same) setState(() => _inkSpelling = next);
   }
 
@@ -39,7 +40,7 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
   /// The underlines of one page.
   List<Widget> _spellWidgets(int pageIndex) => [
         for (final m in _inkSpelling)
-          if (m.page == pageIndex && (!m.correct || (widget.spell?.showChecked ?? false)))
+          if (m.page == pageIndex && (!m.correct || m.unsure || (widget.spell?.showChecked ?? false)))
             Positioned.fromRect(
               rect: m.rect.inflate(2),
               child: IgnorePointer(
@@ -48,7 +49,8 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
                   key: ValueKey(m.correct ? 'ink-word-${m.word}' : 'ink-spell-${m.word}'),
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (d) => m.correct ? _wordMenu(m, d.globalPosition) : _spellMenu(m, d.globalPosition),
-                  child: CustomPaint(painter: m.correct ? const _CheckedPainter() : const _SquigglePainter()),
+                  // (yellow: the reader was not sure of the word, so it may be what was read that is wrong; red: not in the dictionary)
+                  child: CustomPaint(painter: m.unsure ? const _SquigglePainter(Colors.amber) : m.correct ? const _CheckedPainter() : const _SquigglePainter(Colors.red)),
                 ),
               ),
             ),
@@ -63,6 +65,7 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
       position: RelativeRect.fromRect(Rect.fromLTWH(at.dx, at.dy, 1, 1), Offset.zero & overlay.size),
       items: [
         PopupMenuItem<int>(enabled: false, height: 32, child: Text(tr('Read as: {word}', {'word': m.word}), style: const TextStyle(fontStyle: FontStyle.italic))),
+        if (m.unsure) PopupMenuItem<int>(enabled: false, height: 32, child: Text(tr('The reader was not sure of this word'))),
         PopupMenuItem<int>(value: 1, child: Text(tr('Copy'))),
       ],
     );
@@ -79,6 +82,7 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
       position: RelativeRect.fromRect(Rect.fromLTWH(at.dx, at.dy, 1, 1), Offset.zero & overlay.size),
       items: [
         PopupMenuItem<int>(enabled: false, height: 32, child: Text(tr('Not in the dictionary: {word}', {'word': m.word}), style: const TextStyle(fontStyle: FontStyle.italic))),
+        if (m.unsure) PopupMenuItem<int>(enabled: false, height: 32, child: Text(tr('The reader was not sure of this word'))),
         for (var i = 0; i < suggestions.length; i++) PopupMenuItem<int>(key: ValueKey('ink-spell-suggestion-$i'), value: i, child: Text(suggestions[i], style: const TextStyle(fontWeight: FontWeight.w600))),
         PopupMenuItem<int>(value: -1, child: Text(tr('Add to dictionary'))),
         PopupMenuItem<int>(value: -2, child: Text(tr('Ignore'))),
@@ -99,7 +103,8 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
 
 /// A wavy red line along the foot of a misspelled word.
 class _SquigglePainter extends CustomPainter {
-  const _SquigglePainter();
+  final Color color;
+  const _SquigglePainter(this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -112,14 +117,14 @@ class _SquigglePainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = Colors.red.withValues(alpha: 0.8)
+        ..color = color.withValues(alpha: 0.8)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4,
     );
   }
 
   @override
-  bool shouldRepaint(_SquigglePainter old) => false;
+  bool shouldRepaint(_SquigglePainter old) => old.color != color;
 }
 
 /// A green dotted line along the foot of a word that is spelled right (shown when the person asks to see what was read).

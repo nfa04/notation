@@ -74,6 +74,19 @@ void main() {
       expect(small.decode([0, 3, 1]), 'Hello\n world'.trim());
       expect(small.decode([2, 59246, 59280]), 'ü');
     });
+
+    test('the words the model was unsure of are those with a token under the line, whole, with the marks they were written with', () {
+      const small = GlmVocabulary(['Hello', 'Ġworld', 'Ã¼', 'Ġbe', 'ing', '!']);
+      // "Hello world!": "world" was given 0.2 (log -1.6), the rest was sure
+      expect(small.unsureWords([0, 1, 5], [-0.01, -1.6, -0.02], -0.5), ['world!']);
+      expect(small.unsureWords([0, 1, 5], [-0.01, -0.3, -0.02], -0.5), isEmpty);
+      // a word of two tokens is as unsure as its worse token
+      expect(small.unsureWords([0, 3, 4], [-0.01, -0.01, -0.9], -0.5), ['being']);
+      expect(small.unsureWords([0, 3, 4], [-0.9, -0.01, -0.01], -0.5), ['Hello']);
+      // a letter of two bytes is one piece
+      expect(small.unsureWords([2, 1], [-2.0, -0.01], -0.5), ['ü']);
+      expect(small.unsureWords([], [], -0.5), isEmpty);
+    });
   });
 
   group('the table of word vectors', () {

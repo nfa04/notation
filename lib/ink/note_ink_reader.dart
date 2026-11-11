@@ -49,7 +49,7 @@ class NoteInkReader {
   final Future<void> Function(String noteId, List<InkRead> reads) saveReads;
 
   /// What was kept of the readings of the note: the text of blocks (by the key of the block of strokes) and the other readings.
-  final Future<({Map<String, String> texts, List<InkRead> reads})> Function(String noteId) loadSaved;
+  final Future<({Map<String, String> texts, Map<String, String> unsure, List<InkRead> reads})> Function(String noteId) loadSaved;
 
   /// Told when readings arrived (or the work changed): the editor shows which selections are ready and marks checked maths.
   final void Function() onProgress;
@@ -155,9 +155,11 @@ class NoteInkReader {
       final saved = await loadSaved(noteId);
       if (!isOpen()) return;
       _keptTexts.addAll(saved.texts);
+      _keptUnsure.addAll(saved.unsure);
       _keptReads = _signature(saved.reads);
       reader.seed(
         texts: saved.texts,
+        unsure: saved.unsure,
         formulas: {for (final r in saved.reads) if (r.ids.isEmpty && r.latex != null) r.key: r.latex!},
         picked: {for (final r in saved.reads) if (r.ids.isNotEmpty) r.key: (ids: r.ids.split(',').toSet(), text: r.text, latex: r.latex)},
       );
@@ -168,6 +170,9 @@ class NoteInkReader {
 
   /// What is in the database now (the text of blocks by key, and the other readings), so that the same is not written again.
   final Map<String, String> _keptTexts = {};
+
+  /// The words of those texts that the reader was unsure of (by block key).
+  final Map<String, String> _keptUnsure = {};
   String _keptReads = '';
 
   static String _signature(Iterable<InkRead> reads) => (reads.map((r) => '${r.key}\u0000${r.ids}\u0000${r.text}\u0000${r.latex}').toList()..sort()).join('\u0001');
@@ -195,14 +200,18 @@ class NoteInkReader {
       for (final e in keep.picked.entries) e.key: (key: e.key, ids: (e.value.ids.toList()..sort()).join(','), text: e.value.text, latex: e.value.latex),
     }.values.toList();
     // (nothing new to keep, nothing dropped)
-    final sameTexts = texts.length == _keptTexts.length && texts.entries.every((e) => _keptTexts[e.key] == e.value);
+    final sameTexts = texts.length == _keptTexts.length &&
+        texts.entries.every((e) => _keptTexts[e.key] == e.value && (keep.unsure[e.key] ?? '') == (_keptUnsure[e.key] ?? ''));
     final signature = _signature(reads);
     try {
       if (!sameTexts) {
-        await saveIndex(noteId, [for (final t in keep.texts) InkText(key: t.block.key, page: t.block.page, text: t.text, bounds: t.block.bounds)], keep.blocks);
+        await saveIndex(noteId, [for (final t in keep.texts) InkText(key: t.block.key, page: t.block.page, text: t.text, bounds: t.block.bounds, unsure: keep.unsure[t.block.key] ?? '')], keep.blocks);
         _keptTexts
           ..clear()
           ..addAll(texts);
+        _keptUnsure
+          ..clear()
+          ..addAll(keep.unsure);
       }
       if (signature != _keptReads) {
         await saveReads(noteId, reads);

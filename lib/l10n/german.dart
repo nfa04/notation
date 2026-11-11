@@ -3621,4 +3621,5 @@ const germanTexts = <String, String>{
   'Rarely': 'Selten',
   'Often': 'Oft',
   'When the model is unsure of a formula, it reads it again with a thinner and a thicker pen and keeps the surest reading. Normal does this for about one formula in ten and reads about 2 points more right; Often is about three in ten; Never is the quickest.': 'Ist sich das Modell bei einer Formel unsicher, liest es sie noch einmal mit einem dünneren und einem dickeren Stift und behält die sicherste Lesung. „Normal“ tut das bei etwa jeder zehnten Formel und liest etwa 2 Punkte mehr richtig; „Oft“ bei etwa drei von zehn; „Nie“ ist am schnellsten.',
+  'The reader was not sure of this word': 'Das Wort wurde nicht sicher gelesen',
 };

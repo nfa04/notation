@@ -70,6 +70,25 @@ void main() {
     });
   }
 
+  testWidgets('a word the reader was not sure of is underlined (yellow) even when it is spelled right, and is still when the note is opened again', (tester) async {
+    await setUpNote(tester);
+    final text = FakeReader((s) => 'the hapy dog', unsure: const ['dog']);
+    await open(tester, text, null);
+    expect(find.byKey(const ValueKey('ink-word-dog')), findsOneWidget, reason: 'spelled right, but not sure: marked without being asked');
+    expect(find.byKey(const ValueKey('ink-word-the')), findsNothing, reason: 'sure and right: not marked');
+    expect(find.byKey(const ValueKey('ink-spell-hapy')), findsOneWidget, reason: 'misspelled and sure: the usual mark');
+    await tester.tap(find.byKey(const ValueKey('ink-word-dog')));
+    await tester.pumpAndSettle();
+    expect(find.text('The reader was not sure of this word'), findsOneWidget);
+    await closeEditor(tester);
+
+    final again = FakeReader((s) => 'the hapy dog');
+    await open(tester, again, null);
+    expect(again.calls, isEmpty, reason: 'what was read is kept');
+    expect(find.byKey(const ValueKey('ink-word-dog')), findsOneWidget, reason: 'and so is what it was not sure of');
+    await closeEditor(tester);
+  });
+
   testWidgets('words that are spelled right are marked and can be tapped once the person asks for it', (tester) async {
     await setUpNote(tester);
     final text = FakeReader((s) => 'the hapy dog');

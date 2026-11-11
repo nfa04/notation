@@ -19,12 +19,18 @@ List<DrawingStroke> word(String name, double x, double y, {int n = 4}) => [for (
 
 /// A reader that says what it was given and what it read.
 class FakeReader extends InkRecognizer {
-  FakeReader(this.say, {this.delay = Duration.zero, this.installed = true, this.sayAgain});
+  FakeReader(this.say, {this.delay = Duration.zero, this.installed = true, this.sayAgain, this.unsure = const []});
   final String Function(List<DrawingStroke> strokes) say;
 
   /// The other readings (see [InkRecognizer.recognizeAgain]); none when null.
   final List<String> Function(List<DrawingStroke> strokes)? sayAgain;
   int lookedAgain = 0;
+
+  /// The words it says it was not sure of (see [InkRecognizer.recognizeScored]).
+  final List<String> unsure;
+
+  @override
+  Future<({String text, List<String> unsure})> recognizeScored(List<DrawingStroke> strokes) async => (text: await recognize(strokes), unsure: unsure);
   final Duration delay;
   final bool installed;
   final calls = <List<String>>[];

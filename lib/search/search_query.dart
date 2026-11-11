@@ -98,7 +98,10 @@ class InkText {
   final int page;
   final String text;
   final Rect bounds;
-  const InkText({required this.key, required this.page, required this.text, required this.bounds});
+
+  /// The words of [text] the reader was unsure of, separated by spaces (empty: none, or not known).
+  final String unsure;
+  const InkText({required this.key, required this.page, required this.text, required this.bounds, this.unsure = ''});
 }
 
 /// A piece of text of a note to look in.
