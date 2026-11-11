@@ -72,6 +72,19 @@ void groups() {
     expect(lines.last.toSet(), below.toSet());
   });
 
+  test('a figure under the bar of a line\'s fraction, and the foot of a big bracket, stay with their line', () {
+    final strokes = [
+      ...words(100, 330, 300),
+      s(line(const Offset(220, 330), const Offset(262, 330))), // the bar under the 3rd..5th letters
+      box(235, 360, 247, 369), // the denominator, a 4 of two strokes, a letter below the bar
+      s(line(const Offset(241, 353), const Offset(241, 376))),
+    ];
+    final below = words(100, 330, 395);
+    final lines = linesOfWriting([...strokes, ...below]);
+    expect(lines, hasLength(2), reason: 'the figure under the bar is part of the line above, not a line of its own');
+    expect(lines.map((l) => l.length), unorderedEquals([strokes.length, below.length]));
+  });
+
   test('an exponent beside a big bracket stays with its formula, though its middle is as high as the line above', () {
     // (k = 1 and k, the limits of a sum on the line above that came into this block, each letter in two strokes)
     final limits = [

@@ -69,4 +69,20 @@ void main() {
       await closeEditor(tester);
     });
   }
+
+  testWidgets('words that are spelled right are marked and can be tapped once the person asks for it', (tester) async {
+    await setUpNote(tester);
+    final text = FakeReader((s) => 'the hapy dog');
+    await open(tester, text, null);
+    expect(find.byKey(const ValueKey('ink-spell-hapy')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ink-word-the')), findsNothing, reason: 'by default right words are not marked');
+    await tester.runAsync(() => spell.setShowChecked(true));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('ink-word-the')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ink-word-dog')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ink-word-dog')));
+    await tester.pumpAndSettle();
+    expect(find.text('Read as: dog'), findsOneWidget);
+    await closeEditor(tester);
+  });
 }

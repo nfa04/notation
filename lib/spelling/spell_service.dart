@@ -150,6 +150,7 @@ class DictionaryPack extends ModelFilesService {
 class SpellService extends ChangeNotifier {
   static const enabledKey = 'spell_languages';
   static const personalKey = 'spell_personal';
+  static const showCheckedKey = 'spell_show_checked';
 
   final Future<String?> Function(String key) _read;
   final Future<void> Function(String key, String value) _write;
@@ -169,6 +170,17 @@ class SpellService extends ChangeNotifier {
     for (final pack in packs) {
       pack.addListener(() => _packChanged(pack));
     }
+  }
+
+  bool _showChecked = false;
+
+  /// Whether the handwritten words that are spelled right are marked too (and can be tapped), to see that they were read as writing.
+  bool get showChecked => _showChecked;
+
+  Future<void> setShowChecked(bool on) async {
+    _showChecked = on;
+    await _write(showCheckedKey, on ? '1' : '0');
+    notifyListeners();
   }
 
   /// The languages that are on.
@@ -193,6 +205,7 @@ class SpellService extends ChangeNotifier {
         _enabled = {};
       }
     }
+    _showChecked = await _read(showCheckedKey) == '1';
     final words = await _read(personalKey);
     if (words != null) {
       try {

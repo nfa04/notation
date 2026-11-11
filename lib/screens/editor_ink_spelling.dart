@@ -19,13 +19,13 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
         if (text == null) continue;
         final key = '${r.block.page}\u0000${r.block.key}\u0000$text';
         seen.add(key);
-        next.addAll(_inkSpellByBlock[key] ??= misspelledInk([(block: r.block, text: text)], spell!.checker));
+        next.addAll(_inkSpellByBlock[key] ??= checkedInk([(block: r.block, text: text)], spell!.checker));
       }
       _inkSpellByBlock.removeWhere((k, _) => !seen.contains(k));
     } else {
       _inkSpellByBlock.clear();
     }
-    final same = next.length == _inkSpelling.length && !next.asMap().entries.any((e) => e.value.key != _inkSpelling[e.key].key || e.value.word != _inkSpelling[e.key].word || e.value.rect != _inkSpelling[e.key].rect);
+    final same = next.length == _inkSpelling.length && !next.asMap().entries.any((e) => e.value.key != _inkSpelling[e.key].key || e.value.word != _inkSpelling[e.key].word || e.value.correct != _inkSpelling[e.key].correct || e.value.rect != _inkSpelling[e.key].rect);
     if (!same) setState(() => _inkSpelling = next);
   }
 
@@ -39,20 +39,35 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
   /// The underlines of one page.
   List<Widget> _spellWidgets(int pageIndex) => [
         for (final m in _inkSpelling)
-          if (m.page == pageIndex)
+          if (m.page == pageIndex && (!m.correct || (widget.spell?.showChecked ?? false)))
             Positioned.fromRect(
               rect: m.rect.inflate(2),
               child: IgnorePointer(
                 ignoring: _mode == CanvasInteractionMode.draw, // (the pen draws there; tap it in another mode)
                 child: GestureDetector(
-                  key: ValueKey('ink-spell-${m.word}'),
+                  key: ValueKey(m.correct ? 'ink-word-${m.word}' : 'ink-spell-${m.word}'),
                   behavior: HitTestBehavior.translucent,
-                  onTapUp: (d) => _spellMenu(m, d.globalPosition),
-                  child: const CustomPaint(painter: _SquigglePainter()),
+                  onTapUp: (d) => m.correct ? _wordMenu(m, d.globalPosition) : _spellMenu(m, d.globalPosition),
+                  child: CustomPaint(painter: m.correct ? const _CheckedPainter() : const _SquigglePainter()),
                 ),
               ),
             ),
       ];
+
+  /// A word that is spelled right, tapped to see what it was read as: copy it, or see that it is not there at all.
+  Future<void> _wordMenu(InkMisspelling m, Offset at) async {
+    if (!mounted) return;
+    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final choice = await showMenu<int>(
+      context: context,
+      position: RelativeRect.fromRect(Rect.fromLTWH(at.dx, at.dy, 1, 1), Offset.zero & overlay.size),
+      items: [
+        PopupMenuItem<int>(enabled: false, height: 32, child: Text(tr('Read as: {word}', {'word': m.word}), style: const TextStyle(fontStyle: FontStyle.italic))),
+        PopupMenuItem<int>(value: 1, child: Text(tr('Copy'))),
+      ],
+    );
+    if (choice == 1) await Clipboard.setData(ClipboardData(text: m.word));
+  }
 
   Future<void> _spellMenu(InkMisspelling m, Offset at) async {
     final spell = widget.spell;
@@ -105,4 +120,22 @@ class _SquigglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SquigglePainter old) => false;
+}
+
+/// A green dotted line along the foot of a word that is spelled right (shown when the person asks to see what was read).
+class _CheckedPainter extends CustomPainter {
+  const _CheckedPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.green.withValues(alpha: 0.8)
+      ..strokeWidth = 1.6;
+    for (var x = 0.0; x < size.width; x += 4) {
+      canvas.drawLine(Offset(x, size.height - 2), Offset(math.min(x + 2, size.width), size.height - 2), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckedPainter old) => false;
 }

@@ -330,7 +330,49 @@ List<InkCluster> rowsOf(InkCluster cluster) => [for (final row in _rowsByBands(c
 List<List<DrawingStroke>> linesOfWriting(List<DrawingStroke> strokes) {
   if (strokes.isEmpty) return const [];
   final bounds = strokes.map(strokeBounds).reduce((a, b) => a.expandToInclude(b));
-  return [for (final row in _rowsByBands(InkCluster(0, strokes, bounds))) row.strokes];
+  return _adoptSpecks([for (final row in _rowsByBands(InkCluster(0, strokes, bounds))) row.strokes]);
+}
+
+/// A line of one or two small strokes (the 4 under a fraction bar, the 2 of a subscript) that the cut put on a line of its own is
+/// given back to the line it is written against: one that has a stroke within a letter beside it and lies at most half a letter above
+/// or below it, or under a bar of it. A label (`er:`) has more strokes than that and stays where it is.
+List<List<DrawingStroke>> _adoptSpecks(List<List<DrawingStroke>> lines) {
+  if (lines.length < 2) return lines;
+  final boxes = {for (final l in lines) for (final s in l) s: strokeBounds(s)};
+  final letter = letterHeight(boxes.values);
+  Rect around(List<DrawingStroke> l) => l.map((s) => boxes[s]!).reduce((a, b) => a.expandToInclude(b));
+  final merged = [for (final l in lines) List.of(l)];
+  final gone = <int>{};
+  for (var i = 0; i < lines.length; i++) {
+    final speck = around(lines[i]);
+    if (lines[i].length > 2 || speck.height > 1.3 * letter || speck.width > 0.8 * letter) continue;
+    final small = speck.height <= 0.5 * letter; // (a figure under a bar is as big as any letter)
+    int? best;
+    var bestGap = double.infinity;
+    for (var j = 0; j < lines.length; j++) {
+      if (j == i || gone.contains(j) || lines[j].length < 4) continue;
+      final host = around(lines[j]);
+      final up = math.max(0.0, math.max(host.top - speck.bottom, speck.top - host.bottom));
+      // (under a fraction bar of the line: a flat stroke over the speck, at most a letter above it)
+      final underBar = lines[j].any((s) {
+        final b = boxes[s]!;
+        return b.width >= 2.5 * b.height && b.left - 0.3 * letter <= speck.center.dx && b.right + 0.3 * letter >= speck.center.dx && speck.top - b.bottom >= -0.2 * letter && speck.top - b.bottom <= 1.3 * letter;
+      });
+      if ((!small && !underBar) || (up > 0.5 * letter && !underBar) || speck.center.dx < host.left - 0.5 * letter || speck.center.dx > host.right + 0.5 * letter) continue;
+      final beside = lines[j].any((s) {
+        final b = boxes[s]!;
+        return math.max(0.0, math.max(b.left - speck.right, speck.left - b.right)) <= letter && b.top < speck.bottom + 0.5 * letter && b.bottom > speck.top - 0.5 * letter;
+      });
+      if ((beside || underBar) && up < bestGap) {
+        best = j;
+        bestGap = up;
+      }
+    }
+    if (best == null) continue;
+    merged[best].addAll(lines[i]);
+    gone.add(i);
+  }
+  return [for (var i = 0; i < merged.length; i++) if (!gone.contains(i)) merged[i]];
 }
 
 /// A row cut where a word with a colon ends and a formula begins (`Translation:   m g - 2F = m a`, `Rotation: ...`): a label is not part of the

@@ -89,6 +89,12 @@ class SpellChecker {
     ];
   }
 
+  /// Every place in [text] that is checked, with whether it is spelled right.
+  List<(TextRange, bool)> checked(String text) {
+    if (!active) return const [];
+    return [for (final r in spellWords(text)) (r, isCorrect(text.substring(r.start, r.end)))];
+  }
+
   /// What [word] may have been meant to be, best first, from every dictionary (each gives its best first).
   List<String> suggestions(String word, {int max = 6}) {
     final lists = [for (final d in _dictionaries) d.suggest(word, max: max)];

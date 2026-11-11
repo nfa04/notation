@@ -642,6 +642,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   void _inkDictionaryChanged() {
     _inkSpellByBlock.clear();
     _refreshInkSpelling();
+    if (mounted) setState(() {}); // (the marks of right words come and go with the setting)
   }
 
   @override
