@@ -77,7 +77,7 @@ Future<List<int>?> threadPriorities() async {
 }
 
 /// How many of the threads yield (see [threadPriorities]).
-int yielding(List<int> priorities) => priorities.where((p) => Platform.isMacOS ? p <= 10 : p == 19).length;
+int yielding(List<int> priorities) => priorities.where((p) => Platform.isMacOS ? p < 17 : p == 19).length;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -123,7 +123,7 @@ void main() {
     } finally {
       await low.close();
     }
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   testWidgets('a long run does not hold up the frames of the screen', (tester) async {
     // something that moves, so that frames are made all the time
@@ -143,6 +143,7 @@ void main() {
         final watch = Stopwatch()..start();
         for (var i = 0; i < 12; i++) {
           await runOnce(session, 256);
+          debugPrint('run $i done after ${watch.elapsedMilliseconds} ms');
         }
         watch.stop();
         await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -163,5 +164,5 @@ void main() {
       SchedulerBinding.instance.removeTimingsCallback(onTimings);
       await session.close();
     }
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

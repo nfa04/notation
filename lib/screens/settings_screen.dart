@@ -15,12 +15,14 @@ import '../images/subject_service.dart';
 import '../scan/ocr_service.dart';
 import '../style/accessibility.dart';
 import '../style/refresh_rate.dart' show refreshRateAdjustable;
+import '../llm/onnx_session.dart' show onnxPlatformAccelerators;
 import '../style/stylus_settings.dart';
 import 'about_settings.dart';
 import 'stylus_settings_card.dart';
 import 'accessibility_settings.dart';
 import 'pdf_quality_settings.dart';
 import 'refresh_rate_settings.dart';
+import 'acceleration_settings.dart';
 import '../ink/ink_recognizer.dart';
 import '../ink/math_service.dart';
 import '../ink/texteller_decoder.dart' show SecondLook;
@@ -193,6 +195,10 @@ class SettingsScreen extends StatelessWidget {
           if (repository != null && refreshRateAdjustable) ...[
             const SizedBox(height: 20),
             RefreshRateSettings(repository: repository!),
+          ],
+          if (repository != null && onnxPlatformAccelerators().isNotEmpty) ...[
+            const SizedBox(height: 20),
+            AccelerationSettings(repository: repository!),
           ],
           const SizedBox(height: 28),
           const _LanguageSettings(),

@@ -73,6 +73,7 @@ import 'ai/ai_service.dart';
 import 'ai/ai_switch.dart';
 import 'ai/openai_provider.dart';
 import 'ai/text_provider.dart' show ProviderState;
+import 'llm/onnx_acceleration_setting.dart' show applyOnnxAcceleration;
 import 'automations/note_sorter.dart';
 import 'llm/embedding_service.dart';
 import 'llm/llm_service.dart';
@@ -217,6 +218,7 @@ Future<void> _start() async {
   final math = MathService(readSetting: settings.get, writeSetting: settings.set);
   final repository = NoteRepository(db);
   unawaited(applyRefreshRate(settings.get)); // (on Android: the fast rate of the screen, if it was asked for)
+  await applyOnnxAcceleration(settings.get); // (cpu only, if the person chose that)
   final history = NoteHistory(db, repository)..start();
   // who the person is (a name and an id of their own), and which tools they want
   final profile = UserProfile(settings.get, settings.set);

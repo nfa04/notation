@@ -81,7 +81,7 @@ class OnnxTexTeller implements ScoredTexTeller {
   Future<OrtSession> _session(bool encoder) async {
     final open = encoder ? _encoder : _decoder;
     if (open != null) return open;
-    final made = await _timed('open', () => openOnnxSession(encoder ? _encoderPath : _decoderPath, options: _options));
+    final made = await _timed('open', () => openOnnxSession(encoder ? _encoderPath : _decoderPath, options: _options, accelerate: encoder));
     encoder ? _encoder = made : _decoder = made;
     return made;
   }

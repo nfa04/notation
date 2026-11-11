@@ -62,7 +62,7 @@ class GlmOnnxReader with WidgetsBindingObserver {
       final vision = _vision ??= await openOnnxSession(visionPath, options: _options());
       final features = [for (final p in pictures) await _see(vision, p)];
       final table = _table ??= await GlmEmbeddings.open(embeddingsPath);
-      final language = _language ??= await openOnnxSession(textPath, options: _options());
+      final language = _language ??= await openOnnxSession(textPath, options: _options(), accelerate: false);
       return [
         for (var i = 0; i < pictures.length; i++)
           await _write(language, pictures[i], features[i], table, maxTokens).then((r) {

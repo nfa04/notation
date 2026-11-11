@@ -37,7 +37,7 @@ jobs:
           - os: windows-latest
             device: windows
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2

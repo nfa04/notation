@@ -76,10 +76,38 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     env = nil
   }
 
+  /// The threads of this process (by their Mach names).
+  private static func threadNames() -> Set<UInt32> {
+    var list: thread_act_array_t?
+    var count: mach_msg_type_number_t = 0
+    guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS, let list = list else { return [] }
+    defer { vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)), vm_size_t(Int(count) * MemoryLayout<thread_t>.size)) }
+    return Set((0..<Int(count)).map { UInt32(list[$0]) })
+  }
+
+  /// Lowers the scheduling priority of the threads that came to be since [before] was taken. (The threads ONNX Runtime starts are
+  /// not always given the quality of service of the thread that makes the session, so they are lowered by name as well.)
+  private static func lowerNewThreads(since before: Set<UInt32>) {
+    var list: thread_act_array_t?
+    var count: mach_msg_type_number_t = 0
+    guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS, let list = list else { return }
+    defer { vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)), vm_size_t(Int(count) * MemoryLayout<thread_t>.size)) }
+    for i in 0..<Int(count) where !before.contains(UInt32(list[i])) {
+      var policy = thread_precedence_policy_data_t(importance: -30)
+      let words = MemoryLayout<thread_precedence_policy_data_t>.size / MemoryLayout<integer_t>.size
+      withUnsafeMutablePointer(to: &policy) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: words) {
+          _ = thread_policy_set(list[i], thread_policy_flavor_t(THREAD_PRECEDENCE_POLICY), $0, mach_msg_type_number_t(words))
+        }
+      }
+    }
+  }
+
+
   /// Runs [work] (a handler that answers at once) on a thread of background quality of service when [low] is set, and answers
   /// with its answer on this thread. The threads ONNX Runtime starts while the work creates a session inherit that quality of
   /// service, so the session only takes the time the screen leaves over.
-  private func atBackgroundPriority(_ low: Bool, result: @escaping FlutterResult, _ work: @escaping (@escaping FlutterResult) -> Void) {
+  private func atBackgroundPriority(_ low: Bool, newThreads: Bool = false, result: @escaping FlutterResult, _ work: @escaping (@escaping FlutterResult) -> Void) {
     guard low else {
       work(result)
       return
@@ -87,13 +115,16 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     final class Answer { var value: Any? }
     let answer = Answer()
     let done = DispatchSemaphore(value: 0)
+    let before = Self.threadNames()
     let thread = Thread {
+      pthread_set_qos_class_self_np(QOS_CLASS_BACKGROUND, 0)
       work { answer.value = $0 }
       done.signal()
     }
     thread.qualityOfService = .background
     thread.start()
     done.wait()
+    if newThreads { Self.lowerNewThreads(since: before) }
     result(answer.value)
   }
 
@@ -127,7 +158,7 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     case "createSession":
       let args = call.arguments as? [String: Any]
       let low = (args?["sessionOptions"] as? [String: Any])?["lowPriority"] as? Bool == true
-      atBackgroundPriority(low, result: result) { self.handleCreateSession(call: call, result: $0) }
+      atBackgroundPriority(low, newThreads: true, result: result) { self.handleCreateSession(call: call, result: $0) }
     case "getAvailableProviders":
       handleGetAvailableProviders(call: call, result: result)
     case "runInference":

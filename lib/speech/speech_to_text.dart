@@ -114,7 +114,7 @@ class OnnxWhisper implements WhisperEngine {
   ];
 
   Future<OrtSession> _enc() async => _encoder ??= await openOnnxSession(encoderPath, options: _options);
-  Future<OrtSession> _dec() async => _decoder ??= await openOnnxSession(decoderPath, options: _options);
+  Future<OrtSession> _dec() async => _decoder ??= await openOnnxSession(decoderPath, options: _options, accelerate: false);
 
   static Future<void> _breathe() => Future<void>.delayed(const Duration(milliseconds: 4));
 

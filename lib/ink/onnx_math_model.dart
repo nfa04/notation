@@ -49,7 +49,7 @@ class OnnxMathModel implements MathOcrModel {
 
   @override
   Future<int> nextToken(Object encoded, List<int> ids) async {
-    final decoder = _decoder ??= await openOnnxSession(_decoderPath, options: _options);
+    final decoder = _decoder ??= await openOnnxSession(_decoderPath, options: _options, accelerate: false);
     final tokens = await int64Value(ids, [1, ids.length]);
     final out = await decoder.run({'input_ids': tokens, 'encoder_hidden_states': encoded as OrtValue});
     await tokens.dispose();

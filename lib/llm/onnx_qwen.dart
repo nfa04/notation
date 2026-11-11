@@ -27,7 +27,7 @@ class OnnxQwen implements CausalLm {
   OnnxQwen(this.path, {this.layers = 28, this.kvHeads = 8, this.headDim = 128, this.threads = 4});
 
   Future<OrtSession> _open() async =>
-      _session ??= await openOnnxSession(path, options: OrtSessionOptions(intraOpNumThreads: threads, interOpNumThreads: 1, useArena: false));
+      _session ??= await openOnnxSession(path, options: OrtSessionOptions(intraOpNumThreads: threads, interOpNumThreads: 1, useArena: false), accelerate: false);
 
   /// On desktop the plugin runs the model on the thread that also draws the window, so a long call
   /// freezes the screen (a spinning circle stutters). The prompt is therefore fed in slices, and

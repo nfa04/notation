@@ -50,7 +50,7 @@ Future<List<List<int>>> readPicturesOnnx({
     return rows[id] = Float32List.sublistView(Uint8List.fromList(bytes));
   }
 
-  final decoder = await openOnnxSession(decoderPath, options: options());
+  final decoder = await openOnnxSession(decoderPath, options: options(), accelerate: false);
   try {
     return [
       for (var i = 0; i < pictures.length; i++)
