@@ -127,12 +127,12 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     case "createSession":
       let args = call.arguments as? [String: Any]
       let low = (args?["sessionOptions"] as? [String: Any])?["lowPriority"] as? Bool == true
-      atBackgroundPriority(low, result: result) { handleCreateSession(call: call, result: $0) }
+      atBackgroundPriority(low, result: result) { self.handleCreateSession(call: call, result: $0) }
     case "getAvailableProviders":
       handleGetAvailableProviders(call: call, result: result)
     case "runInference":
       let id = (call.arguments as? [String: Any])?["sessionId"] as? String
-      atBackgroundPriority(id.map { lowSessions.contains($0) } ?? false, result: result) { handleRunInference(call: call, result: $0) }
+      atBackgroundPriority(id.map { lowSessions.contains($0) } ?? false, result: result) { self.handleRunInference(call: call, result: $0) }
     case "closeSession":
       handleCloseSession(call: call, result: result)
     case "getMetadata":

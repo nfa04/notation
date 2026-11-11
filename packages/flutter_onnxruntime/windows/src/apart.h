@@ -116,10 +116,12 @@ struct Outcome {
   void ReplayTo(flutter::MethodResult<flutter::EncodableValue> *target) const {
     switch (kind) {
     case Kind::Success:
-      target->Success(value ? &*value : nullptr);
+      if (value) target->Success(*value);
+      else target->Success();
       break;
     case Kind::Error:
-      target->Error(code, message, value ? &*value : nullptr);
+      if (value) target->Error(code, message, *value);
+      else target->Error(code, message);
       break;
     default:
       target->NotImplemented();
