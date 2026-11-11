@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes the AltStore "source" file of a release: the list that AltStore reads to show Notation and to offer its updates.
 
-  python3 tool/make_altstore_source.py --ipa Notation-ios-unsigned.ipa --repo nfa04/notation --tag v0.0.1 --out altstore.json
+  python3 tool/make_altstore_source.py --ipa Notation-ios-unsigned.ipa --repo nfa04/notation --tag v0.0.2 --out altstore.json
 
 The release workflow runs it and attaches the file to the release, so that
 https://github.com/<repo>/releases/latest/download/altstore.json always names the newest version (add that address in AltStore).

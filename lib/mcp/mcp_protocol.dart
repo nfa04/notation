@@ -82,7 +82,7 @@ class McpProtocol {
   /// person can be shown what an agent is doing).
   final void Function(McpTool tool, Map<String, Object?> args, String result)? onChanged;
 
-  McpProtocol({required this.tools, required this.canChange, this.name = 'Notation', this.version = '0.0.1', this.instructions = '', this.onChanged});
+  McpProtocol({required this.tools, required this.canChange, this.name = 'Notation', this.version = '0.0.2', this.instructions = '', this.onChanged});
 
   Future<void> _tail = Future.value();
 

@@ -1,5 +1,5 @@
 ; Inno Setup script for the Windows installer. CI (builds.yml) calls it with
-;   iscc /DAppVersion=0.0.1 /DSourceDir=<Release folder> /DOutDir=<where to write> /DRedist=<file name of vc_redist.x64.exe next to this script, or nothing>
+;   iscc /DAppVersion=0.0.2 /DSourceDir=<Release folder> /DOutDir=<where to write> /DRedist=<file name of vc_redist.x64.exe next to this script, or nothing>
 ; Per-user install by default (no administrator rights); the user may choose "for all users" in the dialog.
 
 #ifndef AppVersion

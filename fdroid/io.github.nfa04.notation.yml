@@ -16,10 +16,10 @@ RepoType: git
 Repo: https://github.com/nfa04/notation.git
 
 Builds:
-  - versionName: 0.0.1
+  - versionName: 0.0.2
     # `flutter build apk --split-per-abi` adds 2000 for arm64-v8a (1000 armeabi-v7a, 4000 x86_64) to the versionCode of the pubspec (+1)
-    versionCode: 2001
-    commit: v0.0.1
+    versionCode: 2002
+    commit: v0.0.2
     # the plugins' Gradle projects are built by `flutter build`, from the pub cache that is inside the checkout
     output: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
     srclibs:
@@ -51,5 +51,5 @@ AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9.]+$
 VercodeOperation:
   - '%c + 2000'
-CurrentVersion: 0.0.1
-CurrentVersionCode: 2001
+CurrentVersion: 0.0.2
+CurrentVersionCode: 2002
