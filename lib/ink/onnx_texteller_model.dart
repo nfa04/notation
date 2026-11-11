@@ -17,7 +17,7 @@ import 'texteller_decoder.dart';
 /// values of one step to the next; only the scores of the next token come over to Dart. Opening the two sessions takes a
 /// moment (about 320 MB of weights), and the background reading asks for formula after formula, so they stay open for
 /// [keepOpen] after a reading and are let go of when nothing more is asked.
-class OnnxTexTeller implements TexTellerModel {
+class OnnxTexTeller implements ScoredTexTeller {
   final String _encoderPath;
   final String _decoderPath;
   final Duration keepOpen;
@@ -52,14 +52,17 @@ class OnnxTexTeller implements TexTellerModel {
   OrtSessionOptions get _options => OrtSessionOptions(intraOpNumThreads: threads, interOpNumThreads: 1, useArena: false);
 
   @override
-  Future<List<int>> read(Float32List pixels, {int maxTokens = texTellerMaxTokens}) {
+  Future<List<int>> read(Float32List pixels, {int maxTokens = texTellerMaxTokens}) async => (await readScored(pixels, maxTokens: maxTokens)).ids;
+
+  @override
+  Future<TexTellerReading> readScored(Float32List pixels, {int maxTokens = texTellerMaxTokens}) {
     // (one picture at a time: the sessions are shared)
     final result = _turn.then((_) => _read(pixels, maxTokens));
     _turn = result.then<void>((_) {}, onError: (_) {});
     return result;
   }
 
-  Future<List<int>> _read(Float32List pixels, int maxTokens) async {
+  Future<TexTellerReading> _read(Float32List pixels, int maxTokens) async {
     _idle?.cancel();
     OrtValue? hidden;
     try {
@@ -98,7 +101,7 @@ class OnnxTexTeller implements TexTellerModel {
     }
   }
 
-  Future<List<int>> _decode(OrtValue hidden, int maxTokens) async {
+  Future<TexTellerReading> _decode(OrtValue hidden, int maxTokens) async {
     final decoder = await _session(false);
     final names = texTellerCacheNames().toList();
     // the first step has nothing cached; the graph wants something of the right kind there all the same (it is not used)
@@ -111,6 +114,7 @@ class OnnxTexTeller implements TexTellerModel {
     final letGo = <Future<void>>[];
     void release(OrtValue v) => letGo.add(v.dispose());
     final ids = [texTellerStartToken];
+    var logProb = 0.0;
     try {
       var first = true;
       while (ids.length < maxTokens) {
@@ -132,6 +136,7 @@ class OnnxTexTeller implements TexTellerModel {
         final flat = await _timed('step.scores', () => scores.asFlattenedList());
         release(scores);
         final next = lastArgMax(flat, scores.shape.last);
+        logProb += lastLogProb(flat, scores.shape.last, next);
 
         await _timed('step.cache', () async {
           for (final n in names) {
@@ -152,7 +157,7 @@ class OnnxTexTeller implements TexTellerModel {
         ids.add(next);
         if (next == texTellerEosToken) break;
       }
-      return ids;
+      return TexTellerReading(ids, logProb);
     } finally {
       for (final v in kept.values) {
         release(v);

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'math_decoder.dart';
@@ -26,6 +27,37 @@ abstract class TexTellerModel {
   Future<void> close();
 }
 
+/// What a reading came to, with how sure the model was of it: the log of the probability it gave the whole line (the scores of the tokens
+/// it chose, added up; 0 is certain, and the more negative, the less sure). A line it is unsure of is more often wrong (93 % of the
+/// lines above -0.1 were read right, 63 % of the others), which is when another reading with another pen is worth the time.
+class TexTellerReading {
+  final List<int> ids;
+  final double logProb;
+  const TexTellerReading(this.ids, this.logProb);
+}
+
+/// A [TexTellerModel] that can also say how sure it is of what it read.
+abstract class ScoredTexTeller implements TexTellerModel {
+  Future<TexTellerReading> readScored(Float32List pixels, {int maxTokens = texTellerMaxTokens});
+}
+
+/// How readily a formula is read again with a thinner and a thicker pen (the surest of the three is kept): when the model's log
+/// probability for the line is below [doubtBelow]. On 1000 MathWriting lines "normal" is about one in ten and brings all of what
+/// reading every line three times does (+2 points exact: 78.7 % to 80.7 %) at a fifth more work; "often" is about three in ten.
+enum SecondLook {
+  off('off', double.negativeInfinity),
+  rarely('rarely', -1.5),
+  normal('normal', -0.8),
+  often('often', -0.3);
+
+  final String id;
+  final double doubtBelow;
+  const SecondLook(this.id, this.doubtBelow);
+}
+
+/// The default.
+const SecondLook texTellerSecondLook = SecondLook.normal;
+
 /// The index of the largest of the last [vocabSize] numbers of [scores] (the scores of every position so far, in a row; the
 /// last position is the one that says what comes next).
 int lastArgMax(List<dynamic> scores, int vocabSize) {
@@ -40,6 +72,21 @@ int lastArgMax(List<dynamic> scores, int vocabSize) {
     }
   }
   return best;
+}
+
+/// The log probability (softmax over the last [vocabSize] numbers of [scores]) of the token [token] at the last position.
+double lastLogProb(List<dynamic> scores, int vocabSize, int token) {
+  final from = scores.length - vocabSize;
+  var top = double.negativeInfinity;
+  for (var i = 0; i < vocabSize; i++) {
+    final v = (scores[from + i] as num).toDouble();
+    if (v > top) top = v;
+  }
+  var sum = 0.0;
+  for (var i = 0; i < vocabSize; i++) {
+    sum += math.exp((scores[from + i] as num).toDouble() - top);
+  }
+  return (scores[from + token] as num).toDouble() - top - math.log(sum);
 }
 
 /// The names the decoder gives the keys and values it is handed (`past_key_values.3.decoder.key`) and hands back

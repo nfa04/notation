@@ -23,6 +23,7 @@ import 'pdf_quality_settings.dart';
 import 'refresh_rate_settings.dart';
 import '../ink/ink_recognizer.dart';
 import '../ink/math_service.dart';
+import '../ink/texteller_decoder.dart' show SecondLook;
 import '../ai/ai_prompt.dart';
 import '../ai/ai_service.dart';
 import '../ai/ai_switch.dart';
@@ -753,6 +754,30 @@ class _MathSettings extends StatelessWidget {
                   : tr('Pix2Text (MIT licence) is lighter and quicker, but made for printed formulas and poor at handwriting. Use it if the device is slow or short of memory.'),
               style: muted,
             ),
+            if (service.model == FormulaModel.texteller) ...[
+              const SizedBox(height: 16),
+              Text(tr('A second look at doubtful formulas'), style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final l in SecondLook.values)
+                  ChoiceChip(
+                    key: ValueKey('math-second-look-${l.id}'),
+                    label: Text(switch (l) {
+                      SecondLook.off => 'Never',
+                      SecondLook.rarely => 'Rarely',
+                      SecondLook.normal => 'Normal',
+                      SecondLook.often => 'Often',
+                    }),
+                    selected: service.secondLook == l,
+                    onSelected: (_) => service.chooseSecondLook(l),
+                  ),
+              ]),
+              const SizedBox(height: 8),
+              Text(
+                tr('When the model is unsure of a formula, it reads it again with a thinner and a thicker pen and keeps the surest reading. Normal does this for about one formula in ten and reads about 2 points more right; Often is about three in ten; Never is the quickest.'),
+                style: muted,
+              ),
+            ],
           ]);
         },
       );

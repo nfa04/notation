@@ -665,15 +665,18 @@ class _AutomationDialogState extends State<AutomationDialog> {
                 decoration: InputDecoration(
                   labelText: tr('Task'),
                   helperMaxLines: 3,
-                  helperText: tr(_event == AutomationEvent.todoFound
-                      ? '{summary} is what is to be done, {line} the whole line, {title} the note\'s title. The task is on the day the line says ("by Friday"), else on the day below'
+                  helperText: _event == AutomationEvent.todoFound
+                      ? tr('{summary} is what is to be done, {line} the whole line, {title} the note\'s title. The task is on the day the line says ("by Friday"), else on the day below')
                       : _event == AutomationEvent.dateFound
-                      ? 'The task is on the date found. {summary} is the line it was in without the date, '
+                      ? tr('The task is on the date found. {summary} is the line it was in without the date, '
                           '{line} the whole line, {time} its time (tasks have no time of their own, '
-                          'so it goes into the text), {title} the note\'s title'
-                      : '{title} is ${_event.hasNote
-                                    ? 'the note\'s' : _event == AutomationEvent.appStarted ? 'empty' : 'the event\'s'} title, {date} today\'s date'
-                          '${[for (final (name, what) in _event.placeholders) ', $name $what'].join()}'),
+                          'so it goes into the text), {title} the note\'s title')
+                      : tr(_event.hasNote
+                              ? '{title} is the note\'s title, {date} today\'s date'
+                              : _event == AutomationEvent.appStarted
+                              ? '{title} is empty, {date} today\'s date'
+                              : '{title} is the event\'s title, {date} today\'s date') +
+                          [for (final (name, what) in _event.placeholders) ', $name ${tr(what)}'].join(),
                 ),
               ),
               const SizedBox(height: 8),

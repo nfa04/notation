@@ -63,6 +63,9 @@ class MathService extends ModelFilesService implements InkRecognizer {
   /// The setting that remembers the choice.
   static const settingKey = 'math_model';
 
+  /// Where the person's choice of [SecondLook] is kept.
+  static const secondLookKey = 'math_second_look';
+
   /// What is used when nobody chose: TexTeller on every device (it reads handwriting far better and, on a 2020 mid-range tablet with
   /// 4 GB of memory, takes a few seconds a formula). A device that is too slow or short of memory can switch to the lighter reader
   /// in the settings; a person who only has that reader's files on the device keeps it until they download TexTeller.
@@ -114,10 +117,33 @@ class MathService extends ModelFilesService implements InkRecognizer {
   MathVocab? _vocab;
   MathVocab? _tellerVocab;
   TexTellerModel? _teller;
+  SecondLook? _secondLook;
   Future<void> _turn = Future.value();
 
   /// The model that reads now.
   FormulaModel get model => _modelKnown ? _model : (_chosen ?? _fallbackModel);
+
+  /// How readily a doubtful line is read again with other pens (the default until the setting has been read).
+  SecondLook get secondLook => _secondLook ?? texTellerSecondLook;
+
+  Future<SecondLook> _readSecondLook() async {
+    if (_secondLook != null) return _secondLook!;
+    SecondLook? stored;
+    try {
+      final name = await _readSetting?.call(secondLookKey);
+      stored = SecondLook.values.where((l) => l.id == name).firstOrNull;
+    } catch (_) {}
+    return _secondLook ??= stored ?? texTellerSecondLook;
+  }
+
+  /// Sets how readily a doubtful line is read again (and remembers it).
+  Future<void> chooseSecondLook(SecondLook l) async {
+    _secondLook = l;
+    try {
+      await _writeSetting?.call(secondLookKey, l.id);
+    } catch (_) {}
+    notifyListeners();
+  }
 
   /// Whether the person chose the model (else it is the default for this device).
   bool get chosen => _chosen != null;
@@ -260,20 +286,32 @@ class MathService extends ModelFilesService implements InkRecognizer {
     if (ink.isEmpty) return const [];
     final out = <String>[];
     for (final pen in otherPens) {
-      final again = (await _recognizeWithTexTeller(ink, penScale: pen)).trim();
+      final again = (await _recognizeWithTexTeller(ink, penScale: pen, again: false)).trim();
       if (again.isNotEmpty && !out.contains(again)) out.add(again);
     }
     return out;
   }
 
-  Future<String> _recognizeWithTexTeller(List<DrawingStroke> ink, {double penScale = 1}) {
+  Future<String> _recognizeWithTexTeller(List<DrawingStroke> ink, {double penScale = 1, bool again = true}) {
     // (one formula at a time: the model keeps its sessions between formulas)
     final result = _turn.then((_) async {
-      final pixels = await renderInkForTexTeller(ink, penScale: penScale);
       final teller = _teller ??= await _openTeller((await file('encoder.onnx')).path, (await file('decoder.onnx')).path);
-      final ids = await teller.read(pixels);
       final vocab = _tellerVocab ??= MathVocab.parse(await _loadTellerVocab());
-      return texTellerLatex(vocab, ids);
+      Future<TexTellerReading> look(double pen) async {
+        final pixels = await renderInkForTexTeller(ink, penScale: pen);
+        return teller is ScoredTexTeller ? teller.readScored(pixels) : TexTellerReading(await teller.read(pixels), 0);
+      }
+
+      final doubt = (await _readSecondLook()).doubtBelow;
+      var best = await look(penScale);
+      // a line the model is unsure of is read with a thinner and a thicker pen as well, and the surest reading is kept
+      if (again && best.logProb < doubt) {
+        for (final pen in otherPens) {
+          final other = await look(penScale * pen);
+          if (other.logProb > best.logProb) best = other;
+        }
+      }
+      return texTellerLatex(vocab, best.ids);
     });
     _turn = result.then<void>((_) {}, onError: (_) {});
     return result;

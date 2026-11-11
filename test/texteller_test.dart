@@ -42,6 +42,19 @@ class FakeTeller implements TexTellerModel {
   Future<void> close() async => closed = true;
 }
 
+/// A reader that also says how sure it is: answers with the next of [script], one for each picture.
+class ScoredFakeTeller extends FakeTeller implements ScoredTexTeller {
+  ScoredFakeTeller(this.script) : super(const []);
+  final List<TexTellerReading> script;
+  int calls = 0;
+
+  @override
+  Future<TexTellerReading> readScored(Float32List pixels, {int maxTokens = texTellerMaxTokens}) async {
+    seen.add(pixels.length);
+    return script[calls++];
+  }
+}
+
 /// The old reader: says E=mc^{2}.
 class FakePix2Text implements MathOcrModel {
   @override
@@ -225,6 +238,87 @@ void main() {
       expect(service.status, HandwritingStatus.installed);
       expect(await service.recognize(ink), r'x\in[-2,-0.5]');
       expect(teller.seen, [texTellerImageSize * texTellerImageSize]);
+    });
+
+    test('a reading the model is sure of is the only one made', () async {
+      putTeller();
+      final sure = ScoredFakeTeller([const TexTellerReading([0, 265, 92, 2], -0.05)]);
+      teller = sure;
+      final service = make();
+      await service.load();
+      expect(await service.recognize(ink), 'x');
+      expect(sure.calls, 1);
+    });
+
+    test('a reading it doubts is made again with a thinner and a thicker pen, and the surest of the three is kept', () async {
+      putTeller();
+      final unsure = ScoredFakeTeller([
+        const TexTellerReading([0, 265, 92, 2], -1.4), // x
+        const TexTellerReading([0, 265, 92, 64, 272, 2], -0.3), // the surest
+        const TexTellerReading([0, 92, 2], -0.9),
+      ]);
+      teller = unsure;
+      final service = make();
+      await service.load();
+      expect(await service.recognize(ink), texTellerLatex(vocab, [0, 265, 92, 64, 272, 2]));
+      expect(texTellerLatex(vocab, [0, 265, 92, 64, 272, 2]), isNot('x'));
+      expect(unsure.calls, 3);
+    });
+
+    test('when the usual reading is still the surest after a doubt, it stays', () async {
+      putTeller();
+      final unsure = ScoredFakeTeller([
+        const TexTellerReading([0, 265, 92, 2], -0.9),
+        const TexTellerReading([0, 92, 2], -2.0),
+        const TexTellerReading([0, 92, 2], -1.5),
+      ]);
+      teller = unsure;
+      final service = make();
+      await service.load();
+      expect(await service.recognize(ink), 'x');
+    });
+
+    test('asking for the other readings does not start a round of readings inside each of them', () async {
+      putTeller();
+      final unsure = ScoredFakeTeller([for (var i = 0; i < 2; i++) const TexTellerReading([0, 265, 2], -3.0)]);
+      teller = unsure;
+      final service = make();
+      await service.load();
+      await service.recognizeAgain(ink);
+      expect(unsure.calls, 2); // one for each of the pens, none for the doubt
+    });
+
+    test('the second look can be turned off, or made to happen for more lines, and the choice is kept', () async {
+      putTeller();
+      final doubtful = [const TexTellerReading([0, 265, 92, 2], -1.0), const TexTellerReading([0, 92, 2], -0.1), const TexTellerReading([0, 92, 2], -0.1)];
+      final firstTry = ScoredFakeTeller(List.of(doubtful));
+      teller = firstTry;
+      final service = make();
+      await service.load();
+      expect(service.secondLook, SecondLook.normal);
+      await service.chooseSecondLook(SecondLook.rarely); // -1.0 is not doubtful enough for that
+      await service.recognize(ink);
+      expect(firstTry.calls, 1);
+      await service.chooseSecondLook(SecondLook.off);
+      await service.recognize(ink.map((s) => s).toList());
+      expect(firstTry.calls, 1 + 1);
+      expect(settings[MathService.secondLookKey], 'off');
+
+      // another start of the app reads what was kept, and "often" looks again at -0.5
+      final often = ScoredFakeTeller([const TexTellerReading([0, 265, 92, 2], -0.5), const TexTellerReading([0, 92, 2], -0.1), const TexTellerReading([0, 92, 2], -0.1)]);
+      teller = often;
+      settings[MathService.secondLookKey] = 'often';
+      final again = make();
+      await again.load();
+      await again.recognize(ink);
+      expect(again.secondLook, SecondLook.often);
+      expect(often.calls, 3);
+    });
+
+    test('the log probability of a token is its share of the scores, and of a sure one is near zero', () {
+      expect(lastLogProb([0.0, 0.0], 2, 0), closeTo(-0.6931, 1e-3));
+      expect(lastLogProb([9.0, 0.0, 20.0, 0.0], 2, 1), closeTo(-20, 1e-3)); // only the last position counts
+      expect(lastLogProb([30.0, 0.0], 2, 0), closeTo(0, 1e-6));
     });
 
     test('a person who only has the old model keeps reading with it', () async {
