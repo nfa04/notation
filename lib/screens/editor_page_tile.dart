@@ -585,6 +585,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                 onPointerDown: (event) {
                   if (_xform != null) return; // (a free transform is going on: the pen draws nothing)
                   if (!_drawsWith(event)) return;
+                  if (event.kind == PointerDeviceKind.touch && (_touches.isNotEmpty || _touchGesture)) return; // (a second finger: the two scroll)
                   if (event.kind == PointerDeviceKind.mouse && (event.buttons & kMiddleMouseButton) != 0) return; // (it moves the canvas)
                   // the side button of the pen, set to run a trigger: it does that and does not draw
                   final trigger = _barrelHeld(event) ? _barrelAction.trigger : null;
@@ -687,6 +688,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                 },
                 onPointerMove: (event) {
                   if (!_drawsWith(event)) return;
+                  if (event.kind == PointerDeviceKind.touch && _touchGesture) return;
                   if (event.pointer == _pickPointer) return _pickMove(event.position);
                   if (_erasesWith(event)) {
                     _currentActiveStroke = null;
@@ -733,6 +735,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                   }
                 },
                 onPointerUp: (event) {
+                  if (event.kind == PointerDeviceKind.touch && _touchGesture) return;
                   if (event.pointer == _pickPointer) {
                     _stylusDown = false;
                     unawaited(_pickUp());

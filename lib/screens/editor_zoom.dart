@@ -130,30 +130,66 @@ extension _EditorZoom on _FixedPageNoteEditorState {
   }
 
   void _onTouchDown(PointerDownEvent e) {
-    if (e.kind != PointerDeviceKind.touch || _infinite) return; // (a canvas is pinched by its own gesture)
+    if (e.kind != PointerDeviceKind.touch) return;
     _touches[e.pointer] = e.position;
-    if (_touches.length == 2 && _canZoom) {
-      final (a, b) = (_touches.values.first, _touches.values.last);
-      _pinchStartDistance = math.max(1.0, (a - b).distance);
-      _pinchStartZoom = _zoom;
-      setState(() => _pinching = true);
+    if (_touches.length != 2 || _touchGesture) return;
+    if (_penDown && _currentActiveStroke == null) return; // (a finger pulls a handle)
+    if (_penDown && !_touches.containsKey(_penPointer)) return; // (the pen is writing)
+    _dropTouchStroke();
+    _touchGesture = true;
+    if (_infinite) return; // (a canvas is moved and pinched by its own gesture)
+    final (a, b) = (_touches.values.first, _touches.values.last);
+    _pinchStartDistance = math.max(1.0, (a - b).distance);
+    _pinchStartZoom = _zoom;
+    _pinchLastMid = (a + b) / 2;
+    setState(() => _pinching = true);
+  }
+
+  /// A line that a finger had just begun when a second one came down was the start of a scroll, not of a drawing: it is taken back.
+  void _dropTouchStroke() {
+    _commitErase();
+    final stroke = _currentActiveStroke;
+    if (stroke != null) {
+      for (final page in _strokesPerPage.values) {
+        page.remove(stroke);
+      }
     }
+    _currentActiveStroke = null;
+    _stabiliser = null;
+    _snapper = null;
+    _symmetryCopies = [];
+    _draggingStroke = false;
+    _inkTick.value++;
+    setState(() {
+      _lassoPath = null;
+      _penDown = false;
+    });
   }
 
   void _onTouchMove(PointerMoveEvent e) {
     if (!_touches.containsKey(e.pointer)) return;
     _touches[e.pointer] = e.position;
-    if (_pinching && _touches.length == 2 && _canZoom) {
+    if (_pinching && _touches.length == 2) {
       final (a, b) = (_touches.values.first, _touches.values.last);
-      _setZoom(
-        _pinchStartZoom * (a - b).distance / _pinchStartDistance,
-        _localInArea((a + b) / 2),
-      );
+      final mid = (a + b) / 2;
+      _panPages(_pinchLastMid - mid);
+      _pinchLastMid = mid;
+      if (!_zoomLocked) _setZoom(_pinchStartZoom * (a - b).distance / _pinchStartDistance, _localInArea(mid));
+    }
+  }
+
+  /// Moves what is shown by [by] (in pixels of the screen), as far as there is something to show.
+  void _panPages(Offset by) {
+    for (final (controller, d) in [(_pageScroll, by.dy), (_hScroll, by.dx)]) {
+      if (!controller.hasClients || d == 0) continue;
+      final p = controller.position;
+      p.jumpTo((p.pixels + d).clamp(p.minScrollExtent, p.maxScrollExtent));
     }
   }
 
   void _onTouchEnd(PointerEvent e) {
     _touches.remove(e.pointer);
+    if (_touches.isEmpty) _touchGesture = false;
     if (_pinching && _touches.length < 2) setState(() => _pinching = false);
   }
 

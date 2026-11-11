@@ -100,13 +100,14 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
   }
 
   void _canvasScaleUpdate(ScaleUpdateDetails d) {
-    if (!_scaleGo) return;
     if (d.pointerCount != _scaleCount) {
+      if (!_scaleGo) _scaleGo = _canPanCanvas; // (a second finger: the two move the canvas whatever the tool)
       // (a finger came or went: the scale starts from 1 again)
       _scaleCount = d.pointerCount;
       _scaleBaseZoom = _zoom;
       _scaleBaseTurn = _viewTurn - d.rotation; // (the turn too goes on from here)
     }
+    if (!_scaleGo) return;
     _panCanvas(d.focalPointDelta);
     if (d.pointerCount > 1 && _canZoom) {
       _setZoom(_scaleBaseZoom * d.scale, _localInArea(d.focalPoint));
@@ -122,7 +123,7 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
     if (_penDown) setState(() => _penDown = false);
   }
 
-  bool get _canPanCanvas => !_penDown && _drag == null && (_mode != CanvasInteractionMode.draw || _fingersScroll);
+  bool get _canPanCanvas => _drag == null && (_touchGesture || !_penDown && (_mode != CanvasInteractionMode.draw || _fingersScroll));
 
   /// The wheel moves the canvas (Shift: sideways), with Ctrl it zooms.
   void _canvasSignal(PointerSignalEvent e) {
@@ -168,6 +169,7 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
         _areaDownTime = DateTime.now();
         _areaTravel = 0;
         if (e.kind == PointerDeviceKind.mouse && (e.buttons & kMiddleMouseButton) != 0) _middlePan = e.pointer;
+        _onTouchDown(e);
       },
       onPointerMove: (e) {
         _areaTravel = math.max(_areaTravel, (e.position - _areaDownAt).distance);
@@ -176,12 +178,14 @@ extension _EditorCanvas on _FixedPageNoteEditorState {
       },
       onPointerUp: (e) {
         _releasePen(e.pointer);
+        _onTouchEnd(e);
         if (e.pointer == _middlePan) _middlePan = -1;
         _tapOnNothing(e);
         if (_drag != null && e.pointer == _drag!.pointer) _endDrag();
       },
       onPointerCancel: (e) {
         _releasePen(e.pointer);
+        _onTouchEnd(e);
         if (e.pointer == _middlePan) _middlePan = -1;
         if (_drag != null && e.pointer == _drag!.pointer) _endDrag();
       },

@@ -1411,6 +1411,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   double _zoom = 1.0;
   bool _zoomLocked = false;
   bool _pinching = false;
+
+  /// Two fingers are down (in any mode): they scroll and zoom, and draw or drag nothing, until every finger is up.
+  bool _touchGesture = false;
+  Offset _pinchLastMid = Offset.zero;
   double _viewportW = 800;
 
   double get _fitWidth {
