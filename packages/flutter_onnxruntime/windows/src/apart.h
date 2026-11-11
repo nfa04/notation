@@ -157,11 +157,8 @@ public:
   static constexpr UINT kMessage = WM_APP + 0x4f52;
 
   ScreenThread(flutter::PluginRegistrarWindows *registrar) : registrar_(registrar) {
-    flutter::FlutterView *view = registrar->GetView();
-    if (view == nullptr) return;
-    HWND child = view->GetNativeWindow();
-    window_ = child == nullptr ? nullptr : GetAncestor(child, GA_ROOT);
-    if (window_ == nullptr) return;
+    view_ = registrar->GetView();
+    if (view_ == nullptr || view_->GetNativeWindow() == nullptr) return;
     delegate_ = registrar->RegisterTopLevelWindowProcDelegate([this](HWND, UINT message, WPARAM, LPARAM) -> std::optional<LRESULT> {
       if (message != kMessage) return std::nullopt;
       Drain();
@@ -181,7 +178,11 @@ public:
       std::lock_guard<std::mutex> lock(mutex_);
       queue_.push_back(std::move(work));
     }
-    PostMessage(window_, kMessage, 0, 0);
+    // (the window is looked for each time: while the plugin is registered the view may not be in the window of the app yet, and a
+    // message posted to the view alone never reaches the delegate, which is for the top window)
+    HWND child = view_->GetNativeWindow();
+    HWND top = child == nullptr ? nullptr : GetAncestor(child, GA_ROOT);
+    if (top != nullptr) PostMessage(top, kMessage, 0, 0);
   }
 
 private:
@@ -199,7 +200,7 @@ private:
   }
 
   flutter::PluginRegistrarWindows *registrar_;
-  HWND window_ = nullptr;
+  flutter::FlutterView *view_ = nullptr;
   int delegate_ = -1;
   std::mutex mutex_;
   std::deque<std::function<void()>> queue_;
