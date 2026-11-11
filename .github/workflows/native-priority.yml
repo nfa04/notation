@@ -60,6 +60,9 @@ jobs:
           xvfb-run -a flutter test integration_test/session_priority_test.dart -d linux 2>&1 | tee test.log || true
           ! grep -q "❌" test.log
           [ "$(grep -c "^.*✅ a " test.log)" -ge 2 ]
+      - name: Let the test read the threads (the sandbox of the debug app does not allow starting ps)
+        if: matrix.os == 'macos-latest'
+        run: /usr/libexec/PlistBuddy -c "Set :com.apple.security.app-sandbox false" macos/Runner/DebugProfile.entitlements
       - name: Test
         if: matrix.os != 'ubuntu-latest'
         run: flutter test integration_test/session_priority_test.dart -d ${{ matrix.device }}

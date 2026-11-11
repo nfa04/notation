@@ -133,6 +133,10 @@ void main() {
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 300));
         stamps.clear();
+        // a window nobody sees (a runner with no screen) may make no frames at all, even with nothing running: nothing to judge then
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        final quiet = stamps.length;
+        stamps.clear();
         final watch = Stopwatch()..start();
         for (var i = 0; i < 12; i++) {
           await runOnce(session, 256);
@@ -144,6 +148,10 @@ void main() {
           longest = longest < stamps[i] - stamps[i - 1] ? stamps[i] - stamps[i - 1] : longest;
         }
         debugPrint('12 runs took ${watch.elapsedMilliseconds} ms; ${stamps.length} frames; the longest wait between two: ${longest ~/ 1000} ms');
+        if (quiet < 4) {
+          debugPrint('only $quiet frames in half a second with nothing running; the window is not drawn, so the frames cannot be judged here');
+          return;
+        }
         expect(stamps.length, greaterThan(3), reason: 'frames kept being made while the model ran');
         // (a single call holding up the screen would be a gap of as long as that call; a few frames' time is what a busy machine costs)
         expect(longest ~/ 1000, lessThan(250));
