@@ -108,6 +108,9 @@ class InkPrefetcher extends ChangeNotifier {
   /// How many clusters were read (text or formula) since this started.
   int reads = 0;
 
+  /// Told how many clusters are still to be read, when a burst starts and after each piece (0 when all is read).
+  void Function(int waiting)? onPending;
+
   /// Whether reading waits (what was read at an earlier time is being loaded, see [seed]); [release] lets it go on.
   bool holding = false;
 
@@ -253,10 +256,13 @@ class InkPrefetcher extends ChangeNotifier {
       _forgetPicked();
       _useKept(clusters);
       var done = 0;
-      for (final c in _todo(clusters)) {
+      final todo = _todo(clusters);
+      onPending?.call(todo.length);
+      for (final c in todo) {
         if (_disposed || _dirty || !canRun() || done >= (_rows ? math.min(perBurst, 4) : perBurst)) break;
         await exclusive(() => _read(c));
         done++;
+        if (!_disposed) onPending?.call(todo.length - done);
         if (pause > Duration.zero) await Future<void>.delayed(pause);
       }
     } finally {

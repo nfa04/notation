@@ -637,6 +637,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// Whether the refresh after readings arrived is due at the next frame (see [_inkProgressed]).
   bool _inkRefreshDue = false;
 
+  /// Whether the person hid the chip that says the writing is being read.
+  bool _inkChipHidden = false;
+
   /// The dictionaries changed (a word added, a language on or off): every block is checked again. A method of the state, not of an
   /// extension, so that it is the same listener when it is taken off again.
   void _inkDictionaryChanged() {
@@ -2223,6 +2226,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
                   ..._toolsOverSurface(),
                   Positioned(left: 8, top: 8, child: _buildZoomControls()),
                   if (_echoes.isNotEmpty && !_echoHidden) Positioned(left: 8, bottom: 8, right: 56, child: _echoChip()),
+                  if (!_inkChipHidden) Positioned(right: 56, top: 8, child: _inkProgressChip()),
                   if (!_infinite)
                   Positioned(
                     right: 0,

@@ -72,6 +72,9 @@ class NoteInkReader {
     required this.onProgress,
   });
 
+  /// How many blocks of writing are still to be read (for the chip that says the writing is being read).
+  final pending = ValueNotifier<int>(0);
+
   /// The reader of the background work; null until something asked for it.
   InkPrefetcher? prefetcher;
 
@@ -119,6 +122,7 @@ class NoteInkReader {
         pause: idle < const Duration(seconds: 1) ? Duration.zero : const Duration(milliseconds: 250),
       )
         ..holding = _loadingKept
+        ..onPending = ((n) => pending.value = n)
         ..addListener(_progressed);
 
   /// What the handwriting of this note said when it was read before is there again, before anything asks for it: a selection is
@@ -226,5 +230,6 @@ class NoteInkReader {
     _indexTimer?.cancel();
     unawaited(saveReadings());
     prefetcher?.dispose();
+    pending.dispose();
   }
 }

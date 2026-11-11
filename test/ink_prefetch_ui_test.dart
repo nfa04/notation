@@ -128,4 +128,32 @@ void main() {
     expect(b, contains('not installed'));
     expect(off.calls, isEmpty);
   });
+
+  testWidgets('a chip says that the writing is being read, and goes when it is read (or is sent away)', (tester) async {
+    final text = FakeReader((s) => 'slow', delay: const Duration(milliseconds: 600));
+    await open(tester, text: text);
+    expect(find.byKey(const ValueKey('ink-progress')), findsNothing, reason: 'nothing asked for the reading yet');
+    final editor = tester.state(find.byType(FixedPageNoteEditor)) as InkPreparer;
+    await tester.runAsync(() => editor.prepareInk(text: true, math: false));
+    await letRead(tester, 200); // (the reading has begun, it is not over)
+    expect(find.text('Reading the handwriting: 1 left'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('ink-progress-hide')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('ink-progress')), findsNothing, reason: 'sent away');
+    await letRead(tester, 1200);
+    expect(text.calls, hasLength(1));
+    await closeEditor(tester);
+  });
+
+  testWidgets('the chip is gone when everything is read', (tester) async {
+    final text = FakeReader((s) => 'fast');
+    await open(tester, text: text);
+    final editor = tester.state(find.byType(FixedPageNoteEditor)) as InkPreparer;
+    await tester.runAsync(() => editor.prepareInk(text: true, math: false));
+    await letRead(tester, 500);
+    expect(text.calls, hasLength(1));
+    expect(find.byKey(const ValueKey('ink-progress')), findsNothing);
+    await closeEditor(tester);
+  });
 }

@@ -3202,6 +3202,8 @@ const germanTexts = <String, String>{
   'The microphone is not allowed (see the settings of the system)': 'Das Mikrofon ist nicht erlaubt (siehe Systemeinstellungen)',
   'Could not start recording: {error}': 'Aufnahme konnte nicht gestartet werden: {error}',
   'Nothing was recorded': 'Es wurde nichts aufgenommen',
+  'Reading the handwriting: 1 left': 'Handschrift wird gelesen: noch 1',
+  'Reading the handwriting: {n} left': 'Handschrift wird gelesen: noch {n}',
   'Kept the sound with 1 line tied to its moment': 'Ton gespeichert, mit 1 Zeile an ihren Moment geknüpft',
   'Kept the sound with {n} lines tied to their moments': 'Ton gespeichert, mit {n} Zeilen an ihre Momente geknüpft',
   'Lecture {date}': 'Vorlesung {date}',
