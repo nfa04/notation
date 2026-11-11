@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # every branch (not tags: those are releases, see release.yml)
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 # one run per branch: a newer push cancels the one before it
@@ -15,6 +16,8 @@ env:
 
 jobs:
   analyze:
+    # (a pull request from a branch of this repository has had its run when the branch was pushed: only one from a fork runs here)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +37,8 @@ jobs:
         working-directory: pdf_overlay
 
   test:
+    # (a pull request from a branch of this repository has had its run when the branch was pushed: only one from a fork runs here)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +60,8 @@ jobs:
           LD_LIBRARY_PATH: build/linux/x64/debug/bundle/lib
 
   android:
+    # (a pull request from a branch of this repository has had its run when the branch was pushed: only one from a fork runs here)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
