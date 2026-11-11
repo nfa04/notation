@@ -18,10 +18,49 @@ class InkTextLine {
   /// In the units of the page, counted down from its top (like the strokes).
   final Rect box;
 
-  const InkTextLine(this.text, this.box);
+  /// The words as they are written, left to right (the strokes that lie together, split at the gaps between words): what the
+  /// words of [text] are laid over, when there are as many. Empty where it is not known.
+  final List<InkWordBox> words;
+
+  const InkTextLine(this.text, this.box, {this.words = const []});
 
   @override
   String toString() => 'InkTextLine($text, $box)';
+}
+
+/// The strokes of one written word and the box round them.
+class InkWordBox {
+  final Rect box;
+  final List<DrawingStroke> strokes;
+  const InkWordBox(this.box, this.strokes);
+}
+
+/// Splits the [strokes] of one line into the words they are written as: strokes whose boxes touch or lie closer than [gap] (in
+/// the units of the page) in the direction of the line belong to one word (a fraction, with its bar, is one).
+List<InkWordBox> splitIntoWords(List<DrawingStroke> strokes, double gap) {
+  final boxes = {for (final s in strokes) s: strokeBounds(s)};
+  final sorted = [...strokes]..sort((a, b) => boxes[a]!.left.compareTo(boxes[b]!.left));
+  final out = <InkWordBox>[];
+  for (final s in sorted) {
+    final b = boxes[s]!;
+    if (out.isNotEmpty && b.left - out.last.box.right <= gap) {
+      final last = out.removeLast();
+      out.add(InkWordBox(last.box.expandToInclude(b), [...last.strokes, s]));
+    } else {
+      out.add(InkWordBox(b, [s]));
+    }
+  }
+  return out;
+}
+
+/// The lines of writing of [cluster] as the reader was given them, each with the words it is written in (see [splitIntoWords]).
+List<({Rect box, List<InkWordBox> words})> inkWrittenLines(InkCluster cluster) {
+  final written = groupIntoLines([for (final s in cluster.strokes) if (s.color.a > 0.9 && Brushes.writes(s.brush)) s]);
+  if (written.isEmpty) return const [];
+  final boxes = [for (final line in written) line.map((c) => c.bounds).reduce((a, b) => a.expandToInclude(b))];
+  final heights = [for (final b in boxes) b.height]..sort();
+  final usual = heights[heights.length ~/ 2];
+  return [for (var i = 0; i < written.length; i++) (box: boxes[i], words: splitIntoWords([for (final c in written[i]) ...c.strokes], usual * 0.3))];
 }
 
 /// Puts the lines of [text] (what was read of [cluster]: one line to a line of writing, a space between words) where the lines of
@@ -52,7 +91,11 @@ List<InkTextLine> inkTextLines(InkCluster cluster, String text) {
   return [
     for (var i = 0; i < said.length; i++)
       if (said[i].isNotEmpty)
-        InkTextLine(said[i], boxes[i].height >= usual * 0.8 ? boxes[i] : Rect.fromLTRB(boxes[i].left, boxes[i].bottom - usual * 0.8, boxes[i].right, boxes[i].bottom)),
+        InkTextLine(
+          said[i],
+          boxes[i].height >= usual * 0.8 ? boxes[i] : Rect.fromLTRB(boxes[i].left, boxes[i].bottom - usual * 0.8, boxes[i].right, boxes[i].bottom),
+          words: written.isEmpty ? const [] : splitIntoWords([for (final c in written[i]) ...c.strokes], usual * 0.3),
+        ),
   ];
 }
 

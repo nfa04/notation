@@ -45,16 +45,66 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
               rect: m.rect.inflate(2),
               child: IgnorePointer(
                 ignoring: _mode == CanvasInteractionMode.draw, // (the pen draws there; tap it in another mode)
-                child: GestureDetector(
-                  key: ValueKey(m.correct ? 'ink-word-${m.word}' : 'ink-spell-${m.word}'),
-                  behavior: HitTestBehavior.translucent,
-                  onTapUp: (d) => m.correct ? _wordMenu(m, d.globalPosition) : _spellMenu(m, d.globalPosition),
-                  // (yellow: the reader was not sure of the word, so it may be what was read that is wrong; red: not in the dictionary)
-                  child: CustomPaint(painter: m.unsure ? const _SquigglePainter(Colors.amber) : m.correct ? const _CheckedPainter() : const _SquigglePainter(Colors.red)),
+                child: Builder(
+                  builder: (box) => GestureDetector(
+                    key: ValueKey(m.correct ? 'ink-word-${m.word}' : 'ink-spell-${m.word}'),
+                    behavior: HitTestBehavior.translucent,
+                    onTapUp: (d) {
+                      if (_mode == CanvasInteractionMode.selectText) _selectWordStrokes(m);
+                      // the menu opens just under the word (as it is on the screen, zoom included), not over it
+                      var at = d.globalPosition;
+                      final render = box.findRenderObject();
+                      if (render is RenderBox && render.hasSize) at = Offset(at.dx, render.localToGlobal(Offset(0, render.size.height)).dy + 4);
+                      if (m.correct) {
+                        _wordMenu(m, at);
+                      } else {
+                        _spellMenu(m, at);
+                      }
+                    },
+                    // (yellow: the reader was not sure of the word, so it may be what was read that is wrong; red: not in the dictionary)
+                    child: CustomPaint(painter: m.unsure ? const _SquigglePainter(Colors.amber) : m.correct ? const _CheckedPainter() : const _SquigglePainter(Colors.red)),
+                  ),
                 ),
               ),
             ),
       ];
+
+  /// Selects every stroke of a tapped word (those of its block that lie within the word's box), so the word can be moved as one.
+  void _selectWordStrokes(InkMisspelling m) {
+    if (m.strokes.isNotEmpty) {
+      final own = [for (final s in m.strokes) if (_layers.editable(s)) s];
+      if (own.isEmpty) return;
+      setState(() {
+        _clearSelection();
+        _activeSelectedBox = null;
+        _selectedImage = null;
+        _selection = own;
+        _selectedStrokePage = m.page;
+      });
+      return;
+    }
+    InkCluster? block;
+    for (final r in _ink?.readings() ?? const <({InkCluster block, String? text, String? latex})>[]) {
+      if (r.block.page == m.page && r.block.key == m.key) {
+        block = r.block;
+        break;
+      }
+    }
+    if (block == null) return;
+    final box = m.rect.inflate(2);
+    final strokes = [
+      for (final s in block.strokes)
+        if (s.points.isNotEmpty && _layers.editable(s) && box.contains(strokeBounds(s).center)) s,
+    ];
+    if (strokes.isEmpty) return;
+    setState(() {
+      _clearSelection();
+      _activeSelectedBox = null;
+      _selectedImage = null;
+      _selection = strokes;
+      _selectedStrokePage = m.page;
+    });
+  }
 
   /// A word that is spelled right, tapped to see what it was read as: copy it, or see that it is not there at all.
   Future<void> _wordMenu(InkMisspelling m, Offset at) async {
@@ -101,7 +151,7 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
   }
 }
 
-/// A wavy red line along the foot of a misspelled word.
+/// A wavy line along the foot of a word: red for a misspelled one, yellow for one the reader was not sure of.
 class _SquigglePainter extends CustomPainter {
   final Color color;
   const _SquigglePainter(this.color);
