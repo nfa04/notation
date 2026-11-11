@@ -62,13 +62,16 @@ Future<List<int>?> threadPriorities() async {
     return out;
   }
   if (Platform.isMacOS) {
-    final r = await Process.run('ps', ['-M', '-o', 'pri', '-p', '$pid']);
+    // (the plain `ps -M` lists a line per thread: "USER PID TT %CPU STAT PRI STIME UTIME COMMAND", the first line with the
+    // process's own columns in front; the priority is the number before the two times, with a letter after it at times: "31T")
+    final r = await Process.run('ps', ['-M', '-p', '$pid']);
     if (r.exitCode != 0) return null;
-    return [
+    final found = [
       for (final line in r.stdout.toString().split('\n').skip(1))
-        // (the column can have a letter after the number, "31T")
-        if (RegExp(r'^\s*(\d+)').firstMatch(line) case final m?) int.parse(m.group(1)!),
+        if (RegExp(r'(\d+)[A-Za-z]*\s+\d+:\d\d\.\d\d\s+\d+:\d\d\.\d\d').firstMatch(line) case final m?) int.parse(m.group(1)!),
     ];
+    if (found.isEmpty) debugPrint('ps -M gave nothing that could be read:\n${r.stdout}');
+    return found;
   }
   return null;
 }
