@@ -83,12 +83,19 @@ List<InkMisspelling> checkedInk(Iterable<({InkCluster block, String? text})> blo
       // when the line has as many written words as the text has words (a stretch of maths is one), each word is laid over the
       // strokes it is written with; otherwise it is placed by its share of the line
       final tokens = [for (final t in _token.allMatches(line.text)) (start: t.start, end: t.end)];
-      final exact = line.words.isNotEmpty && line.words.length == tokens.length;
+      // the reader says how many words there are: when it is not what the gaps made of the writing, the line is cut again at its
+      // widest gaps into that many (not where there is maths, whose signs have gaps of their own)
+      var written = line.words;
+      if (written.isNotEmpty && written.length != tokens.length && !line.text.contains(r'$')) {
+        final again = splitIntoWordCount([for (final w in written) ...w.strokes], tokens.length);
+        if (again != null) written = again;
+      }
+      final exact = written.isNotEmpty && written.length == tokens.length;
       // (otherwise the words of the text are matched to the written ones, in order, by where each word should start and where the
       // gaps between the written words are)
-      final groups = exact || line.words.length < tokens.length || tokens.isEmpty
+      final groups = exact || written.length < tokens.length || tokens.isEmpty
           ? null
-          : _groupsOf([for (final t in tokens) line.box.left + line.box.width * before(t.start) / total], [for (final w in line.words) w.box], line.box.height);
+          : _groupsOf([for (final t in tokens) line.box.left + line.box.width * before(t.start) / total], [for (final w in written) w.box], line.box.height);
 
       for (final (r, right) in checker.checked(masked)) {
         if (r.end - r.start < 3) continue;
@@ -99,34 +106,34 @@ List<InkMisspelling> checkedInk(Iterable<({InkCluster block, String? text})> blo
         if (exact) {
           final i = tokens.indexWhere((t) => r.start >= t.start && r.start < t.end);
           if (i >= 0) {
-            final t = tokens[i], w = line.words[i].box;
+            final t = tokens[i], w = written[i].box;
             own = w;
             final span = before(t.end) - before(t.start);
             if (span > 0) {
               left = w.left + w.width * (before(r.start) - before(t.start)) / span;
               rightEdge = w.left + w.width * (before(math.min(r.end, t.end)) - before(t.start)) / span;
               // (the whole word, but for a mark of punctuation: all of its strokes)
-              if (r.start - t.start <= 1 && t.end - r.end <= 1) strokes = line.words[i].strokes;
+              if (r.start - t.start <= 1 && t.end - r.end <= 1) strokes = written[i].strokes;
             }
           }
         }
         if (!exact && groups != null) {
           final i = tokens.indexWhere((t) => r.start >= t.start && r.start < t.end);
           if (i >= 0 && groups[i + 1] > groups[i]) {
-            final t = tokens[i], first = line.words[groups[i]].box, last = line.words[groups[i + 1] - 1].box;
+            final t = tokens[i], first = written[groups[i]].box, last = written[groups[i + 1] - 1].box;
             own = first.expandToInclude(last);
             final span = before(t.end) - before(t.start), width = last.right - first.left;
             if (span > 0) {
               left = first.left + width * (before(r.start) - before(t.start)) / span;
               rightEdge = first.left + width * (before(math.min(r.end, t.end)) - before(t.start)) / span;
-              if (r.start - t.start <= 1 && t.end - r.end <= 1) strokes = [for (var w = groups[i]; w < groups[i + 1]; w++) ...line.words[w].strokes];
+              if (r.start - t.start <= 1 && t.end - r.end <= 1) strokes = [for (var w = groups[i]; w < groups[i + 1]; w++) ...written[w].strokes];
             }
           }
         }
         // the foot of the mark is the foot of the writing under it, not of the whole line (a stray stroke or a long descender
         // elsewhere in the line would pull it down)
         var top = line.box.top, bottom = line.box.bottom;
-        final under = own != null ? [own] : [for (final w in line.words) if (w.box.right > left && w.box.left < rightEdge) w.box];
+        final under = own != null ? [own] : [for (final w in written) if (w.box.right > left && w.box.left < rightEdge) w.box];
         if (under.isNotEmpty) {
           top = under.map((w) => w.top).reduce(math.min);
           bottom = under.map((w) => w.bottom).reduce(math.max);
@@ -193,7 +200,7 @@ List<int> _groupsOf(List<double> starts, List<Rect> boxes, double height) {
 /// that is [inkTextLines]; where it has not (the reader wraps and joins lines as it likes) the words of the whole text are matched
 /// to the written words of the whole block, in order, whatever line either is on.
 List<InkTextLine> _linesOf(InkCluster block, String text) {
-  final texts = text.split('\n').map((t) => t.trim()).toList();
+  final texts = plainI(text).split('\n').map((t) => t.trim()).toList();
   final written = inkWrittenLines(block);
   if (written.isEmpty) return inkTextLines(block, text);
   if (written.length == texts.length) return inkTextLines(block, text);

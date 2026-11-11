@@ -53,6 +53,42 @@ List<InkWordBox> splitIntoWords(List<DrawingStroke> strokes, double gap) {
   return out;
 }
 
+/// The [strokes] of one line cut into exactly [count] words, at the widest gaps between them in the direction of the line (the
+/// reader says how many words there are, so the gaps need no threshold). Null when the strokes do not fall apart into that many.
+List<InkWordBox>? splitIntoWordCount(List<DrawingStroke> strokes, int count) {
+  if (count < 1 || strokes.length < count) return null;
+  final boxes = {for (final s in strokes) s: strokeBounds(s)};
+  final sorted = [...strokes]..sort((a, b) => boxes[a]!.left.compareTo(boxes[b]!.left));
+  // the gap before each stroke: how far its left edge is from the right edge of everything before it
+  final gaps = <({int at, double size})>[];
+  var reach = boxes[sorted.first]!.right;
+  for (var i = 1; i < sorted.length; i++) {
+    final b = boxes[sorted[i]]!;
+    gaps.add((at: i, size: b.left - reach));
+    reach = math.max(reach, b.right);
+  }
+  if (gaps.length < count - 1) return null;
+  final widest = [...gaps]..sort((a, b) => b.size.compareTo(a.size));
+  final cuts = widest.take(count - 1).toList();
+  // (a cut where the strokes touch or overlap is no gap between words)
+  if (cuts.any((g) => g.size <= 0)) return null;
+  // (and the gaps that are cut are clearly wider than those that are not: otherwise the cut is a guess)
+  final rest = widest.skip(count - 1);
+  if (cuts.isNotEmpty && rest.isNotEmpty && cuts.last.size < rest.first.size * 1.4) return null;
+  final at = {for (final c in cuts) c.at};
+  final out = <InkWordBox>[];
+  var current = <DrawingStroke>[];
+  for (var i = 0; i < sorted.length; i++) {
+    if (at.contains(i) && current.isNotEmpty) {
+      out.add(InkWordBox(current.map((s) => boxes[s]!).reduce((a, b) => a.expandToInclude(b)), current));
+      current = [];
+    }
+    current.add(sorted[i]);
+  }
+  out.add(InkWordBox(current.map((s) => boxes[s]!).reduce((a, b) => a.expandToInclude(b)), current));
+  return out;
+}
+
 /// The lines of writing of [cluster] as the reader was given them, each with the words it is written in (see [splitIntoWords]).
 List<({Rect box, List<InkWordBox> words})> inkWrittenLines(InkCluster cluster) {
   final written = groupIntoLines([for (final s in cluster.strokes) if (s.color.a > 0.9 && Brushes.writes(s.brush)) s]);
@@ -68,7 +104,7 @@ List<({Rect box, List<InkWordBox> words})> inkWrittenLines(InkCluster cluster) {
 /// When the numbers do not match, the lines of text are matched to the lines of writing by length (see [alignLines]): the reading
 /// is kept trimmed, so an unread first or last line is missing, and a piece the model wrote over several lines has more.
 List<InkTextLine> inkTextLines(InkCluster cluster, String text) {
-  final texts = text.split('\n').map((t) => t.trim()).toList();
+  final texts = plainI(text).split('\n').map((t) => t.trim()).toList();
   final written = groupIntoLines([for (final s in cluster.strokes) if (s.color.a > 0.9 && Brushes.writes(s.brush)) s]);
   final List<Rect> boxes;
   final List<String> said;
@@ -312,3 +348,7 @@ class PdfInkText {
     return lines;
   }
 }
+
+/// [text] with the i that carries a stroke instead of a dot (read as ì, í, î or ï: a hurried dot is a tick) written as a plain i. The
+/// reader takes the tick for an accent; a word with an accent on its i is rarely written by hand in the languages the notes are in.
+String plainI(String text) => text.replaceAllMapped(RegExp('[ìíîïĩ]|[ÌÍÎÏĨ]'), (m) => m[0]!.toLowerCase() == m[0] ? 'i' : 'I');

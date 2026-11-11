@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/services.dart';
 
+import '../export/pdf_ink_text.dart' show plainI;
 import '../llm/model_files.dart';
 import '../models/canvas_models.dart';
 import '../web/web_files.dart';
@@ -119,7 +120,7 @@ class GlmOcrService extends ModelFilesService {
     return [
       for (final r in tokens)
         () {
-          final text = vocabulary.decode(r.tokens);
+          final text = plainI(vocabulary.decode(r.tokens));
           return isWriting(text, r.confidence) ? (text: text, unsure: vocabulary.unsureWords(r.tokens, r.logProbs, unsureBelow)) : (text: '', unsure: const <String>[]);
         }(),
     ];

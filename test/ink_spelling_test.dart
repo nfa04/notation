@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes/export/pdf_ink_text.dart' show plainI;
 import 'package:notes/ink/ink_clusters.dart';
 import 'package:notes/ink/ink_grouping.dart' show strokeBounds;
 import 'package:notes/models/canvas_models.dart';
@@ -92,5 +93,11 @@ void main() {
     final top = misspelledInk([(block: block, text: 'the hapy dog try cat dog')], checker);
     expect(top.single.rect.top, closeTo(100, 3));
     expect(top.single.rect.left, closeTo(200, 3));
+  });
+
+  test('an i with a tick for its dot (read as í) is the plain letter, not a misspelling', () {
+    final marks = misspelledInk([(block: cluster, text: 'the cat\nthe dog')], checker);
+    expect(marks, isEmpty);
+    expect(plainI('archímedischen Prìnzip Ìn'), 'archimedischen Prinzip In');
   });
 }
