@@ -15,7 +15,10 @@ class InkMisspelling {
   /// In the units of the page: the line of writing it is on, narrowed to the word.
   final Rect rect;
 
-  const InkMisspelling(this.page, this.key, this.word, this.rect);
+  /// Whether the word is spelled right: such a word is only marked when the person asks to see what was read (to check it was taken for writing).
+  final bool correct;
+
+  const InkMisspelling(this.page, this.key, this.word, this.rect, {this.correct = false});
 
   @override
   String toString() => 'InkMisspelling($word, $rect)';
@@ -29,28 +32,52 @@ double _width(String c) {
   return 1;
 }
 
-/// The words of the readings [blocks] (what was read of each block of writing, null where it was not read yet) that [checker] does not
-/// know, with where they are. A word is placed by its share of the line, so the box is near the word, not exact. Words of up to
+final _maths = RegExp(r'\$\$?[^$]*\$?\$');
+final _command = RegExp(r'\\[a-zA-Z]+|[{}^_$\\]');
+
+/// [text] with the stretches of LaTeX between dollar signs blanked out (as long as they were, so that places in it stay where they
+/// are), and how wide each place is written: a stretch of LaTeX as wide as the signs it stands for (`\frac{1}{2}` is three).
+(String, List<double>) _withoutMaths(String text) {
+  final weights = [for (var i = 0; i < text.length; i++) _width(text[i])];
+  final masked = text.replaceAllMapped(_maths, (m) {
+    final shown = m[0]!.replaceAll(_command, '').replaceAll(' ', '').length;
+    for (var i = m.start; i < m.end; i++) {
+      weights[i] = shown / (m.end - m.start);
+    }
+    return ' ' * (m.end - m.start);
+  });
+  return (masked, weights);
+}
+
+/// Every word of the readings [blocks] (what was read of each block of writing, null where it was not read yet) that [checker] checks (the ones it does not
+/// know have [InkMisspelling.correct] false), with where they are. A word is placed by its share of the line, so the box is near the word, not exact. Words of up to
 /// two letters are left alone: handwriting is misread in them too often to say anything.
-List<InkMisspelling> misspelledInk(Iterable<({InkCluster block, String? text})> blocks, SpellChecker checker) {
+List<InkMisspelling> checkedInk(Iterable<({InkCluster block, String? text})> blocks, SpellChecker checker) {
   if (!checker.active) return const [];
   final out = <InkMisspelling>[];
   for (final b in blocks) {
     final text = b.text;
     if (text == null || text.trim().isEmpty) continue;
     for (final line in inkTextLines(b.block, text)) {
-      final weights = [for (var i = 0; i < line.text.length; i++) _width(line.text[i])];
+      // the maths the reader wrote as LaTeX ($...$) is not words: it is left out, and takes as much of the line as it has signs
+      final (masked, weights) = _withoutMaths(line.text);
       final total = weights.fold(0.0, (a, b) => a + b);
       if (total <= 0) continue;
       double before(int unit) => weights.take(unit).fold(0.0, (a, b) => a + b);
 
-      for (final r in checker.misspellings(line.text)) {
+      for (final (r, right) in checker.checked(masked)) {
         if (r.end - r.start < 3) continue;
         final left = line.box.left + line.box.width * before(r.start) / total;
-        final right = line.box.left + line.box.width * before(r.end) / total;
-        out.add(InkMisspelling(b.block.page, b.block.key, line.text.substring(r.start, r.end), Rect.fromLTRB(left, line.box.top, right, line.box.bottom)));
+        final rightEdge = line.box.left + line.box.width * before(r.end) / total;
+        out.add(InkMisspelling(b.block.page, b.block.key, line.text.substring(r.start, r.end), Rect.fromLTRB(left, line.box.top, rightEdge, line.box.bottom), correct: right));
       }
     }
   }
   return out;
 }
+
+/// The words of [checkedInk] that are not spelled right.
+List<InkMisspelling> misspelledInk(Iterable<({InkCluster block, String? text})> blocks, SpellChecker checker) => [
+      for (final m in checkedInk(blocks, checker))
+        if (!m.correct) m,
+    ];

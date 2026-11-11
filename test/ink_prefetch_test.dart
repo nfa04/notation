@@ -166,6 +166,22 @@ void main() {
       expect(p.reads, 2);
     });
 
+    test('the blocks that come first by [order] are read first, and a lone bar is taken as read without the reader', () async {
+      page = {
+        0: [...word('a', 100, 100)],
+        3: [...word('b', 100, 100), DrawingStroke(id: 'bar', color: Colors.black, width: 3, points: [const Offset(100, 600), const Offset(160, 601)])],
+      };
+      prefetch = InkPrefetcher(strokes: () => page, canRun: () => quiet, idle: const Duration(milliseconds: 40), order: (c) => (c.page - 3).abs())
+        ..configure(text: text);
+      addTearDown(prefetch.dispose);
+      await until(() => text.calls.length >= 2);
+      expect(text.calls.first, everyElement(startsWith('b')), reason: 'the page in view (3) first');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(text.calls, hasLength(2), reason: 'the bar is not read');
+      expect(prefetch.waiting, 0);
+      expect(prefetch.readings().where((r) => r.block.ids.contains('bar')).single.text, '');
+    });
+
     test('only what changed is read again', () async {
       final p = make(t: text);
       await until(() => text.calls.length >= 2);
@@ -175,6 +191,25 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(text.calls, hasLength(3));
       expect(text.calls.last, contains('new'));
+    });
+
+    test('a block the text reader read as nothing but formulas is given as the formula reader read it; words with a formula stay', () async {
+      final t = FakeReader((s) => s.first.id.startsWith('a') ? r'$x ^ 2 = 4$' : r'the speed $v$ is');
+      final p = make(t: t, m: maths);
+      await until(() => maths.calls.isNotEmpty && p.lookupText(page[0]!.where((s) => s.id.startsWith('a'))) != null);
+      await until(() => p.lookupText(page[0]!.where((s) => s.id.startsWith('a'))) == r'$\frac{a}{b}$');
+      expect(p.lookupText(page[0]!.where((s) => s.id.startsWith('a'))), r'$\frac{a}{b}$');
+      await until(() => p.lookupText(page[0]!.where((s) => s.id.startsWith('b'))) != null);
+      expect(p.lookupText(page[0]!.where((s) => s.id.startsWith('b'))), r'the speed $v$ is');
+      expect(p.readings().map((r) => r.text), contains(r'$\frac{a}{b}$'));
+    });
+
+    test('onlyMaths: formulas and punctuation only', () {
+      expect(onlyMaths(r'$x$'), isTrue);
+      expect(onlyMaths(r'$$x = 1$$'), isTrue);
+      expect(onlyMaths(r'$a$, $b$'), isTrue);
+      expect(onlyMaths(r'so $x$'), isFalse);
+      expect(onlyMaths('x = 1'), isFalse);
     });
 
     test('nothing is read while the person is drawing, and it is read once they stop', () async {

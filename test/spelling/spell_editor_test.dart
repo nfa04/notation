@@ -144,6 +144,7 @@ void main() {
     expect(find.textContaining('Download about 1 MB'), findsOneWidget);
 
     await tester.enterText(find.byKey(const ValueKey('spell-new-word')), 'Zorblax');
+    await tester.ensureVisible(find.byKey(const ValueKey('spell-add-word')));
     await tester.tap(find.byKey(const ValueKey('spell-add-word')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('spell-word-Zorblax')), findsOneWidget);

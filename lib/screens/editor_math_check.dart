@@ -21,10 +21,11 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
 
   List<MathMark> _currentMarks() {
     final ink = _ink;
+    final read = ink?.readings() ?? const [];
     final marks = _marker.mark([
-      for (final r in ink?.readings() ?? const []) (page: r.block.page, key: r.block.key, rect: r.block.bounds, latex: r.latex),
+      for (final r in read) (page: r.block.page, key: r.block.key, rect: r.block.bounds, latex: r.latex),
     ], others: {
-      for (final r in ink?.readings() ?? const []) r.block.key: ink!.othersOf(r.block.key),
+      for (final r in read) r.block.key: ink!.othersOf(r.block.key),
     });
     // a line that is marked as a mistake is read once more, another way, in the background: the writing may have been misread
     for (final m in marks) {
@@ -353,9 +354,12 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
       ),
     );
     later?.cancel();
-    for (final e in edits) {
-      e.dispose();
-    }
+    // The sheet is still sliding out (a swipe down returns early) and its fields read these, so they go once it is gone.
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      for (final e in edits) {
+        e.dispose();
+      }
+    });
   }
 
   /// Checks the maths in the selection now (the button over a selection), whether or not the tool that does it

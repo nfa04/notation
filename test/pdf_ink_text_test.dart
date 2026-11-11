@@ -59,15 +59,46 @@ void main() {
       expect(lines[1].box.top, 140);
     });
 
-    test('when the reading has other lines than the writing, the block is cut into as many equal rows', () {
+    test('when the reading has more lines than the writing, the neighbouring ones that fit by length are joined', () {
       final cluster = clusterStrokes(0, _twoLines()).single;
-      final lines = inkTextLines(cluster, 'one\ntwo\nthree');
-      expect(lines, hasLength(3));
-      final height = cluster.bounds.height / 3;
-      for (var i = 0; i < 3; i++) {
-        expect(lines[i].box.top, closeTo(cluster.bounds.top + i * height, 0.01));
-        expect(lines[i].box.height, closeTo(height, 0.01));
-        expect(lines[i].box.width, cluster.bounds.width);
+      // (the first line of writing is almost twice as wide as the second)
+      final lines = inkTextLines(cluster, 'hello\nthere\nbye');
+      expect(lines.map((l) => l.text), ['hello there', 'bye']);
+      expect(lines[0].box.top, 100);
+      expect(lines[1].box.top, 140);
+    });
+
+    test('when the first or last line was not read (the reading is trimmed), the others stay where they are written', () {
+      final strokes = [...word('a', 100, 100, n: 3), ...word('b', 100, 140, n: 8), ...word('c', 100, 180, n: 3)];
+      final cluster = clusterStrokes(0, strokes).single;
+      final last = inkTextLines(cluster, 'ab\nabcdefgh');
+      expect(last.map((l) => l.box.top), [100, 140], reason: 'the third line is the one left out');
+      final first = inkTextLines(cluster, 'abcdefgh\nab');
+      expect(first.map((l) => l.box.top), [140, 180], reason: 'the first line is the one left out');
+    });
+
+    test('formulas are written as a person would copy them, not as LaTeX', () {
+      expect(plainText(r'so $\frac{1}{2} x^{2} \times 3$ is'), 'so 1/2x^2×3 is');
+      expect(plainText(r'$ v_{1}=m_{2}+2 0 $'), 'v_1=m_2+20');
+      expect(plainText('no maths  here'), 'no maths here');
+      // (lines the reader wrote for a real page, with a space after every sign)
+      expect(plainText(r'$ P \left( S _ { n } > \frac { n } { 2 } \right) = \sum_ { k > n } \binom { n } { k } $'), 'P(S_n>n/2)= sum _k>n binom(n,k)');
+      expect(plainText(r'$ \operatorname{V a r} \left( y_{n} \right)=q \left( 1-q \right)=\frac{1}{4}-\left( q-\frac{1}{2} \right)^{2} $'), 'Var(y_n)=q(1-q)=1/4-(q-1/2)^2');
+      expect(plainText(r'$ B e i $ $ p=1 / 2 $ is $ E ( y_{n} )=\frac{1}{2}+(c) \rightarrow $'), 'Bei p=1/2 is E(y_n)=1/2+(c) ->');
+    });
+
+    test('LaTeX without dollar signs is taken for a formula, and stray dollar signs are dropped', () {
+      expect(plainText(r'= E ( Y _ { n } ) - ( E _ { y _ { n } } ) ^ { 2 } = E ( y _ { n } ) \times ( 1 - E ( y _ { n } ) )'), '=E(Y_n)-(E_y_n)^2=E(y_n)×(1-E(y_n))');
+      expect(plainText(r'$ \rho ( S_{n}>\mathrm{0} )\leq 1 $ 0 < n \mid 2 $'), 'rho (S_n>0) <= 1 0<n|2');
+    });
+
+    test('each word has its share of the line, the space after it included, without gaps', () {
+      final words = placeWords('hello big world', 300);
+      expect(words.map((w) => w.text), ['hello ', 'big ', 'world']);
+      expect(words.first.left, 0);
+      expect(words.last.right, closeTo(300, 0.001));
+      for (var i = 1; i < words.length; i++) {
+        expect(words[i].left, closeTo(words[i - 1].right, 0.001));
       }
     });
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import '../llm/download.dart';
 import 'dart:io';
@@ -149,6 +150,7 @@ class DictionaryPack extends ModelFilesService {
 class SpellService extends ChangeNotifier {
   static const enabledKey = 'spell_languages';
   static const personalKey = 'spell_personal';
+  static const showCheckedKey = 'spell_show_checked';
 
   final Future<String?> Function(String key) _read;
   final Future<void> Function(String key, String value) _write;
@@ -168,6 +170,17 @@ class SpellService extends ChangeNotifier {
     for (final pack in packs) {
       pack.addListener(() => _packChanged(pack));
     }
+  }
+
+  bool _showChecked = false;
+
+  /// Whether the handwritten words that are spelled right are marked too (and can be tapped), to see that they were read as writing.
+  bool get showChecked => _showChecked;
+
+  Future<void> setShowChecked(bool on) async {
+    _showChecked = on;
+    await _write(showCheckedKey, on ? '1' : '0');
+    notifyListeners();
   }
 
   /// The languages that are on.
@@ -192,6 +205,7 @@ class SpellService extends ChangeNotifier {
         _enabled = {};
       }
     }
+    _showChecked = await _read(showCheckedKey) == '1';
     final words = await _read(personalKey);
     if (words != null) {
       try {
@@ -199,6 +213,12 @@ class SpellService extends ChangeNotifier {
       } catch (_) {}
     }
     await _refresh();
+    // a language that is on but whose files are not here (its download failed, or the settings came from another device or an
+    // earlier folder of the app) is fetched again: "on" checks, it does not quietly do nothing. It is read in once it is there
+    // (see _packChanged); without a connection it stays as it is until the next start.
+    for (final pack in packs) {
+      if (_enabled.contains(pack.language.id) && !pack.installed) unawaited(pack.install());
+    }
   }
 
   void _packChanged(DictionaryPack pack) {

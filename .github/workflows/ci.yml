@@ -47,10 +47,26 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      # The runner's own resolver sometimes cannot look up the ubuntu.com mirrors (packages.microsoft.com works at the same moment):
+      # "Temporary failure resolving 'archive.ubuntu.com'", and apt then retried for an hour. So the name is looked up first, and if that
+      # fails the network interface is pointed at public resolvers. apt gets short timeouts, a few tries, and the step a limit.
       - name: Linux build tools and libraries of the plugins
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev liblzma-dev
+          if ! getent hosts archive.ubuntu.com security.ubuntu.com; then
+            echo "the runner's resolver cannot find the ubuntu mirrors:"
+            resolvectl status 2>&1 | head -25 || cat /etc/resolv.conf
+            iface=$(ip route show default | awk '{print $5; exit}')
+            sudo resolvectl dns "$iface" 1.1.1.1 8.8.8.8 || echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
+            sleep 2
+            getent hosts archive.ubuntu.com security.ubuntu.com || echo "still no answer from the public resolvers"
+          fi
+          opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          for try in 1 2 3; do
+            sudo apt-get $opts update && sudo apt-get $opts install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev liblzma-dev && exit 0
+            echo "apt failed (try $try), waiting"; sleep 20
+          done
+          exit 1
       - run: flutter pub get
       # the plugins with native code (PDFium, SQLite, ONNX Runtime, QuickJS) are found in the bundle of a debug build
       - run: flutter build linux --debug

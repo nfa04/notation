@@ -15,6 +15,7 @@ import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:notes/screens/settings_screen.dart';
 import 'package:notes/style/app_theme.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'close_editor.dart';
 
 HandwritingService fakeService(Directory dir, {bool installed = true, List<List<int>>? tokens}) {
   if (installed) {
@@ -95,6 +96,7 @@ void main() {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       repo = NoteRepository(db);
       await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+      await repo.settings.set('pdf_handwriting_text', '0');
       id = await repo.createNote();
       final note = (await repo.loadNote(id))!;
       note.strokes[0] = [
@@ -132,6 +134,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('recognized-text')), findsNothing);
     expect(find.textContaining('hello world.'), findsWidgets); // the new text box
+    await closeEditor(tester);
   });
 
   testWidgets('a selected formula becomes LaTeX in a text box', (tester) async {
@@ -147,6 +150,7 @@ void main() {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       repo = NoteRepository(db);
       await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+      await repo.settings.set('pdf_handwriting_text', '0');
       id = await repo.createNote();
       final note = (await repo.loadNote(id))!;
       note.strokes[0] = [
@@ -187,6 +191,7 @@ void main() {
     await tester.tap(find.text('Add text box'));
     await tester.pumpAndSettle();
     expect(find.textContaining('E=mc'), findsWidgets); // in the dollar signs of a text box
+    await closeEditor(tester);
   });
 
   testWidgets('a recognized equation can be solved for a letter', (tester) async {
@@ -202,6 +207,7 @@ void main() {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       repo = NoteRepository(db);
       await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+      await repo.settings.set('pdf_handwriting_text', '0');
       id = await repo.createNote();
       final note = (await repo.loadNote(id))!;
       note.strokes[0] = [
@@ -248,6 +254,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('recognized-text')), findsNothing);
     expect(find.textContaining(r'm = \frac{E}{c^{2}}'), findsWidgets);
+    await closeEditor(tester);
   });
 
   testWidgets('a tap on nothing lets go of the selected drawing, beside the page or with a finger after the pen', (tester) async {
@@ -263,6 +270,7 @@ void main() {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       repo = NoteRepository(db);
       await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+      await repo.settings.set('pdf_handwriting_text', '0');
       id = await repo.createNote();
       final note = (await repo.loadNote(id))!;
       note.strokes[0] = [

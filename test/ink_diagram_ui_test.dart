@@ -23,6 +23,7 @@ void main() {
     await tester.runAsync(() async {
       repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
       await repo.settings.set('index_handwriting', '0');
+      await repo.settings.set('pdf_handwriting_text', '0');
       id = await repo.createNote();
       final note = (await repo.loadNote(id))!;
       DrawingStroke stroke(List<Offset> p) => DrawingStroke(color: const Color(0xFF000000), width: 3, points: p);

@@ -12,6 +12,7 @@ import 'package:notes/ink/ink_clusters.dart';
 import 'package:notes/ink/ink_prefetcher.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'close_editor.dart';
 
 import 'ink_prefetch_test.dart' show FakeReader, scribble, until, word;
 
@@ -80,6 +81,7 @@ void main() {
         await db.delete('review_cards');
         cardRepo = withCards ? CardRepository(db) : null;
         await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+        await repo.settings.set('pdf_handwriting_text', '0');
         id = await repo.createNote();
         final note = (await repo.loadNote(id))!;
         var y = 300.0;
@@ -98,8 +100,7 @@ void main() {
           cards: cardRepo,
         ),
       ));
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
-      await tester.pumpAndSettle();
+      await settleEditor(tester);
       return features;
     }
 
@@ -122,8 +123,7 @@ void main() {
 
     testWidgets('with the tool on, a solution is checked a little behind the pen and each line gets its mark', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       expect(find.byKey(const ValueKey('math-mark-right')), findsOneWidget, reason: '2x = 8 follows');
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsOneWidget, reason: 'x = 5 does not');
 
@@ -137,12 +137,12 @@ void main() {
       expect(find.byKey(const ValueKey('math-check-edit-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('math-check-edit-1')), findsOneWidget);
       expect(find.text('This looks right'), findsOneWidget);
+      await closeEditor(tester);
     });
 
     testWidgets('the sheet of a wrong line can keep the mistake as a flashcard, once', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'}, withCards: true);
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       for (var round = 0; round < 2; round++) {
         await tester.tap(find.byKey(const ValueKey('math-mark-wrong')));
         await tester.pumpAndSettle();
@@ -159,22 +159,22 @@ void main() {
       expect(kept.single.card.front, contains('x = 5'));
       expect(kept.single.card.back, contains('This does not follow from the line above'));
       await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
     });
 
     testWidgets('without the cards there is no such button, and a line that is right has none', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       await tester.tap(find.byKey(const ValueKey('math-mark-wrong')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('math-check-keep-card-2')), findsNothing);
       await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
     });
 
     testWidgets('what was read can be corrected in the sheet of a mark, and the line is checked again', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       await tester.tap(find.byKey(const ValueKey('math-mark-wrong')));
       await tester.pumpAndSettle();
       expect(find.text('This does not follow from the line above'), findsOneWidget);
@@ -188,12 +188,12 @@ void main() {
       expect(find.byKey(const ValueKey('math-mark-right')), findsNWidgets(2), reason: 'the marks behind the sheet changed too');
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsNothing);
       await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
     });
 
     testWidgets('a mistake that reads as no mistake another way is marked "not sure", and the other reading can be picked', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'}, again: {'c': [r'x = 4']});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1200)));
-      await tester.pump();
+      await letRead(tester, 1200);
       expect(find.byKey(const ValueKey('math-mark-unsure')), findsOneWidget);
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsNothing);
 
@@ -209,21 +209,21 @@ void main() {
       expect(find.byKey(const ValueKey('math-mark-unsure')), findsNothing);
       expect(find.byKey(const ValueKey('math-mark-right')), findsNWidgets(2));
       await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
     });
 
     testWidgets('a mistake that every reading shows stays a mistake', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'}, again: {'c': [r'x = 6', r'x = 5']});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1200)));
-      await tester.pump();
+      await letRead(tester, 1200);
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsOneWidget);
       expect(find.byKey(const ValueKey('math-mark-unsure')), findsNothing);
       await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
     });
 
     testWidgets('a line can be read again from its sheet, and says when it reads the same', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 4'}, again: {'b': [r'2x = 6']});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       await tester.tap(find.byKey(const ValueKey('math-mark-right')).first);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('math-check-look-again-1')), findsOneWidget);
@@ -233,6 +233,7 @@ void main() {
       expect(find.byKey(const ValueKey('math-check-other-1-0')), findsOneWidget, reason: 'the other reading is offered');
       expect(find.byKey(const ValueKey('math-check-look-again-1')), findsNothing, reason: 'once is enough');
       await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
     });
 
     testWidgets('the sheet of the manual check can be corrected as well', (tester) async {
@@ -246,20 +247,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('This does not follow from the line above'), findsNothing);
       expect(find.text('This looks right'), findsNWidgets(2));
+      await closeEditor(tester);
     });
 
     testWidgets('with the tool off nothing is read or marked, and switching it on starts it', (tester) async {
       final features = await open(tester, {'a': r'2x + 3 = 11', 'b': r'x = 5'}, tool: false);
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600)));
-      await tester.pump();
+      await letRead(tester, 600);
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsNothing);
       await tester.runAsync(() => features.set(Feature.checkMaths, true));
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsOneWidget);
       await tester.runAsync(() => features.set(Feature.checkMaths, false));
       await tester.pump();
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsNothing);
+      await closeEditor(tester);
     });
 
     testWidgets('circling some maths and pressing the button checks it now', (tester) async {
@@ -272,6 +273,7 @@ void main() {
       expect(find.text('This looks right'), findsOneWidget);
       expect(find.text('This does not follow from the line above'), findsOneWidget);
       expect(find.text('Nothing to check in this line'), findsOneWidget, reason: 'the first line is an equation to solve');
+      await closeEditor(tester);
     });
 
     testWidgets('what the model reads as an environment is shown as text (the formula widget cannot lay it out)', (tester) async {
@@ -283,13 +285,14 @@ void main() {
       expect(find.byKey(const ValueKey('math-check-sheet')), findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(find.text(r'\begin{array}{} \end{array}'), findsAtLeastNWidgets(2), reason: 'in the field, and as text');
+      await closeEditor(tester);
     });
 
     testWidgets('a line that waits for its result shows it', (tester) async {
       await open(tester, {'a': r'17 \cdot 24 ='});
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
-      await tester.pump();
+      await letRead(tester, 900);
       expect(find.byKey(const ValueKey('math-mark-answer')), findsOneWidget);
+      await closeEditor(tester);
     });
 
     testWidgets('without the formula reader the tool does nothing and nothing breaks', (tester) async {
@@ -300,12 +303,14 @@ void main() {
         final db = await AppDatabase.open(path: inMemoryDatabasePath);
         repo = NoteRepository(db);
         await repo.settings.set('index_handwriting', '0'); // (reading for the search is not what these tests are about)
+        await repo.settings.set('pdf_handwriting_text', '0');
         id = await repo.createNote();
       });
       await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo, features: FeatureSettings((k) async => null, (k, v) async {}))));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('math-check-sheet')), findsNothing);
+      await closeEditor(tester);
     });
   });
 }

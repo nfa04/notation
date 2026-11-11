@@ -396,9 +396,9 @@ extension _PdfExport on _FixedPageNoteEditorState {
     if (await widget.repository.settings.get(pdfInkTextSetting) == '0') return null;
     // what was read for the search, and what the open note has read ahead
     final known = {for (final t in await widget.repository.text.inkTexts(widget.noteId)) t.key: t.text};
-    for (final r in _reader.prefetcher?.readings() ?? const <({InkCluster block, String? text, String? latex})>[]) {
-      final text = r.text;
-      if (text != null) known[r.block.key] = text;
+    // (by block, as the export has them, also while the maths check reads by rows)
+    for (final t in _reader.prefetcher?.toKeep().texts ?? const <({InkCluster block, String text})>[]) {
+      known[t.block.key] = t.text;
     }
     final reader = widget.handwriting;
     final canRead = reader != null && _inSettings(Feature.handwriting) && reader.status == HandwritingStatus.installed;
@@ -416,7 +416,7 @@ extension _PdfExport on _FixedPageNoteEditorState {
   /// open note's reader.
   Future<void> _keepExportReadings(PdfInkText? text) async {
     if (text == null || text.fresh.isEmpty || _lockMode != LockMode.none) return;
-    _reader.prefetcher?.seed({for (final t in text.fresh) t.key: t.text});
+    _reader.prefetcher?.seed(texts: {for (final t in text.fresh) t.key: t.text});
     try {
       // (nothing is dropped here: only the reader of the open note knows which blocks are gone)
       await widget.repository.text.saveInkText(widget.noteId, text.fresh, {...text.known.keys});

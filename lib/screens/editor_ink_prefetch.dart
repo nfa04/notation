@@ -29,9 +29,49 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
     );
   }
 
+  /// Readings arrived: the marks, the underlines and the buttons are brought up to date once, at the next frame, however many
+  /// arrived before it.
   void _inkProgressed() {
-    if (_checkOn) _marks = _currentMarks();
-    _refreshInkSpelling();
-    setState(() {}); // (the buttons over a selection show whether it is ready)
+    if (_inkRefreshDue) return;
+    _inkRefreshDue = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _inkRefreshDue = false;
+      if (!mounted) return;
+      if (_checkOn) _marks = _currentMarks();
+      _refreshInkSpelling();
+      setState(() {}); // (the buttons over a selection show whether it is ready)
+    });
   }
+
+  /// Says that the writing is being read and how many blocks are left; disappears when there are none. A tap on the cross hides it
+  /// until the note is opened again.
+  Widget _inkProgressChip() => ValueListenableBuilder<int>(
+        valueListenable: _reader.pending,
+        builder: (context, waiting, _) {
+          if (waiting <= 0) return const SizedBox.shrink();
+          final scheme = Theme.of(context).colorScheme;
+          return Material(
+            key: const ValueKey('ink-progress'),
+            elevation: 2,
+            color: scheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onSecondaryContainer)),
+                const SizedBox(width: 8),
+                Text(trCount(waiting, 'Reading the handwriting: 1 left', 'Reading the handwriting: {n} left'), style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer)),
+                IconButton(
+                  key: const ValueKey('ink-progress-hide'),
+                  tooltip: tr('Hide'),
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 16,
+                  icon: Icon(Icons.close, color: scheme.onSecondaryContainer),
+                  onPressed: () => setState(() => _inkChipHidden = true),
+                ),
+              ]),
+            ),
+          );
+        },
+      );
 }

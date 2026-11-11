@@ -103,6 +103,33 @@ void main() {
       }
     });
 
+    test('an ink section of the wrong kind is read as far as it can be: the rest of the note is still there', () {
+      final kinds = <Object?>[null, 'text', 7, -3, 1e30, true, [], {}, [1, 2], {'a': 1}, [{}], [{'key': 1}], [{'key': 'k', 'page': 'x', 'text': 3}]];
+      final rnd = Random(5);
+      for (var round = 0; round < 300; round++) {
+        final ink = rnd.nextInt(4) == 0
+            ? kinds[rnd.nextInt(kinds.length)]
+            : <String, Object?>{
+                'texts': kinds[rnd.nextInt(kinds.length)],
+                'reads': kinds[rnd.nextInt(kinds.length)],
+              };
+        final parsed = decodeNoteFile(zipWith({'format': 'uninote', 'version': noteFileVersion, 'note': {'title': 'T'}, 'ink': ink}));
+        expect(parsed.note.title, 'T');
+      }
+      // a block with a good key but a position that is not a number is left out, not made up
+      final partly = decodeNoteFile(zipWith({
+        'format': 'uninote',
+        'version': noteFileVersion,
+        'ink': {
+          'texts': [
+            {'key': 'a', 'page': 0, 'text': 'x', 'l': 0, 't': 0, 'r': 1, 'b': 1},
+            {'key': 'b', 'page': 0, 'text': 'y', 'l': 'no', 't': 0, 'r': 1, 'b': 1},
+          ],
+        },
+      }));
+      expect(partly.ink.texts.map((t) => t.key), ['a']);
+    });
+
     test('strokes: a count that promises more than the bytes hold, a page far out, a point that is not a number', () {
       Uint8List strokes(void Function(ByteData d) fill) {
         final d = ByteData(4096);

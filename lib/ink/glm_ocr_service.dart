@@ -50,8 +50,8 @@ class GlmOcrService extends ModelFilesService {
   /// A line is cut into pieces that are not wider than this many times their height: the network's work grows with the width.
   static const widestPiece = 24.0;
 
-  /// Turns the pictures of lines into token ids. Tests pass a fake.
-  final Future<List<List<int>>> Function(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures) _read;
+  /// Turns the pictures of lines into token ids, with how sure the model was of each. Tests pass a fake (of tokens only: sure of them).
+  final Future<List<GlmReading>> Function(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures) _read;
   final Future<String> Function() _loadVocab;
   final Map<String, String> _checks;
 
@@ -61,18 +61,23 @@ class GlmOcrService extends ModelFilesService {
     Map<String, String>? checksums,
     super.modelDirectory,
     super.download,
-  })  : _read = read ?? _readWithOnnx,
+  })  : _read = read == null
+            ? _onnx.readScored
+            : ((a, b, c, d) async => [for (final t in await read(a, b, c, d)) (tokens: t, confidence: 1.0)]),
         _loadVocab = loadVocab ?? (() => rootBundle.loadString('assets/glm_ocr/vocab.txt')),
         _checks = checksums ?? (repo == defaultRepo ? GlmOcrService.checksums : const {}),
         super(files: modelFiles, folderName: 'glm_ocr');
 
-  static Future<List<List<int>>> _readWithOnnx(String vision, String text, String embeddings, List<GlmPicture> pictures) =>
-      readPicturesGlm(visionPath: vision, textPath: text, embeddingsPath: embeddings, pictures: pictures);
+  /// The networks, kept open between the readings of the background reader (see [GlmOnnxReader]).
+  static final _onnx = GlmOnnxReader();
 
   GlmVocabulary? _vocabulary;
 
   @override
-  Future<void> unload() async => _vocabulary = null;
+  Future<void> unload() async {
+    _vocabulary = null;
+    await _onnx.close();
+  }
 
   @override
   Future<void> install() async {
@@ -102,7 +107,24 @@ class GlmOcrService extends ModelFilesService {
       pictures,
     );
     final vocabulary = _vocabulary ??= GlmVocabulary.parse(await _loadVocab());
-    return [for (final t in tokens) vocabulary.decode(t)];
+    return [
+      for (final r in tokens)
+        () {
+          final text = vocabulary.decode(r.tokens);
+          return isWriting(text, r.confidence) ? text : '';
+        }(),
+    ];
+  }
+
+  /// Whether [text], read with [confidence], is what is written and not what the model makes of a drawing: of a drawing it writes an
+  /// empty block of markdown or a row of dashes with much confidence, or anything with little. (On generated pages: of 17 pieces that were
+  /// mostly drawing this left out 14, of 318 of writing none. A lone digit is let be, though a drawing is sometimes read as one: it may be
+  /// an answer written on its own.)
+  static bool isWriting(String text, double confidence) {
+    final t = text.trim();
+    if (t.isEmpty || confidence < 0.5) return false;
+    if (RegExp(r'^```[a-z]*\s*```$').hasMatch(t)) return false;
+    return !RegExp(r'^[-_.,:;=~*·•|/\\ ]+$').hasMatch(t);
   }
 
   /// The text of each of [lines], as the chunks of words [groupIntoLines] cut them into: neighbouring chunks are put together again as

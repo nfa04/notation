@@ -137,6 +137,20 @@ void main() {
       expect(downloads, isEmpty);
     });
 
+    test('a language that is on but whose files are missing is fetched again at the start, and then checks', () async {
+      // (the settings came along to another folder of the app, the files did not)
+      await settings.write(SpellService.enabledKey, '["en_US"]');
+      final service = make();
+      await service.load();
+      for (var i = 0; i < 50 && !service.active; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(service.active, isTrue);
+      expect(service.checker.misspellings('teh cat').length, 1);
+      expect(downloads.where((u) => u.contains('/en/en_US.')), hasLength(2), reason: 'the two files of the dictionary');
+      expect(downloads.where((u) => u.contains('/de/de_DE.')), isEmpty, reason: 'only what is on');
+    });
+
     test('turning it off stops the checking; deleting removes the files', () async {
       final service = make();
       await service.load();

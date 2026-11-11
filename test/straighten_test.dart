@@ -10,6 +10,7 @@ import 'package:notes/models/straighten.dart';
 import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'close_editor.dart';
 
 /// A hand-drawn line from [a] to [b], with some shake of up to [shake] units.
 List<Offset> hand(Offset a, Offset b, {double shake = 2, int n = 40}) {
@@ -130,5 +131,6 @@ void main() {
     expect(strokes().length, 3);
     expect(strokes().last.points.map((p) => p.dy).toSet().length, greaterThan(1));
     expect(await tester.runAsync(() => repo.settings.get('straighten_lines')), '0');
+    await closeEditor(tester);
   });
 }

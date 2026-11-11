@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -312,6 +314,15 @@ void main() {
       expect(InkCluster(0, [s], Rect.zero).key, '1-6d2ec8c5');
       s.points.add(const Offset(5, 6));
       expect(InkCluster(0, [s], Rect.zero).key, isNot('1-6d2ec8c5'));
+    });
+
+    test('a block has the same key just drawn and loaded again (its points are kept as 32-bit numbers)', () {
+      // (244.5499989... rounds to 2445 tenths, the 32-bit 244.5500030... to 2446: the block was read again after every reopening)
+      const x = 244.5499989301142;
+      final stored = Float32List.fromList([x])[0];
+      expect((x * 10).round(), isNot((stored * 10).round()), reason: 'the case this is about');
+      DrawingStroke at(double v) => DrawingStroke(id: 's', color: Colors.black, width: 2.35, points: [Offset(v, 10), Offset(v + 5, 20)]);
+      expect(InkCluster(0, [at(x)], Rect.zero).key, InkCluster(0, [at(stored)], Rect.zero).key);
     });
   });
 

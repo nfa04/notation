@@ -35,6 +35,12 @@ void main() {
     expect(misspelledInk([(block: cluster, text: null)], checker), isEmpty);
   });
 
+  test('the maths the reader wrote as LaTeX is not checked, and the words after it are still placed along the line', () {
+    final marks = misspelledInk([(block: cluster, text: r'the cat' '\n' r'$\frac{1}{2}\rho$ hapy')], checker);
+    expect(marks.map((m) => m.word), ['hapy'], reason: 'frac and rho are not words');
+    expect(marks.single.rect.left, greaterThan(105), reason: 'it comes after the formula');
+  });
+
   test('nothing is marked without a dictionary', () {
     expect(misspelledInk([(block: cluster, text: 'the\nhapy')], SpellChecker()), isEmpty);
   });

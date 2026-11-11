@@ -4,6 +4,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../search/search_query.dart';
 
+/// A reading of handwriting kept in `ink_reads`: the key of the strokes, the ids of a selection's strokes (comma-separated; empty for
+/// a block), and its text or its formula.
+typedef InkRead = ({String key, String ids, String? text, String? latex});
+
 /// The words of notes as the search and the AI read them: titles, documents, text boxes, the text of PDF pages and of handwriting.
 /// Locked notes are never in it.
 class NoteTextRepository {
@@ -123,6 +127,22 @@ class NoteTextRepository {
             },
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+        }
+        await batch.commit(noResult: true);
+      });
+
+  /// What was read of the handwriting of [noteId] that is not for the search (see `ink_reads`): formulas, and conversions of
+  /// selections that are not a whole block.
+  Future<List<InkRead>> inkReads(String noteId) async => [
+        for (final r in await _db.query('ink_reads', where: 'note_id = ?', whereArgs: [noteId]))
+          (key: r['key'] as String, ids: r['ids'] as String, text: r['text'] as String?, latex: r['latex'] as String?),
+      ];
+
+  /// Keeps [reads] of [noteId] in place of what was kept before (they are few: a note's formulas and conversions).
+  Future<void> saveInkReads(String noteId, Iterable<InkRead> reads) => _db.transaction((txn) async {
+        final batch = txn.batch()..delete('ink_reads', where: 'note_id = ?', whereArgs: [noteId]);
+        for (final r in reads) {
+          batch.insert('ink_reads', {'note_id': noteId, 'key': r.key, 'ids': r.ids, 'text': r.text, 'latex': r.latex}, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         await batch.commit(noResult: true);
       });

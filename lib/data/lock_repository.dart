@@ -76,7 +76,7 @@ class LockRepository {
       files.add(r['path'] as String);
     }
     await _db.transaction((txn) async {
-      for (final t in ['strokes', 'text_boxes', 'highlights', 'images', 'pdf_text', 'ink_text', 'note_embeddings', 'note_chunks', 'note_chunk_state', 'note_ai', 'facts', 'fact_state']) {
+      for (final t in ['strokes', 'text_boxes', 'highlights', 'images', 'pdf_text', 'ink_text', 'ink_reads', 'note_embeddings', 'note_chunks', 'note_chunk_state', 'note_ai', 'facts', 'fact_state']) {
         await txn.delete(t, where: 'note_id = ?', whereArgs: [id]);
       }
       await txn.update(

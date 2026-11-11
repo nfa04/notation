@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 53;
+const int schemaVersion = 55;
 
 const List<String> createStatements = [
   '''
@@ -148,6 +148,7 @@ const List<String> createStatements = [
   _createNoteBranches,
   _createPdfText,
   _createInkText,
+  _createInkReads,
   _createTemplates,
   _createNoteLocks,
   _createNoteChunks,
@@ -544,6 +545,21 @@ const String _createInkText = '''
   )
   ''';
 
+/// What was read of the handwriting that is not for the search (which has `ink_text`): the formulas (LaTeX) of blocks and of the
+/// rows the maths check reads, and what a conversion of a selection that is not a whole block read ([text] or [latex]). [key] names
+/// the strokes exactly (`InkCluster.keyOf`); [ids] are the ids of the strokes of a selection (comma-separated, empty for a block),
+/// so that the reading can be dropped with them. Nothing here is kept for a locked note.
+const String _createInkReads = '''
+  CREATE TABLE IF NOT EXISTS ink_reads (
+    note_id     TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    key         TEXT NOT NULL,
+    ids         TEXT NOT NULL DEFAULT '',
+    text        TEXT,
+    latex       TEXT,
+    PRIMARY KEY (note_id, key)
+  )
+  ''';
+
 const String _indexNoteVersions = 'CREATE INDEX idx_note_versions_note ON note_versions(note_id, created_at)';
 
 /// Earlier states of notes (see `NoteHistory`). The note itself is in a file of the app's storage ([file]); the
@@ -706,6 +722,15 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  // the handwriting is cut into lines another way (a block of several lines with a bracket or a long tail was read as one squeezed
+  // line): what was read is read again (the formulas too: they are kept in the same rows as the conversions of selections)
+  54: [
+    'DROP TABLE IF EXISTS ink_text', // (dropped and made again, not emptied: a DELETE needs the notes table to be there for its key)
+    'DROP TABLE IF EXISTS ink_reads',
+    _createInkText,
+    _createInkReads,
+  ],
+  53: [_createInkReads],
   52: [_createSyncStubs],
   51: _graphsGetIds,
   50: _moveGraphSnapshots,

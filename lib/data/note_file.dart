@@ -17,7 +17,9 @@ import '../models/brush_desc.dart';
 import '../models/gradient.dart';
 import '../models/stroke_label.dart';
 import '../models/layers.dart';
+import '../search/search_query.dart' show InkText;
 import 'note_data.dart';
+import 'note_text_repository.dart' show InkRead;
 import 'safe_names.dart';
 import 'safe_zip.dart';
 import '../l10n/language.dart';
@@ -44,6 +46,9 @@ import '../l10n/language.dart';
 /// where the author is not known.
 /// What the AI made of the note (a summary, a presentation, ...) is `ai`, a list of `kind`, `key`, `content`, `sourceHash`, `model`
 /// and `createdAt`: it travels with the note so that it need not be made again.
+/// What the handwriting reader made of the strokes is `ink`: `texts` (`key`, `page`, `text`, `l`, `t`, `r`, `b`: the text of a block of strokes
+/// and where it lies) and `reads` (`key`, `ids`, `text`, `latex`: formulas and conversions of selections). The keys name the strokes as
+/// they are, so a device that gets the note does not read it again. It is not part of what makes two note files the same note.
 /// `audio` lists the sounds kept with the note: `id`, `kind` ("recording" or "speech"), `title`, `file`, `durationMs` and `createdAt`.
 /// A reader must ignore fields it does not know; a change that breaks readers
 /// raises `version`.
@@ -94,6 +99,9 @@ class NoteFileParts {
   /// What the AI made of the note.
   final List<NoteAiRow> ai;
 
+  /// What the handwriting reader made of the strokes (see [InkReadingParts]).
+  final InkReadingParts ink;
+
   /// The sounds kept with the note.
   final List<AudioPart> audio;
 
@@ -108,8 +116,19 @@ class NoteFileParts {
     this.themeExtension = 'png',
     this.documentImages = const {},
     this.ai = const [],
+    this.ink = InkReadingParts.none,
     this.audio = const [],
   });
+}
+
+/// What the handwriting reader made of a note's strokes (the `ink_text` and `ink_reads` tables), so that a device that gets the note does
+/// not read it again. Keys name the strokes as they are, so they are the same on every device.
+class InkReadingParts {
+  final List<InkText> texts;
+  final List<InkRead> reads;
+  const InkReadingParts({this.texts = const [], this.reads = const []});
+  static const none = InkReadingParts();
+  bool get isEmpty => texts.isEmpty && reads.isEmpty;
 }
 
 /// A note file, read.
@@ -132,6 +151,9 @@ class ParsedNoteFile {
   /// What the AI made of the note.
   final List<NoteAiRow> ai;
 
+  /// What the handwriting reader made of the strokes.
+  final InkReadingParts ink;
+
   /// The sounds kept with the note.
   final List<AudioPart> audio;
 
@@ -140,6 +162,7 @@ class ParsedNoteFile {
 
   ParsedNoteFile(this.note,
       {this.ai = const [],
+      this.ink = InkReadingParts.none,
       this.audio = const [],
       this.brushes = const [],
       this.createdAt,
@@ -591,6 +614,16 @@ List<NoteFileEntry> noteFileEntries(NoteFileParts parts, {DateTime? now}) {
             'createdAt': a.createdAt.millisecondsSinceEpoch,
           },
       ],
+    if (!parts.ink.isEmpty)
+      'ink': {
+        'texts': [
+          for (final t in parts.ink.texts)
+            {'key': t.key, 'page': t.page, 'text': t.text, 'l': t.bounds.left, 't': t.bounds.top, 'r': t.bounds.right, 'b': t.bounds.bottom},
+        ],
+        'reads': [
+          for (final r in parts.ink.reads) {'key': r.key, if (r.ids.isNotEmpty) 'ids': r.ids, if (r.text != null) 'text': r.text, if (r.latex != null) 'latex': r.latex},
+        ],
+      },
     'highlights': [
       for (final e in n.highlights.entries)
         for (final h in e.value)
@@ -640,7 +673,8 @@ String? noteContentDigest(Uint8List bytes) {
       if (name == 'manifest.json') {
         final m = (jsonDecode(utf8.decode(f.content)) as Map).cast<String, Object?>()
           ..remove('exportedAt')
-          ..remove('ai');
+          ..remove('ai')
+          ..remove('ink');
         final note = (m['note'] as Map?)?.cast<String, Object?>();
         if (note != null) {
           note
@@ -672,7 +706,8 @@ bool sameNoteContent(Uint8List a, Uint8List b) {
     String manifest(ArchiveFile f) {
       final m = (jsonDecode(utf8.decode(f.content)) as Map).cast<String, Object?>()
         ..remove('exportedAt')
-        ..remove('ai');
+        ..remove('ai')
+          ..remove('ink');
       final note = (m['note'] as Map?)?.cast<String, Object?>();
       if (note != null) {
         note
@@ -917,6 +952,19 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
           createdAt: time(a['createdAt']) ?? DateTime.now(),
         ),
   ];
+  final inkMap = m['ink'] is Map ? (m['ink'] as Map).cast<String, Object?>() : const <String, Object?>{};
+  double? opt_(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
+  final ink = InkReadingParts(
+    texts: [
+      for (final t in _listOf(inkMap['texts']))
+        if (t['key'] is String && t['text'] is String && _int(t['page']) != null && [t['l'], t['t'], t['r'], t['b']].every((v) => opt_(v) != null))
+          InkText(key: t['key'] as String, page: _int(t['page'])!, text: t['text'] as String, bounds: Rect.fromLTRB(opt_(t['l'])!, opt_(t['t'])!, opt_(t['r'])!, opt_(t['b'])!)),
+    ],
+    reads: [
+      for (final r in _listOf(inkMap['reads']))
+        if (r['key'] is String) (key: r['key'] as String, ids: _str(r['ids']) ?? '', text: _str(r['text']), latex: _str(r['latex'])),
+    ],
+  );
   final audio = <AudioPart>[];
   for (final a in _listOf(m['audio'])) {
     final data = fileBytes(a['file']);
@@ -957,6 +1005,7 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
   return ParsedNoteFile(
     note,
     ai: ai,
+    ink: ink,
     audio: audio,
     brushes: brushes,
     createdAt: time(info['createdAt']),
