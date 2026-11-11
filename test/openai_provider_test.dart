@@ -292,4 +292,102 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
+
+  group('rate limits', () {
+    const cfg = OpenAiConfig(baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'm', pauseSeconds: 4);
+    final ok = sse(['hi']);
+
+    OpenAiProvider limited(List<Duration> slept, Stream<String> Function(int call) answer) {
+      sent = [];
+      return OpenAiProvider(
+        secret: secret,
+        sleep: (d) async => slept.add(d),
+        transport: (url, headers, body, cancel) {
+          sent.add((url: url, headers: headers, body: jsonDecode(body) as Map<String, dynamic>));
+          return answer(sent.length);
+        },
+      );
+    }
+
+    test('the pause is saved, read back, and clamped', () {
+      expect(OpenAiConfig.decode(cfg.encode()).pauseSeconds, 4);
+      expect(OpenAiConfig.decode(const OpenAiConfig().encode()).pauseSeconds, 0);
+      expect(OpenAiConfig.decode('{"baseUrl":"x","model":"m","pause":99999}').pauseSeconds, OpenAiConfig.maxPauseSeconds);
+      expect(OpenAiConfig.decode('{"baseUrl":"x","model":"m","pause":-3}').pauseSeconds, 0);
+    });
+
+    test('requests start at least the pause apart', () async {
+      final slept = <Duration>[];
+      final p = limited(slept, (_) => Stream.value(ok));
+      await p.save(cfg, 'k');
+      await p.complete(const AiPrompt(system: 's', user: 'a'));
+      expect(slept, isEmpty, reason: 'the first one starts at once');
+      await p.complete(const AiPrompt(system: 's', user: 'b'));
+      final total = slept.fold<Duration>(Duration.zero, (a, b) => a + b);
+      expect(total, greaterThan(const Duration(seconds: 3)));
+      expect(total, lessThanOrEqualTo(const Duration(seconds: 4)));
+    });
+
+    test('with no pause nothing waits', () async {
+      final slept = <Duration>[];
+      final p = limited(slept, (_) => Stream.value(ok));
+      await p.save(const OpenAiConfig(baseUrl: 'http://x/v1', model: 'm'), '');
+      await p.complete(const AiPrompt(system: 's', user: 'a'));
+      await p.complete(const AiPrompt(system: 's', user: 'b'));
+      expect(slept, isEmpty);
+    });
+
+    test('a 429 is tried again after the wait the service asks for, then it works', () async {
+      final slept = <Duration>[];
+      final p = limited(slept, (call) => call < 3 ? Stream.error(refusal('slow down', status: 429, retryAfter: const Duration(seconds: 7))) : Stream.value(ok));
+      await p.save(const OpenAiConfig(baseUrl: 'http://x/v1', model: 'm'), '');
+      expect(await p.complete(const AiPrompt(system: 's', user: 'a')), 'hi');
+      expect(sent.length, 3);
+      expect(slept.fold<Duration>(Duration.zero, (a, b) => a + b), const Duration(seconds: 15)); // 2 x (7 s + half a second)
+    });
+
+    test('without a time from the service the wait grows, and after three tries the error is shown', () async {
+      final slept = <Duration>[];
+      final p = limited(slept, (_) => Stream.error(refusal('The service answered 429: too many', status: 429)));
+      await p.save(const OpenAiConfig(baseUrl: 'http://x/v1', model: 'm'), '');
+      await expectLater(p.complete(const AiPrompt(system: 's', user: 'a')), throwsA(predicate((e) => '$e'.contains('429'))));
+      expect(sent.length, 4);
+      expect(slept.fold<Duration>(Duration.zero, (a, b) => a + b), const Duration(milliseconds: 35000 + 3 * 500)); // 5, 10, 20 s and half a second each
+    });
+
+    test('a wait of minutes (a daily quota) is not waited for', () async {
+      final slept = <Duration>[];
+      final p = limited(slept, (_) => Stream.error(refusal('quota', status: 429, retryAfter: const Duration(minutes: 20))));
+      await p.save(const OpenAiConfig(baseUrl: 'http://x/v1', model: 'm'), '');
+      await expectLater(p.complete(const AiPrompt(system: 's', user: 'a')), throwsA(anything));
+      expect(sent.length, 1);
+      expect(slept, isEmpty);
+    });
+
+    test('other errors are not tried again', () async {
+      final p = limited([], (_) => Stream.error(refusal('nope', status: 401)));
+      await p.save(const OpenAiConfig(baseUrl: 'http://x/v1', model: 'm'), '');
+      await expectLater(p.complete(const AiPrompt(system: 's', user: 'a')), throwsA(anything));
+      expect(sent.length, 1);
+    });
+
+    test('a stop ends the waiting', () async {
+      final cancel = AiCancel();
+      sent = [];
+      final p2 = OpenAiProvider(secret: secret, sleep: (_) async => cancel.cancel(), transport: (u, h, b, c) {
+        sent.add((url: u, headers: h, body: jsonDecode(b) as Map<String, dynamic>));
+        return Stream.error(refusal('slow', status: 429, retryAfter: const Duration(seconds: 30)));
+      });
+      await p2.save(const OpenAiConfig(baseUrl: 'http://x/v1', model: 'm'), '');
+      expect(await p2.complete(const AiPrompt(system: 's', user: 'a'), cancel: cancel), '');
+      expect(sent.length, 1);
+    });
+
+    test('where the service says how long: the header and the words of Gemini', () {
+      expect(OpenAiProvider.retryAfterOf('12', ''), const Duration(seconds: 12));
+      expect(OpenAiProvider.retryAfterOf(null, '{"error":{"details":[{"retryDelay":"33s"}]}}'), const Duration(seconds: 33));
+      expect(OpenAiProvider.retryAfterOf(null, 'Quota exceeded. Please retry in 12.5s.'), const Duration(milliseconds: 12500));
+      expect(OpenAiProvider.retryAfterOf(null, 'nothing'), isNull);
+    });
+  });
 }

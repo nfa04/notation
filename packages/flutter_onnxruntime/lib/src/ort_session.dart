@@ -105,6 +105,9 @@ class OrtSessionOptions {
   // {'mlas.disable_kleidiai': '1'}. See onnxruntime_session_options_config_keys.h for the available keys:
   // https://github.com/microsoft/onnxruntime/blob/main/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h
   final Map<String, String>? sessionConfigs;
+  // run the session at the lowest priority, so that it only uses the time the rest of the app leaves over (Android only; the
+  // threads of the session are started with that priority, and its runs are made at it)
+  final bool? lowPriority;
 
   OrtSessionOptions({
     this.intraOpNumThreads,
@@ -113,6 +116,7 @@ class OrtSessionOptions {
     this.useArena,
     this.deviceId,
     this.sessionConfigs,
+    this.lowPriority,
   });
 
   Map<String, dynamic> toMap() {
@@ -123,6 +127,7 @@ class OrtSessionOptions {
       if (useArena != null) 'useArena': useArena,
       if (deviceId != null) 'deviceId': deviceId,
       if (sessionConfigs != null && sessionConfigs!.isNotEmpty) 'sessionConfigs': sessionConfigs,
+      if (lowPriority == true) 'lowPriority': true,
     };
   }
 }

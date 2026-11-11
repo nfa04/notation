@@ -27,6 +27,8 @@ enum OrtError: Error {
 public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
   private var sessions = [String: ORTSession]()
   private var env: ORTEnv?
+  // The sessions made with `lowPriority` (see atBackgroundPriority)
+  private var lowSessions = Set<String>()
   // Lock to serialize method handler and cleanup to prevent use-after-close races
   private let lock = NSLock()
 
@@ -74,6 +76,27 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     env = nil
   }
 
+  /// Runs [work] (a handler that answers at once) on a thread of background quality of service when [low] is set, and answers
+  /// with its answer on this thread. The threads ONNX Runtime starts while the work creates a session inherit that quality of
+  /// service, so the session only takes the time the screen leaves over.
+  private func atBackgroundPriority(_ low: Bool, result: @escaping FlutterResult, _ work: @escaping (@escaping FlutterResult) -> Void) {
+    guard low else {
+      work(result)
+      return
+    }
+    final class Answer { var value: Any? }
+    let answer = Answer()
+    let done = DispatchSemaphore(value: 0)
+    let thread = Thread {
+      work { answer.value = $0 }
+      done.signal()
+    }
+    thread.qualityOfService = .background
+    thread.start()
+    done.wait()
+    result(answer.value)
+  }
+
   // swiftlint:disable:next cyclomatic_complexity
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     lock.lock()
@@ -102,11 +125,14 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
       Reference: https://onnxruntime.ai/docs/api/objectivec/Classes/ORTSession.html
     */
     case "createSession":
-      handleCreateSession(call: call, result: result)
+      let args = call.arguments as? [String: Any]
+      let low = (args?["sessionOptions"] as? [String: Any])?["lowPriority"] as? Bool == true
+      atBackgroundPriority(low, result: result) { handleCreateSession(call: call, result: $0) }
     case "getAvailableProviders":
       handleGetAvailableProviders(call: call, result: result)
     case "runInference":
-      handleRunInference(call: call, result: result)
+      let id = (call.arguments as? [String: Any])?["sessionId"] as? String
+      atBackgroundPriority(id.map { lowSessions.contains($0) } ?? false, result: result) { handleRunInference(call: call, result: $0) }
     case "closeSession":
       handleCloseSession(call: call, result: result)
     case "getMetadata":
@@ -214,6 +240,7 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
       let session = try ORTSession(env: safeEnv, modelPath: modelPath, sessionOptions: sessionOptions)
       let sessionId = UUID().uuidString
       sessions[sessionId] = session
+      if (args["sessionOptions"] as? [String: Any])?["lowPriority"] as? Bool == true { lowSessions.insert(sessionId) }
 
       // Get input and output names
       var inputNames: [String] = []
@@ -357,6 +384,7 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     }
 
     if sessions.removeValue(forKey: sessionId) != nil {
+      lowSessions.remove(sessionId)
       result(nil)
     } else {
       result(FlutterError(code: "INVALID_SESSION", message: "Session not found", details: nil))

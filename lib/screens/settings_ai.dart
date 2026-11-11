@@ -232,6 +232,7 @@ class _OpenAiForm extends StatefulWidget {
 class _OpenAiFormState extends State<_OpenAiForm> {
   late final _url = TextEditingController(text: widget.provider.config.baseUrl);
   late final _model = TextEditingController(text: widget.provider.config.model);
+  late final _pause = TextEditingController(text: widget.provider.config.pauseSeconds == 0 ? '' : '${widget.provider.config.pauseSeconds}');
   final _key = TextEditingController();
   bool _hidden = true;
   bool _testing = false;
@@ -242,11 +243,12 @@ class _OpenAiFormState extends State<_OpenAiForm> {
   void dispose() {
     _url.dispose();
     _model.dispose();
+    _pause.dispose();
     _key.dispose();
     super.dispose();
   }
 
-  OpenAiConfig get _edited => OpenAiConfig(baseUrl: _url.text, model: _model.text);
+  OpenAiConfig get _edited => OpenAiConfig(baseUrl: _url.text, model: _model.text, pauseSeconds: (int.tryParse(_pause.text.trim()) ?? 0).clamp(0, OpenAiConfig.maxPauseSeconds));
 
   /// Saves; a key left empty here keeps the saved one.
   Future<void> _save() =>
@@ -305,6 +307,20 @@ class _OpenAiFormState extends State<_OpenAiForm> {
           onChanged: (_) => setState(() {}),
           autocorrect: false,
           decoration: InputDecoration(labelText: tr('Model'), helperText: tr('e.g. gpt-4o-mini or llama3.2'), border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('openai-pause'),
+          controller: _pause,
+          onChanged: (_) => setState(() {}),
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText: tr('Pause between requests (seconds)'),
+            helperText: tr('Empty: none. Raise it if the service says there were too many requests (the free plan of Gemini allows only a few a minute). A request that is turned away is also tried again after the wait the service asks for.'),
+            helperMaxLines: 4,
+            border: const OutlineInputBorder(),
+          ),
         ),
         const SizedBox(height: 12),
         TextField(

@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart' hide Text;
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, FilteringTextInputFormatter;
 import '../speech/speech_to_text.dart';
 import '../mcp/mcp_service.dart';
 import '../l10n/language.dart';

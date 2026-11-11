@@ -227,6 +227,8 @@ target_include_directories(${PLUGIN_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_BINAR
 # Add ONNX Runtime include directories
 target_include_directories(${PLUGIN_NAME} PRIVATE ${ONNXRUNTIME_INCLUDE_DIRS})
 
+find_package(Threads REQUIRED)
+target_link_libraries(${PLUGIN_NAME} PRIVATE Threads::Threads)
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
 

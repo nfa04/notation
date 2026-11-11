@@ -13,9 +13,11 @@
 #include "session_manager.h"
 #include "tensor_manager.h"
 #include "value_conversion.h"
+#include "worker.h"
 #include <cstring>
 #include <map>
 #include <memory>
+#include <set>
 #include <mutex>
 #include <onnxruntime_cxx_api.h>
 #include <string>
@@ -38,6 +40,14 @@ struct _FlutterOnnxruntimePlugin {
 
   // Mutex for thread safety
   std::mutex mutex;
+
+  // The long calls (create a session, run it, close it) are done on these threads, not on the one of the screen: the sessions made
+  // with `lowPriority` on the one that runs at the lowest priority, the others on the other. Both are deleted before the managers.
+  Worker *normal_worker;
+  Worker *low_worker;
+
+  // The ids of the sessions made with `lowPriority` (guarded by `mutex`).
+  std::set<std::string> low_sessions;
 };
 
 G_DEFINE_TYPE(FlutterOnnxruntimePlugin, flutter_onnxruntime_plugin, g_object_get_type())
@@ -51,7 +61,7 @@ static void method_call_handler(FlMethodChannel *channel, FlMethodCall *method_c
 static FlMethodResponse *get_platform_version();
 
 // Session management
-static FlMethodResponse *create_session(FlutterOnnxruntimePlugin *self, FlValue *args);
+static FlMethodResponse *create_session(FlutterOnnxruntimePlugin *self, FlValue *args, bool low);
 static FlMethodResponse *get_available_providers(FlutterOnnxruntimePlugin *self, FlValue *args);
 static FlMethodResponse *run_inference(FlutterOnnxruntimePlugin *self, FlValue *args);
 static FlMethodResponse *close_session(FlutterOnnxruntimePlugin *self, FlValue *args);
@@ -103,12 +113,17 @@ static void flutter_onnxruntime_plugin_class_init(FlutterOnnxruntimePluginClass 
 static void flutter_onnxruntime_plugin_init(FlutterOnnxruntimePlugin *self) {
   self->session_manager = new SessionManager();
   self->tensor_manager = new TensorManager();
+  self->normal_worker = new Worker(false);
+  self->low_worker = new Worker(true);
 }
 
 static void flutter_onnxruntime_plugin_dispose(GObject *object) {
   FlutterOnnxruntimePlugin *self = FLUTTER_ONNXRUNTIME_PLUGIN(object);
 
-  // Clean up session manager, tensor manager and values
+  // Clean up the workers (they finish the calls they have), session manager, tensor manager and values
+  delete self->normal_worker;
+  delete self->low_worker;
+  self->normal_worker = self->low_worker = nullptr;
   delete self->session_manager;
   delete self->tensor_manager;
 
@@ -145,18 +160,56 @@ static void flutter_onnxruntime_plugin_handle_method_call(FlutterOnnxruntimePlug
   const gchar *method = fl_method_call_get_name(method_call);
   FlValue *args = fl_method_call_get_args(method_call);
 
+  // The long calls are not done here, on the thread of the screen (see Worker).
+  if (strcmp(method, "createSession") == 0 || strcmp(method, "runInference") == 0 || strcmp(method, "closeSession") == 0) {
+    bool low = false;
+    if (strcmp(method, "createSession") == 0) {
+      FlValue *options = args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP ? fl_value_lookup_string(args, "sessionOptions") : nullptr;
+      FlValue *flag = options != nullptr && fl_value_get_type(options) == FL_VALUE_TYPE_MAP ? fl_value_lookup_string(options, "lowPriority") : nullptr;
+      low = flag != nullptr && fl_value_get_type(flag) == FL_VALUE_TYPE_BOOL && fl_value_get_bool(flag);
+    } else {
+      FlValue *id = args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP ? fl_value_lookup_string(args, "sessionId") : nullptr;
+      if (id != nullptr && fl_value_get_type(id) == FL_VALUE_TYPE_STRING) {
+        std::lock_guard<std::mutex> lock(self->mutex);
+        low = self->low_sessions.count(fl_value_get_string(id)) > 0;
+      }
+    }
+    struct Reply {
+      FlMethodCall *call;
+      FlMethodResponse *response;
+    };
+    g_object_ref(method_call); // (the arguments are read on the worker)
+    std::string name = method;
+    (low ? self->low_worker : self->normal_worker)->post([self, method_call, name, args, low] {
+      FlMethodResponse *response;
+      if (name == "createSession") {
+        response = create_session(self, args, low);
+      } else if (name == "runInference") {
+        response = run_inference(self, args);
+      } else {
+        response = close_session(self, args);
+      }
+      // (the answer is given on the thread of the screen again)
+      g_idle_add(
+          [](gpointer data) -> gboolean {
+            auto *reply = static_cast<Reply *>(data);
+            fl_method_call_respond(reply->call, reply->response, nullptr);
+            g_object_unref(reply->response);
+            g_object_unref(reply->call);
+            delete reply;
+            return G_SOURCE_REMOVE;
+          },
+          new Reply{method_call, response});
+    });
+    return;
+  }
+
   // Dispatch the call to the appropriate handler function.
   // Each handler function now directly returns an FlMethodResponse.
   if (strcmp(method, "getPlatformVersion") == 0) {
     response = get_platform_version();
-  } else if (strcmp(method, "createSession") == 0) {
-    response = create_session(self, args);
   } else if (strcmp(method, "getAvailableProviders") == 0) {
     response = get_available_providers(self, args);
-  } else if (strcmp(method, "runInference") == 0) {
-    response = run_inference(self, args);
-  } else if (strcmp(method, "closeSession") == 0) {
-    response = close_session(self, args);
   } else if (strcmp(method, "getMetadata") == 0) {
     response = get_metadata(self, args);
   } else if (strcmp(method, "getInputInfo") == 0) {
@@ -192,7 +245,7 @@ static FlMethodResponse *get_platform_version() {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_string(uname_data.version)));
 }
 
-static FlMethodResponse *create_session(FlutterOnnxruntimePlugin *self, FlValue *args) {
+static FlMethodResponse *create_session(FlutterOnnxruntimePlugin *self, FlValue *args, bool low) {
   FlValue *model_path_value = fl_value_lookup_string(args, "modelPath");
 
   if (model_path_value == nullptr || fl_value_get_type(model_path_value) != FL_VALUE_TYPE_STRING) {
@@ -350,6 +403,10 @@ static FlMethodResponse *create_session(FlutterOnnxruntimePlugin *self, FlValue 
 
   try {
     std::string session_id = self->session_manager->createSession(model_path, session_options);
+    if (low) {
+      std::lock_guard<std::mutex> lock(self->mutex);
+      self->low_sessions.insert(session_id);
+    }
 
     std::vector<std::string> input_names = self->session_manager->getInputNames(session_id);
     std::vector<std::string> output_names = self->session_manager->getOutputNames(session_id);
@@ -537,6 +594,10 @@ static FlMethodResponse *close_session(FlutterOnnxruntimePlugin *self, FlValue *
   const char *session_id = fl_value_get_string(session_id_value);
 
   self->session_manager->closeSession(session_id);
+  {
+    std::lock_guard<std::mutex> lock(self->mutex);
+    self->low_sessions.erase(session_id);
+  }
 
   return FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_null()));
 }

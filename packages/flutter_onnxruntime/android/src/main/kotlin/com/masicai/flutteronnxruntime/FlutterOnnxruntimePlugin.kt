@@ -14,6 +14,7 @@ import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtLoggingLevel
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.providers.OrtTensorRTProviderOptions
+import android.os.Process
 import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -160,6 +161,20 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
             "STRING" -> "string"
             // Add other types as needed
             else -> type.toString().lowercase()
+        }
+    }
+
+    /** Ids of the sessions made with `lowPriority` (see [atLowPriority]). */
+    private val lowPrioritySessions: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Runs [work] with this thread at the lowest priority, and puts the priority back after. */
+    private fun <T> atLowPriority(work: () -> T): T {
+        val before = Process.getThreadPriority(Process.myTid())
+        Process.setThreadPriority(Process.THREAD_PRIORITY_LOWEST)
+        try {
+            return work()
+        } finally {
+            Process.setThreadPriority(before)
         }
     }
 
@@ -311,8 +326,12 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                             return
                         }
 
-                        val session = ortEnvironment.createSession(modelPath, ortSessionOptions)
+                        // A low priority session is made on a thread of low priority: the threads ONNX Runtime starts for its
+                        // work inherit that, so the session only takes the time the screen leaves over
+                        val low = sessionOptions["lowPriority"] == true
+                        val session = if (low) atLowPriority { ortEnvironment.createSession(modelPath, ortSessionOptions) } else ortEnvironment.createSession(modelPath, ortSessionOptions)
                         val sessionId = UUID.randomUUID().toString()
+                        if (low) lowPrioritySessions.add(sessionId)
                         sessions[sessionId] = session
 
                         // Get input and output names
@@ -432,12 +451,14 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                                 }
 
                             // Run inference with correctly typed inputs and optional run options
-                            val ortOutputs =
+                            val runIt = {
                                 if (ortRunOptions != null) {
                                     session.run(runInputs, ortRunOptions)
                                 } else {
                                     session.run(runInputs)
                                 }
+                            }
+                            val ortOutputs = if (sessionId in lowPrioritySessions) atLowPriority(runIt) else runIt()
 
                             // Process outputs
                             // Outputs will be a map of outputName -> OrtValue parameters
@@ -493,6 +514,7 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                         val session = sessions[sessionId]!!
                         session.close()
                         sessions.remove(sessionId)
+                        lowPrioritySessions.remove(sessionId)
 
                         result.success(null)
                     } catch (e: OrtException) {

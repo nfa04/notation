@@ -18,6 +18,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <memory>
+#include <set>
 #include <sstream>
 
 // Include our implementation headers
@@ -25,6 +26,7 @@
 #include "src/tensor_manager.h"
 #include "src/value_conversion.h"
 #include "src/windows_utils.h"
+#include "src/apart.h"
 
 #include "include/flutter_onnxruntime/export.h"
 
@@ -39,6 +41,24 @@ public:
   // Manager instances
   std::unique_ptr<SessionManager> sessionManager_;
   std::unique_ptr<TensorManager> tensorManager_;
+
+  // The long calls (create a session, run it, close it) are done on these threads, not on the one of the screen: the sessions made
+  // with `lowPriority` on the one at the lowest priority, the others on the other. Their answers are given on the thread of the
+  // screen (screenThread_, which is null when the app has no window: the calls are then made on the calling thread). The workers
+  // are destroyed first (they finish the calls they have), then the thread of the screen.
+  std::unique_ptr<ScreenThread> screenThread_;
+  std::unique_ptr<Worker> normalWorker_ = std::make_unique<Worker>(false);
+  std::unique_ptr<Worker> lowWorker_ = std::make_unique<Worker>(true);
+
+  // The ids of the sessions made with `lowPriority`.
+  std::mutex lowMutex_;
+  std::set<std::string> lowSessions_;
+
+  ~FlutterOnnxruntimePluginImpl() {
+    normalWorker_.reset();
+    lowWorker_.reset();
+    screenThread_.reset();
+  }
 };
 
 // static
@@ -47,6 +67,7 @@ void FlutterOnnxruntimePlugin::RegisterWithRegistrar(flutter::PluginRegistrarWin
       registrar->messenger(), "flutter_onnxruntime", &flutter::StandardMethodCodec::GetInstance());
 
   auto plugin = std::make_unique<FlutterOnnxruntimePlugin>();
+  plugin->impl_->screenThread_ = std::make_unique<ScreenThread>(registrar);
 
   channel->SetMethodCallHandler([plugin_pointer = plugin.get()](const auto &call, auto result) {
     plugin_pointer->HandleMethodCall(call, std::move(result));
@@ -89,6 +110,44 @@ void FlutterOnnxruntimePlugin::HandleMethodCall(
     return;
   } else if (method_name == "releaseOrtValue") {
     HandleReleaseOrtValue(method_call, std::move(result));
+    return;
+  }
+
+  // The long calls are not done here, on the thread of the screen (see Worker)
+  if (impl_->screenThread_ && impl_->screenThread_->Available() &&
+      (method_name == "createSession" || method_name == "runInference" || method_name == "closeSession")) {
+    const auto *map = std::get_if<flutter::EncodableMap>(method_call.arguments());
+    bool low = false;
+    if (map != nullptr && method_name == "createSession") {
+      auto options = map->find(flutter::EncodableValue("sessionOptions"));
+      if (options != map->end() && std::holds_alternative<flutter::EncodableMap>(options->second)) {
+        const auto &options_map = std::get<flutter::EncodableMap>(options->second);
+        auto flag = options_map.find(flutter::EncodableValue("lowPriority"));
+        low = flag != options_map.end() && std::holds_alternative<bool>(flag->second) && std::get<bool>(flag->second);
+      }
+    } else if (map != nullptr) {
+      auto id = map->find(flutter::EncodableValue("sessionId"));
+      if (id != map->end() && std::holds_alternative<std::string>(id->second)) {
+        std::lock_guard<std::mutex> lock(impl_->lowMutex_);
+        low = impl_->lowSessions_.count(std::get<std::string>(id->second)) > 0;
+      }
+    }
+    // (the call is only valid while this function runs: its arguments are copied)
+    auto call = std::make_shared<flutter::MethodCall<flutter::EncodableValue>>(
+        method_name, method_call.arguments() ? std::make_unique<flutter::EncodableValue>(*method_call.arguments()) : nullptr);
+    std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>> target = std::move(result);
+    (low ? impl_->lowWorker_ : impl_->normalWorker_)->Post([this, call, target] {
+      auto outcome = std::make_shared<Outcome>();
+      const auto &name = call->method_name();
+      if (name == "createSession") {
+        HandleCreateSession(*call, std::make_unique<CollectedResult>(outcome));
+      } else if (name == "runInference") {
+        HandleRunInference(*call, std::make_unique<CollectedResult>(outcome));
+      } else {
+        HandleCloseSession(*call, std::make_unique<CollectedResult>(outcome));
+      }
+      impl_->screenThread_->Post([outcome, target] { outcome->ReplayTo(target.get()); });
+    });
     return;
   }
 
@@ -561,8 +620,22 @@ void FlutterOnnxruntimePlugin::HandleCreateSession(
       }
     }
 
+    // A session of low priority: the threads ONNX Runtime starts for it start at the lowest priority (the one that opens it is on
+    // the worker of low priority already)
+    bool low = false;
+    if (session_options_it != args->end() && std::holds_alternative<flutter::EncodableMap>(session_options_it->second)) {
+      const auto &options_map = std::get<flutter::EncodableMap>(session_options_it->second);
+      auto flag = options_map.find(flutter::EncodableValue("lowPriority"));
+      low = flag != options_map.end() && std::holds_alternative<bool>(flag->second) && std::get<bool>(flag->second);
+    }
+    if (low) low_priority_threads::Apply(session_options);
+
     // Create the session
     std::string session_id = impl_->sessionManager_->createSession(model_path.c_str(), session_options);
+    if (low && !session_id.empty()) {
+      std::lock_guard<std::mutex> lock(impl_->lowMutex_);
+      impl_->lowSessions_.insert(session_id);
+    }
 
     if (session_id.empty()) {
       result->Error("SESSION_CREATION_ERROR", "Failed to create ONNX Runtime session", nullptr);
@@ -840,6 +913,10 @@ void FlutterOnnxruntimePlugin::HandleCloseSession(
 
     // Close the session
     impl_->sessionManager_->closeSession(session_id);
+    {
+      std::lock_guard<std::mutex> lock(impl_->lowMutex_);
+      impl_->lowSessions_.erase(session_id);
+    }
 
     // Return null for success
     result->Success(nullptr);

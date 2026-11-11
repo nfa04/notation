@@ -33,7 +33,8 @@ class GlmOnnxReader with WidgetsBindingObserver {
   bool _observing = false;
   Future<void> _turn = Future.value();
 
-  OrtSessionOptions _options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false);
+  /// Low priority: the reading goes on in the background while the person writes, and takes only the time the screen leaves over.
+  OrtSessionOptions _options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false, lowPriority: true);
 
   /// The token ids of each of [pictures]. One call at a time: the sessions are shared.
   Future<List<List<int>>> read(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures, {int maxTokens = 80}) async =>

@@ -1,0 +1,60 @@
+name: Native priority
+
+# The ONNX Runtime plugin does its long calls (opening a model, running it) on threads of its own, at a low priority for the
+# readers that run in the background. That is native code per platform, so it is tried in the app itself on each platform that
+# can be reached here: integration_test/session_priority_test.dart reads the threads of the process (Linux, macOS) and watches that
+# the frames of the screen keep coming while a model runs. (iOS and Android need a device; Windows can only be built and run.)
+on:
+  push:
+    paths:
+      - packages/flutter_onnxruntime/**
+      - integration_test/session_priority_test.dart
+      - .github/workflows/native-priority.yml
+  pull_request:
+    paths:
+      - packages/flutter_onnxruntime/**
+      - integration_test/session_priority_test.dart
+      - .github/workflows/native-priority.yml
+  workflow_dispatch:
+
+concurrency:
+  group: native-priority-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  priority:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            device: linux
+          - os: macos-latest
+            device: macos
+          - os: windows-latest
+            device: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Linux build tools and a screen
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          sudo apt-get $opts update
+          sudo apt-get $opts install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev liblzma-dev xvfb
+      - run: flutter pub get
+      - name: Test (Linux, on a virtual screen)
+        if: matrix.os == 'ubuntu-latest'
+        run: xvfb-run -a flutter test integration_test/session_priority_test.dart -d linux
+      - name: Test
+        if: matrix.os != 'ubuntu-latest'
+        run: flutter test integration_test/session_priority_test.dart -d ${{ matrix.device }}

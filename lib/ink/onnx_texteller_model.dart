@@ -49,7 +49,7 @@ class OnnxTexTeller implements ScoredTexTeller {
           {Duration keepOpen = const Duration(seconds: 20), int? threads}) async =>
       OnnxTexTeller._(encoderPath, decoderPath, keepOpen, threads ?? (kIsWeb ? browserThreads() : math.min(4, math.max(2, Platform.numberOfProcessors ~/ 2))));
 
-  OrtSessionOptions get _options => OrtSessionOptions(intraOpNumThreads: threads, interOpNumThreads: 1, useArena: false);
+  OrtSessionOptions get _options => OrtSessionOptions(intraOpNumThreads: threads, interOpNumThreads: 1, useArena: false, lowPriority: true);
 
   @override
   Future<List<int>> read(Float32List pixels, {int maxTokens = texTellerMaxTokens}) async => (await readScored(pixels, maxTokens: maxTokens)).ids;

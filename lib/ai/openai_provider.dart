@@ -18,7 +18,13 @@ class OpenAiConfig {
   final String baseUrl;
   final String model;
 
-  const OpenAiConfig({this.baseUrl = defaultBaseUrl, this.model = ''});
+  /// The least time between the start of one request and the next, in seconds (0: none). For services that limit how many
+  /// requests a minute may be made (the free plan of Gemini), where a long job such as the facts of many notes would otherwise be refused.
+  final int pauseSeconds;
+
+  const OpenAiConfig({this.baseUrl = defaultBaseUrl, this.model = '', this.pauseSeconds = 0});
+
+  static const maxPauseSeconds = 600;
 
   static const defaultBaseUrl = 'https://api.openai.com/v1';
 
@@ -33,12 +39,16 @@ class OpenAiConfig {
     return Uri.parse(base.endsWith('/chat/completions') ? base : '$base/chat/completions');
   }
 
-  String encode() => jsonEncode({'baseUrl': baseUrl, 'model': model});
+  String encode() => jsonEncode({'baseUrl': baseUrl, 'model': model, if (pauseSeconds > 0) 'pause': pauseSeconds});
 
   static OpenAiConfig decode(String? text) {
     try {
       final m = jsonDecode(text ?? '') as Map<String, dynamic>;
-      return OpenAiConfig(baseUrl: m['baseUrl'] as String? ?? defaultBaseUrl, model: m['model'] as String? ?? '');
+      return OpenAiConfig(
+        baseUrl: m['baseUrl'] as String? ?? defaultBaseUrl,
+        model: m['model'] as String? ?? '',
+        pauseSeconds: ((m['pause'] as num?)?.toInt() ?? 0).clamp(0, maxPauseSeconds),
+      );
     } catch (_) {
       return const OpenAiConfig();
     }
@@ -58,11 +68,51 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
   final SettingsRepository? _settings;
   final SecretStore _secret;
   final OpenAiTransport _send;
+  final Future<void> Function(Duration) _sleep;
 
-  OpenAiProvider({SettingsRepository? settings, required SecretStore secret, OpenAiTransport? transport})
+  /// [sleep] waits (it is told to wait and nothing else; tests pass one that does not take the time).
+  OpenAiProvider({SettingsRepository? settings, required SecretStore secret, OpenAiTransport? transport, Future<void> Function(Duration)? sleep})
       : _settings = settings,
         _secret = secret,
-        _send = transport ?? _dioTransport;
+        _send = transport ?? _dioTransport,
+        _sleep = sleep ?? Future.delayed;
+
+  /// How often a request that the service turned away as too many (429) is tried again, and the longest wait that is worth it:
+  /// a quota that comes back tomorrow is not waited for.
+  static const _retries = 3;
+  static const _longestWait = Duration(seconds: 90);
+
+  // Requests start one after the other, at least the configured pause apart.
+  Future<void> _gate = Future.value();
+  DateTime? _lastStart;
+
+  Future<void> _waitOurTurn(AiCancel? cancel) async {
+    final before = _gate;
+    final mine = Completer<void>();
+    _gate = mine.future;
+    try {
+      await before;
+      final pause = Duration(seconds: _config.pauseSeconds);
+      final last = _lastStart;
+      if (last != null && pause > Duration.zero) {
+        final wait = pause - DateTime.now().difference(last);
+        if (wait > Duration.zero) await _waitCancellable(wait, cancel);
+      }
+      _lastStart = DateTime.now();
+    } finally {
+      mine.complete();
+    }
+  }
+
+  /// Waits [wait], in pieces so that a stop is noticed.
+  Future<void> _waitCancellable(Duration wait, AiCancel? cancel) async {
+    var left = wait;
+    while (left > Duration.zero && !(cancel?.cancelled ?? false)) {
+      final step = left < const Duration(seconds: 1) ? left : const Duration(seconds: 1);
+      await _sleep(step);
+      left -= step;
+    }
+  }
 
   OpenAiConfig _config = const OpenAiConfig();
   String _key = '';
@@ -82,7 +132,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
   /// Saves the address and model, and the key (an empty one is deleted; many
   /// servers on your own machine need none).
   Future<void> save(OpenAiConfig config, String key) async {
-    _config = OpenAiConfig(baseUrl: config.baseUrl.trim(), model: config.model.trim());
+    _config = OpenAiConfig(baseUrl: config.baseUrl.trim(), model: config.model.trim(), pauseSeconds: config.pauseSeconds.clamp(0, OpenAiConfig.maxPauseSeconds));
     _key = key.trim();
     notifyListeners();
     await _settings?.set(_configKey, _config.encode());
@@ -141,17 +191,34 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
     if (!_config.complete) throw StateError(reason!);
     if (cancel?.cancelled ?? false) return const AiToolReply('');
     try {
-      return await _ask(prompt, tools, 'max_tokens', maxTokens, onPartial, cancel);
+      return await _paced(prompt, tools, 'max_tokens', maxTokens, onPartial, cancel);
     } on _Refused catch (e) {
       // newer OpenAI models want another name for the limit
       if (e.message.contains('max_completion_tokens')) {
-        return _ask(prompt, tools, 'max_completion_tokens', maxTokens, onPartial, cancel);
+        return _paced(prompt, tools, 'max_completion_tokens', maxTokens, onPartial, cancel);
       }
       // (a model that cannot take tools says so: the caller then asks for the calls as text instead)
       if (tools.isNotEmpty && RegExp(r'\b(tools?|functions?)\b', caseSensitive: false).hasMatch(e.message) && e.message.contains('400')) {
         throw ToolsNotSupported(e.message);
       }
       throw StateError(e.message);
+    }
+  }
+
+  /// [_ask] after the pause that is set, and again (after what the service says to wait, or a growing wait) when it answers 429.
+  Future<AiToolReply> _paced(AiPrompt prompt, List<AiToolSpec> tools, String limitName, int maxTokens, void Function(String)? onPartial, AiCancel? cancel) async {
+    for (var attempt = 0;; attempt++) {
+      await _waitOurTurn(cancel);
+      if (cancel?.cancelled ?? false) return const AiToolReply('');
+      try {
+        return await _ask(prompt, tools, limitName, maxTokens, onPartial, cancel);
+      } on _Refused catch (e) {
+        if (e.status != 429 || attempt >= _retries) rethrow;
+        final wait = e.retryAfter ?? Duration(seconds: 5 << attempt); // 5, 10, 20 s when the service does not say
+        if (wait > _longestWait) rethrow;
+        await _waitCancellable(wait + const Duration(milliseconds: 500), cancel);
+        if (cancel?.cancelled ?? false) return const AiToolReply('');
+      }
     }
   }
 
@@ -309,7 +376,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
     final status = response.statusCode ?? 0;
     if (status < 200 || status >= 300) {
       final text = await stream.join();
-      throw _Refused(_explain(status, text));
+      throw _Refused(_explain(status, text), status: status, retryAfter: status == 429 ? _retryAfter(response.headers.value('retry-after'), text) : null);
     }
     await for (final chunk in stream) {
       if (cancel?.cancelled ?? false) {
@@ -318,6 +385,19 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
       }
       yield chunk;
     }
+  }
+
+  /// How long a 429 says to wait: the `Retry-After` header (seconds), or what Gemini writes in the answer ("retryDelay": "12s",
+  /// "Please retry in 12.5s"). Null when it says nothing.
+  @visibleForTesting
+  static Duration? retryAfterOf(String? header, String body) => _retryAfter(header, body);
+
+  static Duration? _retryAfter(String? header, String body) {
+    final seconds = double.tryParse(header?.trim() ?? '');
+    if (seconds != null && seconds >= 0) return Duration(milliseconds: (seconds * 1000).round());
+    final m = RegExp(r'retryDelay"?\s*:\s*"([\d.]+)s"').firstMatch(body) ?? RegExp(r'retry in ([\d.]+)\s*s', caseSensitive: false).firstMatch(body);
+    final found = double.tryParse(m?.group(1) ?? '');
+    return found == null ? null : Duration(milliseconds: (found * 1000).round());
   }
 
   static String _explain(int status, String body) {
@@ -340,11 +420,15 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
 /// A refusal by the server, with what it said.
 class _Refused implements Exception {
   final String message;
-  _Refused(this.message);
+
+  /// The HTTP status, and for 429 how long the service said to wait (when it did).
+  final int? status;
+  final Duration? retryAfter;
+  _Refused(this.message, {this.status, this.retryAfter});
   @override
   String toString() => message;
 }
 
 /// For tests and for transports that want to refuse the same way.
 @visibleForTesting
-Exception refusal(String message) => _Refused(message);
+Exception refusal(String message, {int? status, Duration? retryAfter}) => _Refused(message, status: status, retryAfter: retryAfter);
