@@ -7,6 +7,13 @@ name: CoreML check
 # Started by hand (Actions > CoreML check > Run workflow); it downloads about 1.6 GB of models, kept in the Actions cache.
 on:
   workflow_dispatch:
+  # (a hand-started workflow must be on the default branch first; until then, a push to this branch runs it)
+  push:
+    branches: [coreml-check]
+
+concurrency:
+  group: coreml-check-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: 3.47.7
