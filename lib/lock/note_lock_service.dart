@@ -97,11 +97,31 @@ class NoteLockService extends ChangeNotifier {
   /// How hard a passphrase is stirred into a key (tests use less).
   final int _iterations;
 
+  /// Wrong secrets in a row for each note, and when the next try is allowed: each one after the third doubles the wait (up to 15 minutes).
+  /// In memory only, as a person at an unlocked device is the one this is meant for; it keeps a script of guesses from being fast.
+  final Map<String, ({int failures, DateTime until})> _guesses = {};
+  final DateTime Function() _clock;
+
+  /// How long until [noteId] may be tried again (zero when it may).
+  Duration waitFor(String noteId) {
+    final g = _guesses[noteId];
+    if (g == null) return Duration.zero;
+    final left = g.until.difference(_clock());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  void _failed(String noteId) {
+    final n = (_guesses[noteId]?.failures ?? 0) + 1;
+    final seconds = n <= 3 ? 0 : (1 << (n - 3).clamp(1, 10)).clamp(2, 900); // (the shift is capped: it would wrap to 0)
+    _guesses[noteId] = (failures: n, until: _clock().add(Duration(seconds: seconds)));
+  }
+
   /// The key of each encrypted note that is open, kept in memory only.
   final Map<String, Uint8List> _keys = {};
 
-  NoteLockService(this.repository, this.files, {DeviceAuth? deviceAuth, PassphraseVault? vault, this.onSealed, int iterations = lockIterations})
-      : _iterations = iterations,
+  NoteLockService(this.repository, this.files, {DeviceAuth? deviceAuth, PassphraseVault? vault, this.onSealed, int? iterations, DateTime Function()? clock})
+      : _iterations = iterations ?? lockIterations,
+        _clock = clock ?? DateTime.now,
         deviceAuth = deviceAuth ?? LocalDeviceAuth(),
         vault = vault ?? const KeystoreVault();
 
@@ -147,6 +167,17 @@ class NoteLockService extends ChangeNotifier {
 
   /// Opens [noteId] with [secret] (the passcode or the passphrase). False if it is wrong.
   Future<bool> unlock(String noteId, String secret) async {
+    if (waitFor(noteId) > Duration.zero) return false;
+    final ok = await _unlock(noteId, secret);
+    if (ok) {
+      _guesses.remove(noteId);
+    } else {
+      _failed(noteId);
+    }
+    return ok;
+  }
+
+  Future<bool> _unlock(String noteId, String secret) async {
     final lock = await repository.locks.lockRow(noteId);
     if (lock == null) return true;
     if (lock.mode == 1) {
@@ -204,7 +235,10 @@ class NoteLockService extends ChangeNotifier {
     final secret = await vault.read(noteId);
     if (secret == null) return false;
     if (!await deviceAuth.authenticate(reason)) return false;
-    return unlock(noteId, secret);
+    // (the device's own check stands in for the secret and is not throttled: the throttle is for guessing, which this is not)
+    final ok = await _unlock(noteId, secret);
+    if (ok) _guesses.remove(noteId);
+    return ok;
   }
 
   // ---- putting away

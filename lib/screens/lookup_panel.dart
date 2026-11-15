@@ -123,6 +123,11 @@ class _WebPageState extends State<_WebPage> {
     ..setJavaScriptMode(JavaScriptMode.unrestricted)
     ..addJavaScriptChannel('UniSelection', onMessageReceived: (m) => widget.onSelection?.call(m.message))
     ..setNavigationDelegate(NavigationDelegate(
+      // (a page may only lead to web pages: not to another app's scheme, a file or a script address)
+      onNavigationRequest: (r) {
+        final u = Uri.tryParse(r.url);
+        return u != null && (u.scheme == 'https' || u.scheme == 'http') ? NavigationDecision.navigate : NavigationDecision.prevent;
+      },
       onPageStarted: (_) {
         widget.onSelection?.call('');
         _set(() => _loading = true);

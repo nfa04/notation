@@ -50,7 +50,14 @@ configure<ApplicationExtension> {
     buildTypes {
         getByName("release") {
             val releaseKey = signingConfigs.findByName("release")
-            if (releaseKey == null) logger.warn("android/key.properties is missing: this release build is signed with the DEBUG key and cannot be published.")
+            if (releaseKey == null) {
+                // (F-Droid and the builds of the CI sign the file themselves, or not at all: this is only a warning. A build that is
+                // meant for a store passes `-PrequireReleaseKey=true` and stops here instead)
+                if (project.findProperty("requireReleaseKey") == "true") {
+                    throw GradleException("android/key.properties is missing: this release build would be signed with the DEBUG key.")
+                }
+                logger.warn("android/key.properties is missing: this release build is signed with the DEBUG key and cannot be published.")
+            }
             signingConfig = releaseKey ?: signingConfigs.getByName("debug")
             // the model runtimes need their classes untouched (see proguard-rules.pro)
             isMinifyEnabled = true

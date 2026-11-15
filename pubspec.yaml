@@ -89,6 +89,8 @@ dependencies:
   # the web has no folders to ask for (lib/web/web_files_web.dart answers instead)
   path_provider_platform_interface: any
   web: ^1.1.2
+  cryptography_flutter: ^2.3.4
+  sodium: ^4.0.4
 
 dev_dependencies:
   flutter_test:
