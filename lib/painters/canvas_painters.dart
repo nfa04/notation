@@ -16,7 +16,11 @@ import 'soft_strokes.dart';
 class HighlightsPainter extends CustomPainter {
   final List<PdfHighlight> highlights;
 
-  HighlightsPainter({required this.highlights});
+  /// Whether the marks are multiplied into what is under them (a page with printed text: the marker tints the paper and the text
+  /// stays as dark as it was, as if the mark were behind it) instead of laid over it, which dims the text.
+  final bool behindText;
+
+  HighlightsPainter({required this.highlights, this.behindText = false});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -24,6 +28,7 @@ class HighlightsPainter extends CustomPainter {
       final paint = Paint()
         ..color = h.color
         ..style = PaintingStyle.fill;
+      if (behindText) paint.blendMode = BlendMode.multiply;
       canvas.drawRect(h.rect, paint);
     }
   }

@@ -12,6 +12,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:notes/pdf/pdf_text_layer.dart';
+import 'pdf_words.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -45,13 +48,12 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    // the page's text layer has one piece per word: 'alpha ' twice and the last 'alpha'
-    final pieces = [find.text('alpha ').at(0), find.text('alpha ').at(1), find.text('alpha').last];
-    for (var i = 0; i < 60 && find.text('alpha ').evaluate().length < 2; i++) {
+    // the page's text layer knows where each of the three 'alpha' is
+    for (var i = 0; i < 60 && pdfWords(tester, 'alpha').length < 3; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 100));
     }
-    expect(find.text('alpha '), findsNWidgets(2));
+    expect(pdfWords(tester, 'alpha'), hasLength(3));
 
     List<Rect> marks() {
       final paint = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is HighlightsPainter);
@@ -60,7 +62,7 @@ void main() {
 
     final lefts = <double>[];
     for (final at in [0, 1, 2]) {
-      final point = tester.getCenter(pieces[at]);
+      final point = pdfWords(tester, 'alpha')[at].center;
       final before = marks().length;
       // a long press selects the word under the finger
       await tester.longPressAt(point);
@@ -112,7 +114,7 @@ void main() {
       addTearDown(() => dir.delete(recursive: true));
 
       await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-      for (var i = 0; i < 60 && find.text('beta ').evaluate().isEmpty; i++) {
+      for (var i = 0; i < 60 && pdfWords(tester, 'beta').isEmpty; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
         await tester.pump(const Duration(milliseconds: 100));
       }
@@ -129,16 +131,16 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
         await tester.pump(const Duration(milliseconds: 100));
       }
-      final word = find.text('beta ');
+      final word = find.byType(PdfTextLayer);
       await tester.ensureVisible(word);
       await tester.pump(const Duration(milliseconds: 300));
-      if (tester.getRect(word).top < 200) { // (under the top bar: the wheel brings it further down)
+      if (pdfWords(tester, 'beta').single.top < 200) { // (under the top bar: the wheel brings it further down)
         final mouse = TestPointer(2, PointerDeviceKind.mouse);
         await tester.sendEventToBinding(mouse.hover(const Offset(500, 500)));
-        await tester.sendEventToBinding(mouse.scroll(Offset(0, tester.getRect(word).top - 300)));
+        await tester.sendEventToBinding(mouse.scroll(Offset(0, pdfWords(tester, 'beta').single.top - 300)));
         await tester.pump(const Duration(milliseconds: 300));
       }
-      await tester.longPressAt(tester.getCenter(word));
+      await tester.longPressAt(pdfWords(tester, 'beta').single.center);
       await tester.pump(const Duration(milliseconds: 400));
       // the button in the top bar (in a narrow window it is scrolled out of sight first)
       final comment = find.text('Comment').first;

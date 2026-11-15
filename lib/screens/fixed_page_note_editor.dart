@@ -24,6 +24,7 @@ import 'package:flutter/rendering.dart' show RenderBox, RenderParagraph, RenderR
 import '../pdf/pdf_content_editor.dart';
 import '../pdf/page_cache.dart';
 import '../pdf/pdf_pages.dart';
+import '../pdf/pdf_text_layer.dart';
 import 'color_swatches.dart';
 import '../pdf/pdf_stand_in_fonts.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData, HardwareKeyboard, KeyDownEvent, KeyboardInsertedContent, LogicalKeyboardKey, MissingPluginException, SystemChrome, SystemUiMode;
@@ -2115,7 +2116,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   final Map<int, GlobalKey<SelectionAreaState>> _areaKeys = {};
 
-  final Map<(int, int, int), GlobalKey> _wordKeys = {};
+  /// The text layer of each page of a PDF (see [PdfTextLayer]).
+  final Map<int, GlobalKey> _layerKeys = {};
 
   /// Whether this is a computer with a mouse (a double tap is for touch screens).
   bool get _desktop =>
