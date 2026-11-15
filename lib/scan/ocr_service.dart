@@ -52,7 +52,7 @@ class OnnxOcrModels implements OcrModels {
 
   @override
   Future<Float32List> detect(DetectorInput input) async {
-    final session = _detector ??= await openOnnxSession(detectorPath, options: _options);
+    final session = _detector ??= await openOnnxSession(detectorPath, options: _options, accelerate: !await onnxNeedsFixedShapes());
     final tensor = await OrtValue.fromList(input.data, [1, 3, input.height, input.width]);
     final out = await session.run({'x': tensor});
     await tensor.dispose();
@@ -70,7 +70,7 @@ class OnnxOcrModels implements OcrModels {
 
   @override
   Future<({List<double> scores, int steps, int classes})> read(ReaderInput input) async {
-    final session = _reader ??= await openOnnxSession(readerPath, options: _options);
+    final session = _reader ??= await openOnnxSession(readerPath, options: _options, accelerate: !await onnxNeedsFixedShapes());
     final tensor = await OrtValue.fromList(input.data, [1, 3, readerHeight, input.width]);
     final out = await session.run({'x': tensor});
     await tensor.dispose();

@@ -31,7 +31,7 @@ Future<List<List<int>>> readPicturesOnnx({
   OrtSessionOptions options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false);
 
   final features = <Float32List>[];
-  final vision = await openOnnxSession(visionPath, options: options());
+  final vision = await openOnnxSession(visionPath, options: options(), accelerate: !await onnxNeedsFixedShapes());
   try {
     for (final p in pictures) {
       features.add(await _see(vision, p));

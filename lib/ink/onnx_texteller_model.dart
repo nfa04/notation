@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../llm/onnx_session.dart';
+import '../llm/warm_session.dart';
 import '../web/browser_threads.dart';
 import 'dart:io';
 import 'dart:math' as math;
@@ -10,6 +11,9 @@ import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
 import 'ink_image.dart' show texTellerImageSize;
 import 'texteller_decoder.dart';
+
+/// What the encoder gives for a picture: 785 places (28 x 28 pieces and one more) of 768 numbers.
+const List<int> texTellerHidden = [785, 768];
 
 /// [TexTellerModel] on top of the two ONNX files (the encoder and the decoder with a cache of keys and values).
 ///
@@ -22,7 +26,8 @@ class OnnxTexTeller implements ScoredTexTeller {
   final String _decoderPath;
   final Duration keepOpen;
   final int threads;
-  OrtSession? _encoder;
+  WarmSession? _encoder;
+  int _openedAt = onnxAccelerationChanges;
   OrtSession? _decoder;
   Timer? _idle;
 
@@ -64,6 +69,9 @@ class OnnxTexTeller implements ScoredTexTeller {
 
   Future<TexTellerReading> _read(Float32List pixels, int maxTokens) async {
     _idle?.cancel();
+    // (the setting of where models run changed since the sessions were opened: opened again)
+    if (_openedAt != onnxAccelerationChanges) await close();
+    _openedAt = onnxAccelerationChanges;
     OrtValue? hidden;
     try {
       hidden = await _encode(pixels);
@@ -73,36 +81,63 @@ class OnnxTexTeller implements ScoredTexTeller {
       if (keepOpen == Duration.zero) {
         await close();
       } else {
-        _idle = Timer(keepOpen, () => unawaited(close()));
+        _idle = Timer(keepOpen, _idleClose);
       }
     }
   }
 
-  Future<OrtSession> _session(bool encoder) async {
-    final open = encoder ? _encoder : _decoder;
-    if (open != null) return open;
-    final made = await _timed('open', () => openOnnxSession(encoder ? _encoderPath : _decoderPath, options: _options, accelerate: encoder));
-    encoder ? _encoder = made : _decoder = made;
+  Future<OrtSession> _decoderSession() async {
+    final made = _decoder ?? await _timed<OrtSession>('open', () => openOnnxSession(_decoderPath, options: _options, accelerate: false));
+    _decoder = made;
+    return made;
+  }
+
+  Future<WarmSession> _encoderSession() async {
+    final made = _encoder ?? await _timed<WarmSession>('open', () async => openWarmSession(_encoderPath, options: _options, oneSize: true, accelerate: _encoderPath.endsWith('encoder-gpu.onnx') || !await onnxNeedsFixedShapes()));
+    _encoder = made;
     return made;
   }
 
   Future<OrtValue> _encode(Float32List pixels) async {
-    final encoder = await _session(true);
-    final input = await _timed('encode.input', () => OrtValue.fromList(pixels, [1, 1, texTellerImageSize, texTellerImageSize]));
+    final encoder = await _encoderSession();
+    // (the picture is always the same size: one plan; a wrong shape is checked for all the same, see [WarmSession.run])
+    bool right(OrtValue v) => v.shape.length == 3 && v.shape[1] == texTellerHidden[0] && v.shape[2] == texTellerHidden[1];
+    OrtValue hiddenOf(Map<String, OrtValue> out) => out['last_hidden_state'] ?? out.values.first;
+    final out = await _timed(
+      'encode.run',
+      () => encoder.run(() async => {'pixel_values': await OrtValue.fromList(pixels, [1, 1, texTellerImageSize, texTellerImageSize])}, accept: (out) => right(hiddenOf(out))),
+    );
+    final hidden = hiddenOf(out);
+    for (final e in out.values) {
+      if (!identical(e, hidden)) await e.dispose();
+    }
+    if (right(hidden)) return hidden;
+    final shape = hidden.shape;
+    await hidden.dispose();
+    throw StateError('The formula encoder gave $shape where [1, ${texTellerHidden.join(', ')}] was expected.');
+  }
+
+  /// Makes the encoder's plan for the graphics card now (AMD: about 2 minutes the first time, kept on disk) with a blank picture, so that
+  /// no reading has to wait for it. The encoder has one picture size only, so this is the one plan.
+  Future<void> precompile() async {
+    _idle?.cancel();
     try {
-      final out = await _timed('encode.run', () => encoder.run({'pixel_values': input}));
-      final hidden = out['last_hidden_state'] ?? out.values.first;
-      for (final e in out.values) {
-        if (!identical(e, hidden)) await e.dispose();
-      }
-      return hidden;
+      final hidden = await _encode(Float32List(texTellerImageSize * texTellerImageSize));
+      await hidden.dispose();
+      // (the plan of a new session can be the right one only by chance of the first run: a second one shows it is the encoder's own)
+      final again = await _encode(Float32List(texTellerImageSize * texTellerImageSize));
+      await again.dispose();
     } finally {
-      await input.dispose();
+      if (keepOpen == Duration.zero) {
+        await close();
+      } else {
+        _idle = Timer(keepOpen, _idleClose);
+      }
     }
   }
 
   Future<TexTellerReading> _decode(OrtValue hidden, int maxTokens) async {
-    final decoder = await _session(false);
+    final decoder = await _decoderSession();
     final names = texTellerCacheNames().toList();
     // the first step has nothing cached; the graph wants something of the right kind there all the same (it is not used)
     final nothing = await OrtValue.fromList(Float32List(texTellerHeads * texTellerHeadSize), [1, texTellerHeads, 1, texTellerHeadSize]);
@@ -166,6 +201,15 @@ class OnnxTexTeller implements ScoredTexTeller {
       release(cacheOff);
       release(cacheOn);
       await _timed('release', () => Future.wait(letGo));
+    }
+  }
+
+  // (not while the accelerator is making a plan: that would throw the minutes away and start it again)
+  void _idleClose() {
+    if (_encoder?.compiling != null) {
+      _idle = Timer(keepOpen, _idleClose);
+    } else {
+      unawaited(close());
     }
   }
 

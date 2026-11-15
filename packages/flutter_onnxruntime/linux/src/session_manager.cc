@@ -5,6 +5,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include "session_manager.h"
+#include "ort_runtime.h"
 #include <iostream>
 #include <locale.h>
 
@@ -53,6 +54,7 @@ private:
 };
 
 Ort::Env createOrtEnv() {
+  ort_runtime::init(); // which ONNX Runtime (the bundled one or a pack) has to be settled before the first call into it
   ScopedCLocale locale_guard;
   return Ort::Env(ORT_LOGGING_LEVEL_WARNING, "FlutterOnnxRuntime");
 }
@@ -67,6 +69,10 @@ SessionManager::~SessionManager() {
   // Clear all sessions
   std::lock_guard<std::mutex> lock(mutex_);
   sessions_.clear();
+  // With a runtime pack the environment is left alive: destroying it unloads the provider libraries, and the HIP / CUDA runtimes
+  // they brought still have exit handlers that then call into code that is gone (a segmentation fault as the app closes). The
+  // process is ending, the operating system takes the memory back.
+  if (!ort_runtime::activePath().empty()) (void)env_.release();
 }
 
 std::string SessionManager::createSession(const char *model_path, const Ort::SessionOptions &session_options) {

@@ -190,6 +190,11 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
           }
         }
 
+        // the session's own log level (1 = info: the CoreML provider then says how many of the nodes it took, in how many pieces)
+        if let level = options["logSeverityLevel"] as? Int, let logging = [ORTLoggingLevel.verbose, .info, .warning, .error, .fatal][safe: level] {
+          try? sessionOptions.setLogSeverityLevel(logging)
+        }
+
         // Note: 14/04/25 interOpNumThreads is not supported in onnxruntime-objc
         // if let interOpNumThreads = options["interOpNumThreads"] as? Int {
         //   try sessionOptions.setInterOpNumThreads(Int32(interOpNumThreads))
@@ -203,7 +208,14 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
               continue
             case "CORE_ML":
               do {
-                try sessionOptions.appendCoreMLExecutionProvider()
+                // with options (ModelFormat, MLComputeUnits, ModelCacheDirectory, ...: coreml_provider_factory.h) when the app gives
+                // some; without, ONNX Runtime's defaults (the older NeuralNetwork format, converted again at every session)
+                let coreMLOptions = (options["providerOptions"] as? [String: Any])?["CORE_ML"] as? [String: String] ?? [:]
+                if coreMLOptions.isEmpty {
+                  try sessionOptions.appendCoreMLExecutionProvider()
+                } else {
+                  try sessionOptions.appendCoreMLExecutionProvider(withOptionsV2: coreMLOptions)
+                }
               } catch {
                 result(FlutterError(code: "SESSION_OPTIONS_ERROR",
                   message: "Failed to append CoreML execution provider: \(error.localizedDescription)", details: nil))
@@ -1205,4 +1217,8 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
     default: return "unknown"
     }
   }
+}
+
+private extension Array {
+  subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }

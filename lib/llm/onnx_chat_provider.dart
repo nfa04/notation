@@ -46,8 +46,8 @@ class OnnxChatProvider extends ModelFilesService implements TextModelProvider, S
     this.keepLoaded = const Duration(seconds: 30),
     this.specs = ChatModelSpec.all,
   })  : _settings = settings,
-        _ram = ram ?? totalRamMb,
-        _open = open ?? ((path, spec) async => OnnxQwen(path, layers: spec.layers, kvHeads: spec.kvHeads, headDim: spec.headDim, threads: onnxThreads)),
+        _ram = ram ?? usableRamMb,
+        _open = open ?? ((path, spec) async => OnnxQwen(path, layers: spec.layers, kvHeads: spec.kvHeads, headDim: spec.headDim, threads: onnxThreads, embedPath: spec.embedFile == null ? null : p.join(p.dirname(path), spec.embedFile))),
         _modelsRoot = modelsRoot ?? (() async => Directory(p.join((await getApplicationSupportDirectory()).path, 'models'))),
         super(files: ChatModelSpec.qwen3Large.files, folderName: 'llm_large');
 
@@ -72,9 +72,11 @@ class OnnxChatProvider extends ModelFilesService implements TextModelProvider, S
     _ramKnown = true;
     final saved = await _settings?.get(_modelKey);
     // without a choice: the biggest model that fits and is not a huge download, so that a
-    // small device still gets an answer and nobody is sent off to fetch 10 GB
+    // small device still gets an answer and nobody is sent off to fetch 10 GB. A device with 10 GB or more to use
+    // (a 16 GB iPad, a laptop) starts with a 4B model (3 GB).
+    final limitMb = (_ramMb ?? 0) >= 10000 ? 3200 : 2200;
     _spec = specs.where((s) => s.id == saved).firstOrNull ??
-        specs.lastWhere((s) => _fits(s) && s.downloadMb <= 2200, orElse: () => specs.first);
+        specs.lastWhere((s) => _fits(s) && s.downloadMb <= limitMb, orElse: () => specs.first);
     files = _spec.files;
     await _refreshInstalled();
     await super.load();
@@ -124,12 +126,13 @@ class OnnxChatProvider extends ModelFilesService implements TextModelProvider, S
             installed: _installed.contains(s.id),
             supported: _fits(s),
             reason: _reasonFor(s),
+            extraSmall: s.extraSmall,
           ),
       ];
 
   String? _reasonFor(ChatModelSpec s) => _fits(s)
       ? null
-      : tr('This needs a device with at least {need} GB of memory; this one has {have} GB.',
+      : tr('This needs a device with at least {need} GB of memory; this one can use {have} GB.',
           {'need': s.neededGb, 'have': ((_ramMb ?? 0) / 1000).toStringAsFixed(1)});
 
   @override

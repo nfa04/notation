@@ -21,6 +21,7 @@ enum OrtProvider {
   DIRECT_ML,
   DNNL,
   NNAPI,
+  MIGRAPHX,
   OPEN_VINO,
   QNN,
   ROCM,

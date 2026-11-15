@@ -1,0 +1,80 @@
+name: CoreML check
+
+# Runs integration_test/coreml_check_test.dart on a Mac: the formula encoder and the handwriting vision network, opened with several
+# CoreML settings and with the plain processor, compared answer by answer and timed. A GitHub Mac is a virtual machine on Apple
+# Silicon: expect no Neural Engine and little or no graphics card, so the times here say little about a real Mac; what counts is
+# whether CoreML takes the models, whether its answers match the processor's, and whether the cache works.
+# Started by hand (Actions > CoreML check > Run workflow); it downloads about 1.6 GB of models, kept in the Actions cache.
+on:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  coreml:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: What machine this is
+        run: |
+          sysctl -n machdep.cpu.brand_string hw.memsize hw.ncpu
+          sw_vers
+          system_profiler SPDisplaysDataType || true
+      - name: Models from the Actions cache
+        id: models
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/models
+          # (the checksums the app pins: a new file is a new key)
+          key: coreml-models-8ea8a061-6194708c-e4565d57-7f5cffc1-966e02f2
+      - name: Download the models
+        if: steps.models.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir -p models/teller models/glm
+          get() { curl -fsSL --retry 3 -o "models/$1" "$2"; }
+          get teller/encoder.onnx https://huggingface.co/nfa04/texteller-onnx-8bit/resolve/main/encoder.onnx
+          get teller/encoder-gpu.onnx https://huggingface.co/nfa04/texteller-onnx-8bit/resolve/main/encoder-gpu.onnx
+          get glm/vision.onnx https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/vision.onnx
+          get glm/vision-gpu.onnx https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/vision-gpu.onnx
+          get glm/vision-gpu.onnx.data https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/vision-gpu.onnx.data
+      - name: Check the models
+        working-directory: ${{ runner.temp }}/models
+        run: |
+          shasum -a 256 -c <<'EOF'
+          8ea8a061533b7fd8fbb746b0bd9ddd8d26d324fe07647dcf9059ddd07c2d77c4  teller/encoder.onnx
+          6194708cf94bf4b2a34a07bc08fe13279cd382f22772f54bd9082c11a3ff4563  teller/encoder-gpu.onnx
+          e4565d57d7714b0b180718d8bb0a58d59fe7a68486028fe2fa774ce994f0f03a  glm/vision.onnx
+          7f5cffc1f3589d9c8c4322fd904903ddc5759c9df96880516533ca6ab17ccc0e  glm/vision-gpu.onnx
+          966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99  glm/vision-gpu.onnx.data
+          EOF
+      - run: flutter pub get
+      - name: Let the test read the models (the sandbox of the debug app only reaches its own container)
+        run: /usr/libexec/PlistBuddy -c "Set :com.apple.security.app-sandbox false" macos/Runner/DebugProfile.entitlements
+      - name: Test
+        run: |
+          set -o pipefail
+          flutter test integration_test/coreml_check_test.dart -d macos \
+            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json 2>&1 | tee coreml.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '```'
+            grep -E "coreml-check|CoreML|partitions" coreml.log | grep -v '^coreml-check | {' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coreml-check
+          path: |
+            coreml.log
+            ${{ runner.temp }}/coreml.json

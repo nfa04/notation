@@ -2,7 +2,7 @@
 //   flutter test tool/handwriting_bench/export_lines_test.dart --dart-define=SELECT=/path/select.json --dart-define=OUT=/path/out
 // SELECT: a list of {id, strokes: [{c: ARGB int, b: brush or null, pts: [x0, y0, x1, y1, ...]}]} (one page each).
 // OUT gets lines.json (every line: its strokes and chunk boxes) and paddle/<line>.png (the picture PaddleOCR-VL reads, got back from
-// the patches it is given). (TrOCR's pictures were made here too until TrOCR was taken out of the app.)
+// the patches it is given).
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';

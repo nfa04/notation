@@ -13,7 +13,7 @@ folder = arg('--dir', 'fp32'); embed_mode = arg('--embed', 'fp32'); limit = int(
 root = os.path.expanduser('~/hw-bench/glm_onnx')
 proc = AutoProcessor.from_pretrained(os.path.expanduser('~/hw-bench/models/glm-ocr'))
 opt = ort.SessionOptions(); opt.intra_op_num_threads = int(arg('--threads', 4))
-vision = ort.InferenceSession(os.path.join(root, folder, 'vision.onnx'), opt, providers=['CPUExecutionProvider'])
+vision = None if arg('--vload') else ort.InferenceSession(arg('--vision') or os.path.join(root, folder, 'vision.onnx'), opt, providers=['CPUExecutionProvider'])
 text = ort.InferenceSession(os.path.join(root, folder, 'text.onnx'), opt, providers=['CPUExecutionProvider'])
 embed = np.load(f'{root}/embed.npy', mmap_mode='r')
 if embed_mode == 'bin':                                                                   # the release file: int8 rows, then a float32 scale per row
@@ -34,7 +34,16 @@ def read(png, max_tokens=80):
     inp = proc.apply_chat_template(msgs, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors='pt')
     ids = inp['input_ids'][0].numpy(); g = inp['image_grid_thw'][0].numpy()
     _t0 = _t.perf_counter()
-    feats = vision.run(None, {'pixel_values': inp['pixel_values'].numpy(), 'pos_ids': vision_pos_ids(int(g[1]), int(g[2]))})[0]
+    px_, pos_ = inp['pixel_values'].numpy(), vision_pos_ids(int(g[1]), int(g[2]))
+    stem = os.path.basename(png)[:-4]
+    if arg('--vload'):                                                                    # features computed elsewhere (a graphics card): see --vdump
+        feats = np.fromfile(f"{arg('--vload')}/{stem}.feat", dtype=np.float32).reshape(-1, 1536)
+    else:
+        feats = vision.run(None, {'pixel_values': px_, 'pos_ids': pos_})[0]
+        if arg('--vdump'):                                                                # inputs (and the processor's features) for a test on another runtime
+            os.makedirs(arg('--vdump'), exist_ok=True)
+            open(f"{arg('--vdump')}/{stem}.in", 'wb').write(px_.astype(np.float32).tobytes() + pos_.astype(np.int64).tobytes())
+            np.asarray(feats, dtype=np.float32).tofile(f"{arg('--vdump')}/{stem}.cpu")
     TIMES['vision'].append(_t.perf_counter() - _t0)
     emb = np.asarray(embed[ids]).astype(np.float32)
     emb[ids == IMG] = feats

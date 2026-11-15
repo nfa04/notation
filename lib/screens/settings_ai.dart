@@ -122,6 +122,8 @@ class _AiSettingsState extends State<_AiSettings> {
     );
   }
 
+  bool _showExtraSmall = false;
+
   /// The sizes to choose from.
   Widget _models(BuildContext context, SelectableModels models) {
     final scheme = Theme.of(context).colorScheme;
@@ -130,6 +132,7 @@ class _AiSettingsState extends State<_AiSettings> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Model', style: Theme.of(context).textTheme.labelLarge),
         for (final o in models.modelOptions)
+          if (!o.extraSmall || _showExtraSmall || o.id == models.selectedModelId || o.installed)
           InkWell(
             key: ValueKey('ai-model-${o.id}'),
             onTap: o.supported && o.id != models.selectedModelId ? () => models.selectModel(o.id) : null,
@@ -155,6 +158,12 @@ class _AiSettingsState extends State<_AiSettings> {
                 ),
               ]),
             ),
+          ),
+        if (models.modelOptions.any((o) => o.extraSmall && !(_showExtraSmall || o.id == models.selectedModelId || o.installed)) || _showExtraSmall)
+          TextButton(
+            key: const ValueKey('ai-show-extra-small'),
+            onPressed: () => setState(() => _showExtraSmall = !_showExtraSmall),
+            child: Text(_showExtraSmall ? 'Hide extra small models' : 'Show extra small models'),
           ),
       ]),
     );

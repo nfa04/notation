@@ -294,7 +294,7 @@ void main() {
 
       final laptop = make(ram: 46000);
       await laptop.load();
-      expect(laptop.selectedModelId, 'qwen3-1.7b'); // not a 10 GB download unasked
+      expect(laptop.selectedModelId, 'qwen3.5-4b'); // not a 10 GB download unasked: the 3 GB one
       final byId = {for (final o in laptop.modelOptions) o.id: o};
       expect(byId['qwen3-14b']!.supported, isTrue);
       final phone = make(ram: 7600); // an "8 GB" phone
@@ -685,6 +685,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const ValueKey('ai-model-qwen3-1.7b')), 400, scrollable: find.byType(Scrollable).first);
 
+    // the models under a billion parameters are out of sight, except the one in use, until asked for
+    expect(find.byKey(const ValueKey('ai-model-qwen2.5-0.5b')), findsNothing);
+    expect(find.byKey(const ValueKey('ai-model-qwen3-0.6b')), findsOneWidget); // (it is the chosen one)
+    await tester.ensureVisible(find.byKey(const ValueKey('ai-show-extra-small')));
+    await tester.tap(find.byKey(const ValueKey('ai-show-extra-small')));
+    await tester.pumpAndSettle();
     for (final id in ['qwen2.5-0.5b', 'qwen3-0.6b', 'qwen2.5-1.5b', 'qwen3-1.7b']) {
       expect(find.byKey(ValueKey('ai-model-$id')), findsOneWidget);
     }

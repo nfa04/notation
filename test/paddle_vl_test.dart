@@ -117,7 +117,6 @@ void main() {
           glm: GlmOcrService(modelDirectory: () async => Directory(p.join(dir.path, 'glm'))),
           readSetting: (k) async => settings[k],
           writeSetting: (k, v) async => settings[k] = v,
-          removeOldFiles: () async {},
         );
         await hw.load();
         expect(hw.reader, HandwritingReader.glm);
@@ -137,7 +136,6 @@ void main() {
           paddle: paddle,
           glm: GlmOcrService(modelDirectory: () async => Directory(p.join(dir.path, 'glm'))),
           readSetting: (k) async => settings[k],
-          removeOldFiles: () async {},
         );
         await again.load();
         expect(again.reader, HandwritingReader.paddle);

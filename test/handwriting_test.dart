@@ -81,11 +81,10 @@ void main() {
               },
         );
 
-    HandwritingService service({GlmOcrService? g, Future<void> Function()? removeOld}) => HandwritingService(
+    HandwritingService service({GlmOcrService? g}) => HandwritingService(
           glm: g ?? glm(),
           readSetting: (k) async => settings[k],
           writeSetting: (k, v) async => settings[k] = v,
-          removeOldFiles: removeOld ?? () async {},
         );
 
     setUp(() async {
@@ -95,11 +94,11 @@ void main() {
     });
     tearDown(() => dir.delete(recursive: true));
 
-    test('GLM-OCR reads unless the person chose another reader; an old choice of TrOCR is GLM-OCR now', () async {
+    test('GLM-OCR reads unless the person chose another reader; a reader that is not offered is GLM-OCR', () async {
       final fresh = service();
       await fresh.load();
       expect(fresh.reader, HandwritingReader.glm);
-      settings[HandwritingService.readerKey] = 'trocr'; // (what an earlier version kept)
+      settings[HandwritingService.readerKey] = 'nothing-like-it';
       final old = service();
       await old.load();
       expect(old.reader, HandwritingReader.glm);
@@ -124,15 +123,35 @@ void main() {
       expect(Directory('${dir.path}/glm').existsSync(), isFalse);
     });
 
-    test('what the TrOCR reader of earlier versions left behind is cleared away when the service starts', () async {
-      var cleared = 0;
-      await (service(removeOld: () async => cleared++)).load();
-      expect(cleared, 1);
-      // the real clearing goes to the app's folder; here the folder of the old files is what it deletes
-      final old = Directory('${dir.path}/models/trocr')..createSync(recursive: true);
-      File('${old.path}/encoder.onnx').writeAsBytesSync([1]);
-      await service(removeOld: () async => old.deleteSync(recursive: true)).load();
-      expect(old.existsSync(), isFalse);
+    test('the vision network can be switched: only its file is fetched, the other one stays (no download to go back), and the choice is kept', () async {
+      final fetched = <String>[];
+      final g = glm(download: (url, path, progress) async {
+        fetched.add(url.split('/').last);
+        File(path).writeAsBytesSync([1]);
+        progress(1);
+      });
+      final s = service(g: g);
+      await s.load();
+      expect(s.weights, GlmWeights.platformDefault);
+      await s.setWeights(GlmWeights.standard);
+      await s.install();
+      expect(fetched, ['vision.onnx', 'text.onnx', 'embeddings.bin']);
+      expect(s.status, HandwritingStatus.installed);
+
+      fetched.clear();
+      await s.setWeights(GlmWeights.compact);
+      expect(s.status, HandwritingStatus.notInstalled); // (until the new file is there)
+      expect(settings[HandwritingService.weightsKey], 'compact');
+      await s.install();
+      expect(fetched, ['vision-web.onnx']);
+      expect(s.status, HandwritingStatus.installed);
+      expect(File('${dir.path}/glm/vision.onnx').existsSync(), isTrue);
+      expect(File('${dir.path}/glm/vision-web.onnx').existsSync(), isTrue);
+
+      final again = service(g: glm());
+      await again.load(); // (a new start finds the choice and the file)
+      expect(again.weights, GlmWeights.compact);
+      expect(again.status, HandwritingStatus.installed);
     });
 
     test('a failing download is reported and leaves nothing behind', () async {

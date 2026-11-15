@@ -99,6 +99,9 @@ class ModelOption {
   final bool supported;
   final String? reason;
 
+  /// A model too small to give good answers: the list shows it only when asked (or when it is the one in use).
+  final bool extraSmall;
+
   const ModelOption({
     required this.id,
     required this.label,
@@ -106,6 +109,7 @@ class ModelOption {
     required this.installed,
     required this.supported,
     this.reason,
+    this.extraSmall = false,
   });
 }
 

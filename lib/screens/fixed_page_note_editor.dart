@@ -229,6 +229,7 @@ import 'scan_screen.dart';
 import 'shape_style_dialog.dart';
 import 'speech_recorder.dart';
 import 'table_editor.dart';
+import 'onnx_places.dart';
 import 'text_box_style_dialog.dart';
 import '../style/platform_dialog.dart';
 import '../style/platform_look.dart';

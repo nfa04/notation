@@ -61,6 +61,11 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
                 SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onSecondaryContainer)),
                 const SizedBox(width: 8),
                 Text(trCount(waiting, 'Reading the handwriting: 1 left', 'Reading the handwriting: {n} left'), style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer)),
+                // (where it runs now: the graphics card, the processor or both)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: OnnxPlaces(since: DateTime.now(), compact: true, style: TextStyle(fontSize: 11, color: scheme.onSecondaryContainer.withValues(alpha: 0.75))),
+                ),
                 IconButton(
                   key: const ValueKey('ink-progress-hide'),
                   tooltip: tr('Hide'),

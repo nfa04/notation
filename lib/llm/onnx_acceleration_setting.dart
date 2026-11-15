@@ -7,3 +7,11 @@ const onnxAccelerationSetting = 'onnx_acceleration';
 Future<void> applyOnnxAcceleration(Future<String?> Function(String key) get) async {
   onnxAccelerationEnabled = await get(onnxAccelerationSetting) != 'cpu';
 }
+
+/// 'off' to feed pictures to the networks at the size they have; anything else (or nothing): pad them to a few fixed sizes
+/// (see [padToFixedSizes]).
+const onnxPadSetting = 'onnx_pad_fixed_sizes';
+
+Future<void> applyOnnxPadding(Future<String?> Function(String key) get) async {
+  padToFixedSizes = await get(onnxPadSetting) != 'off';
+}

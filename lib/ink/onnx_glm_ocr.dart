@@ -7,6 +7,7 @@ import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
 import '../llm/onnx_qwen.dart' show onnxThreads;
 import '../llm/onnx_session.dart';
+import '../llm/warm_session.dart';
 import 'glm_ocr.dart';
 import 'paddle_vl.dart' show withoutLoop;
 
@@ -24,8 +25,11 @@ class GlmOnnxReader with WidgetsBindingObserver {
 
   GlmOnnxReader({this.keepOpen = const Duration(seconds: 15)});
 
-  OrtSession? _vision, _language;
+  WarmSession? _vision;
+  OrtSession? _language;
   GlmEmbeddings? _table;
+
+  int _openedAt = 0; // ([onnxAccelerationChanges] when the sessions were opened)
 
   /// The files the open sessions are of (another set closes them first).
   String? _files;
@@ -52,15 +56,19 @@ class GlmOnnxReader with WidgetsBindingObserver {
   Future<List<GlmReading>> _read(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures, int maxTokens) async {
     _idle?.cancel();
     final files = '$visionPath\u0000$textPath\u0000$embeddingsPath';
-    if (_files != files) await _close();
+    // (other files, or the setting of where models run changed since they were opened: opened again)
+    if (_files != files || _openedAt != onnxAccelerationChanges) await _close();
     _files = files;
+    _openedAt = onnxAccelerationChanges;
     if (!_observing) {
       WidgetsBinding.instance.addObserver(this);
       _observing = true;
     }
     try {
-      final vision = _vision ??= await openOnnxSession(visionPath, options: _options());
-      final features = [for (final p in pictures) await _see(vision, p)];
+      // (a quantised network cannot run on an accelerator that compiles for exact sizes: it is cut into pieces, each compiled, and the
+      // quantised ones run on the processor anyway, so it would only make the first reading take for ever)
+      final vision = _vision ??= await openWarmSession(visionPath, options: _options(), accelerate: visionPath.endsWith('vision-gpu.onnx') || !await onnxNeedsFixedShapes());
+      final features = await _seeAll(vision, pictures);
       final table = _table ??= await GlmEmbeddings.open(embeddingsPath);
       final language = _language ??= await openOnnxSession(textPath, options: _options(), accelerate: false);
       return [
@@ -78,9 +86,19 @@ class GlmOnnxReader with WidgetsBindingObserver {
         if (keepOpen == Duration.zero) {
           await _close();
         } else {
-          _idle = Timer(keepOpen, close);
+          _idle = Timer(keepOpen, _idleClose);
         }
       }
+    }
+  }
+
+  /// The quiet time is over: let go, unless the accelerator is still making a plan (letting go would throw the minutes of work away, and the
+  /// next reading would begin the same plan again).
+  void _idleClose() {
+    if (_vision?.compiling != null) {
+      _idle = Timer(keepOpen, _idleClose);
+    } else {
+      unawaited(close());
     }
   }
 
@@ -112,20 +130,53 @@ class GlmOnnxReader with WidgetsBindingObserver {
   void didHaveMemoryPressure() => unawaited(close());
 }
 
-Future<Float32List> _see(OrtSession vision, GlmPicture p) async {
-  final pixels = await OrtValue.fromList(p.patches, [p.count, 3 * 2 * glmPatch * glmPatch]);
-  final positions = await int64Value(glmPatchPositions(p.gridHeight, p.gridWidth), [p.count, 2]);
-  final out = await vision.run({'pixel_values': pixels, 'pos_ids': positions});
-  final result = out[vision.outputNames.first] ?? out.values.first;
-  final flat = await result.asFlattenedList();
-  final features = Float32List(flat.length);
-  for (var i = 0; i < flat.length; i++) {
-    features[i] = (flat[i] as num).toDouble();
+/// The size of a picture as the accelerator sees it (it makes one plan for each).
+String _sizeOf(GlmPicture p) => '${p.gridHeight}x${p.gridWidth}';
+
+/// [_see] of every picture, in an order that changes the accelerator's plan as seldom as possible: the size whose plan is in memory first,
+/// then the others size by size (MIGraphX holds one plan; changing it loads the other from disk, about 3 s, where a run takes 0.3 s).
+Future<List<Float32List>> _seeAll(WarmSession vision, List<GlmPicture> pictures) async {
+  final loaded = vision.loaded;
+  final order = List.generate(pictures.length, (i) => i)
+    ..sort((a, b) {
+      final ka = _sizeOf(pictures[a]), kb = _sizeOf(pictures[b]);
+      if ((ka == loaded) != (kb == loaded)) return ka == loaded ? -1 : 1;
+      final byCount = pictures[a].count.compareTo(pictures[b].count);
+      return byCount != 0 ? byCount : ka.compareTo(kb);
+    });
+  final features = List<Float32List?>.filled(pictures.length, null);
+  for (final i in order) {
+    features[i] = await _see(vision, pictures[i]);
   }
-  for (final v in [pixels, positions, ...out.values]) {
-    await v.dispose();
+  return [for (final f in features) f!];
+}
+
+Future<Float32List> _see(WarmSession vision, GlmPicture p) async {
+  // (every 2 x 2 patches make one row of features)
+  final wanted = (p.count ~/ 4) * glmHidden;
+  // (an answer of another size is the plan of another picture size, which the accelerator can give on the first run of a session: see
+  // [WarmSession.run]; it runs again then)
+  final out = await vision.run(
+    () async => {
+      'pixel_values': await OrtValue.fromList(p.patches, [p.count, 3 * 2 * glmPatch * glmPatch]),
+      'pos_ids': await int64Value(glmPatchPositions(p.gridHeight, p.gridWidth), [p.count, 2]),
+    },
+    key: _sizeOf(p),
+    accept: (out) => out.values.first.shape.fold<int>(1, (a, b) => a * b) == wanted,
+  );
+  try {
+    final flat = await out.values.first.asFlattenedList();
+    if (flat.length != wanted) throw StateError('The vision network gave ${flat.length} numbers where $wanted were expected.');
+    final features = Float32List(flat.length);
+    for (var i = 0; i < flat.length; i++) {
+      features[i] = (flat[i] as num).toDouble();
+    }
+    return features;
+  } finally {
+    for (final v in out.values) {
+      await v.dispose();
+    }
   }
-  return features;
 }
 
 /// The language model's turn: the cache stays on the native side; its first position is one of zeros that the mask hides (the graph

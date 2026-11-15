@@ -1,13 +1,12 @@
 import 'dart:async';
-import '../web/web_files.dart';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../llm/accelerator_plans.dart';
 import '../llm/model_files.dart';
 import '../models/canvas_models.dart';
 import 'ink_image.dart';
@@ -18,6 +17,20 @@ import 'onnx_texteller_model.dart';
 import 'texteller_decoder.dart';
 
 /// Which model reads the handwritten formulas.
+/// Which encoder of TexTeller is used (the decoder is the same). The 8-bit one is the smaller; the 16-bit one is for a graphics card whose
+/// runtime cannot run the quantised operators (AMD's MIGraphX), where it takes about 45 ms against about half a second on the processor. It
+/// is the published encoder in 16-bit numbers with the statistics of its LayerNorms kept in 32 bits (`tool/texteller_fix_ln_fp16.py`):
+/// without that the values of the last layers (up to 20000) overflow and the card's reading is 15 % off. On 400 inks of MathWriting it read
+/// 58.5 % exactly right against 60.2 % for the unquantised encoder.
+enum TellerWeights {
+  standard('encoder.onnx', 88),
+  gpu('encoder-gpu.onnx', 172);
+
+  final String file;
+  final int megabytes;
+  const TellerWeights(this.file, this.megabytes);
+}
+
 enum FormulaModel {
   /// TexTeller 3.0 (Apache-2.0), trained on handwriting: reads far more formulas right (about 3 in 4 of the formulas of a
   /// test set against 1 in 8), and its two files are about 320 MB. It is the default.
@@ -53,15 +66,28 @@ class MathService extends ModelFilesService implements InkRecognizer {
     'decoder.onnx': (url: '$tellerRepo/decoder.onnx', megabytes: 229),
   };
 
+  /// The files of TexTeller with the encoder [w]. The 16-bit encoder is only on Hugging Face (not in the GitHub release).
+  static Map<String, ({String url, int megabytes})> tellerFilesFor(TellerWeights w) => switch (w) {
+        TellerWeights.standard => tellerFiles,
+        TellerWeights.gpu => {
+            'encoder-gpu.onnx': (url: '${tellerRepo == defaultTellerRepo ? hubTellerRepo : tellerRepo}/encoder-gpu.onnx', megabytes: w.megabytes),
+            'decoder.onnx': tellerFiles['decoder.onnx']!,
+          },
+      };
+
   /// SHA-256 of the two files (the same on GitHub and on Hugging Face): a download that does not match (cut short, or not the file that was published) is
   /// thrown away instead of being run.
   static const tellerChecksums = {
     'encoder.onnx': '8ea8a061533b7fd8fbb746b0bd9ddd8d26d324fe07647dcf9059ddd07c2d77c4',
     'decoder.onnx': 'ba01e6781c1acf48781e838433c185e71feccae11f40d84ee2a46ecca7ec5ad9',
+    'encoder-gpu.onnx': '6194708cf94bf4b2a34a07bc08fe13279cd382f22772f54bd9082c11a3ff4563',
   };
 
   /// The setting that remembers the choice.
   static const settingKey = 'math_model';
+
+  /// Where the choice of [TellerWeights] is kept.
+  static const weightsKey = 'math_weights';
 
   /// Where the person's choice of [SecondLook] is kept.
   static const secondLookKey = 'math_second_look';
@@ -79,7 +105,6 @@ class MathService extends ModelFilesService implements InkRecognizer {
   final Future<String?> Function(String key)? _readSetting;
   final Future<void> Function(String key, String value)? _writeSetting;
   final FormulaModel _fallbackModel;
-  final Map<String, String> _checksums;
 
   MathService({
     Future<MathOcrModel> Function(String, String)? open,
@@ -101,8 +126,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
         _readSetting = readSetting,
         _writeSetting = writeSetting,
         _fallbackModel = defaultModel ?? standardModel,
-        _checksums = checksums ?? (tellerRepo == defaultTellerRepo ? tellerChecksums : const {}),
-        super(files: (defaultModel ?? standardModel) == FormulaModel.texteller ? tellerFiles : modelFiles, folderName: 'math');
+        super(files: (defaultModel ?? standardModel) == FormulaModel.texteller ? tellerFiles : modelFiles, folderName: 'math', checksums: checksums ?? (tellerRepo == defaultTellerRepo ? tellerChecksums : const {}));
 
   /// How long the sessions of TexTeller stay open after a formula was read (the next one is often asked for at once): longer
   /// on a computer than on a tablet, which has less memory to spare.
@@ -114,11 +138,18 @@ class MathService extends ModelFilesService implements InkRecognizer {
   FormulaModel _model = FormulaModel.pix2text;
   bool _modelKnown = false;
   FormulaModel? _chosen; // what the person chose (null: nobody did)
+  TellerWeights _weights = TellerWeights.standard;
   MathVocab? _vocab;
   MathVocab? _tellerVocab;
   TexTellerModel? _teller;
   SecondLook? _secondLook;
   Future<void> _turn = Future.value();
+
+  /// The encoder of TexTeller in use.
+  TellerWeights get weights => _weights;
+
+  @override
+  bool get keepExisting => model == FormulaModel.texteller; // (the decoder stays when the encoder is changed)
 
   /// The model that reads now.
   FormulaModel get model => _modelKnown ? _model : (_chosen ?? _fallbackModel);
@@ -148,7 +179,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
   /// Whether the person chose the model (else it is the default for this device).
   bool get chosen => _chosen != null;
 
-  Map<String, ({String url, int megabytes})> _filesOf(FormulaModel m) => m == FormulaModel.texteller ? tellerFiles : modelFiles;
+  Map<String, ({String url, int megabytes})> _filesOf(FormulaModel m) => m == FormulaModel.texteller ? tellerFilesFor(_weights) : modelFiles;
 
   Future<Directory> _directoryOf(FormulaModel m) => m == FormulaModel.texteller ? _tellerDirectory() : super.directory();
 
@@ -183,6 +214,10 @@ class MathService extends ModelFilesService implements InkRecognizer {
       stored = FormulaModel.values.where((m) => m.name == name).firstOrNull;
     } catch (_) {}
     _chosen = stored;
+    try {
+      final w = await _readSetting?.call(weightsKey);
+      _weights = TellerWeights.values.where((v) => v.name == w).firstOrNull ?? TellerWeights.standard;
+    } catch (_) {}
     var m = stored ?? _fallbackModel;
     if (stored == null) {
       final other = m == FormulaModel.texteller ? FormulaModel.pix2text : FormulaModel.texteller;
@@ -212,6 +247,20 @@ class MathService extends ModelFilesService implements InkRecognizer {
     await super.load();
   }
 
+  /// Switches the encoder of TexTeller (and remembers it); the new file is fetched with the install button, the decoder stays.
+  Future<void> setWeights(TellerWeights w) async {
+    if (status == HandwritingStatus.downloading) return;
+    await _settle();
+    if (w == _weights) return;
+    try {
+      await _writeSetting?.call(weightsKey, w.name);
+    } catch (_) {}
+    await unload();
+    _weights = w;
+    if (_model == FormulaModel.texteller) files = tellerFilesFor(w);
+    await super.load();
+  }
+
   /// Whether the files of [m] are on the device (the settings show it for both).
   Future<bool> hasFilesOf(FormulaModel m) => _hasFilesOf(m);
 
@@ -223,22 +272,25 @@ class MathService extends ModelFilesService implements InkRecognizer {
       notifyListeners();
       return;
     }
-    await super.install();
-    if (model == FormulaModel.texteller && installed) await _checkDownload();
+    await super.install(); // (the other encoder, if there is one, stays: switching back needs no download; "Remove" deletes them all)
   }
 
-  /// Compares the downloaded TexTeller files with [tellerChecksums]; a file that differs is not kept.
-  Future<void> _checkDownload() async {
-    for (final entry in _checksums.entries) {
-      final f = await file(entry.key);
-      await ensureWebFile(f.path); // (in a browser a model's file may be left empty until it is needed)
-      final got = await f.exists() ? (await sha256.bind(f.openRead()).first).toString() : '';
-      if (got == entry.value) continue;
-      await remove();
-      error = 'The downloaded file ${entry.key} is not the one that was published (its checksum differs). Try again.';
-      notifyListeners();
-      return;
+  /// Makes the graphics card's plan for the formula encoder now (see [OnnxTexTeller.precompile]). Needs the "Graphics card" size.
+  Future<void> precompileEncoder() async {
+    await _settle();
+    if (!installed || model != FormulaModel.texteller || _weights != TellerWeights.gpu) {
+      throw StateError('A plan can only be made for the graphics card file of the formula model (Settings > Formulas > Size of the model).');
     }
+    await _turn; // (one reading at a time)
+    final teller = _teller ??= await _openTeller((await file(_weights.file)).path, (await file('decoder.onnx')).path);
+    if (teller is OnnxTexTeller) await teller.precompile();
+  }
+
+  /// Whether the graphics card's plan for the formula encoder is on disk, as far as the app knows ([AcceleratorPlans]); null when the
+  /// graphics card file is not in use.
+  Future<bool?> encoderPlanned() async {
+    if (!installed || model != FormulaModel.texteller || _weights != TellerWeights.gpu) return null;
+    return (await AcceleratorPlans.sizes((await file(_weights.file)).path)).isNotEmpty;
   }
 
   @override
@@ -298,7 +350,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
   Future<String> _recognizeWithTexTeller(List<DrawingStroke> ink, {double penScale = 1, bool again = true}) {
     // (one formula at a time: the model keeps its sessions between formulas)
     final result = _turn.then((_) async {
-      final teller = _teller ??= await _openTeller((await file('encoder.onnx')).path, (await file('decoder.onnx')).path);
+      final teller = _teller ??= await _openTeller((await file(_weights.file)).path, (await file('decoder.onnx')).path);
       final vocab = _tellerVocab ??= MathVocab.parse(await _loadTellerVocab());
       Future<TexTellerReading> look(double pen) async {
         final pixels = await renderInkForTexTeller(ink, penScale: pen);

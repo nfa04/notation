@@ -2,12 +2,10 @@ import 'dart:async';
 import '../llm/onnx_session.dart';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
 import '../llm/model_files.dart';
-import '../web/web_files.dart';
 import 'picture_edit.dart';
 
 /// What runs the network that finds the subject of a picture: the real one is ONNX Runtime ([OnnxSubjectModel]); tests pass a
@@ -74,27 +72,10 @@ class SubjectService extends ModelFilesService {
   final SubjectModel Function(String path) _open;
   SubjectModel? _model;
 
-  final String? _checksum;
-
   /// [checksum]: what the downloaded file has to hash to (tests pass null to skip the check).
   SubjectService({SubjectModel Function(String path)? model, String? checksum = SubjectService.checksum, super.modelDirectory, super.download})
       : _open = model ?? OnnxSubjectModel.new,
-        _checksum = checksum,
-        super(files: const {fileName: (url: url, megabytes: 5)}, folderName: 'subject');
-
-  @override
-  Future<void> install() async {
-    await super.install();
-    final want = _checksum;
-    if (want == null || !installed) return;
-    final f = await file(fileName);
-    await ensureWebFile(f.path); // (in a browser a model's file may be left empty until it is needed)
-    final got = await f.exists() ? (await sha256.bind(f.openRead()).first).toString() : '';
-    if (got == want) return;
-    await remove();
-    error = 'The downloaded file $fileName is not the one that was published (its checksum differs). Try again.';
-    notifyListeners();
-  }
+        super(files: const {fileName: (url: url, megabytes: 5)}, folderName: 'subject', checksums: {fileName: ?checksum});
 
   /// What the model says of [picture]: null if the model is not installed.
   Future<SubjectMatte?> find(RgbaPicture picture) async {

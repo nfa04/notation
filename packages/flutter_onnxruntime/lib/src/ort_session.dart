@@ -44,12 +44,21 @@ class OrtSession {
   /// };
   /// final outputs = await session.run(inputs);
   /// ```
+  /// Told when a run of any session starts (true) and ends (false): for an app that shows what is running where.
+  static void Function(OrtSession session, bool running)? onRun;
+
   Future<Map<String, OrtValue>> run(Map<String, OrtValue> inputs, {OrtRunOptions? options}) async {
-    final result = await FlutterOnnxruntimePlatform.instance.runInference(
-      id,
-      inputs,
-      runOptions: options?.toMap() ?? {},
-    );
+    onRun?.call(this, true);
+    final Map<String, dynamic> result;
+    try {
+      result = await FlutterOnnxruntimePlatform.instance.runInference(
+        id,
+        inputs,
+        runOptions: options?.toMap() ?? {},
+      );
+    } finally {
+      onRun?.call(this, false);
+    }
     final outputs = <String, OrtValue>{};
     for (final entry in result.entries) {
       final tensorMap = {'valueId': entry.value[0], 'dataType': entry.value[1], 'shape': entry.value[2]};
@@ -108,6 +117,14 @@ class OrtSessionOptions {
   // run the session at the lowest priority, so that it only uses the time the rest of the app leaves over (Android only; the
   // threads of the session are started with that priority, and its runs are made at it)
   final bool? lowPriority;
+  // give the session a thread of its own (at the lowest priority) for its calls, so that nothing waits behind it while it works for
+  // minutes (an accelerator that compiles the model on its first run; Linux only)
+  final bool? ownThread;
+  // options for a provider, by provider: passed as-is to ONNX Runtime where the platform code reads them (iOS and macOS: CORE_ML, with
+  // the keys of coreml_provider_factory.h such as {'ModelFormat': 'MLProgram', 'ModelCacheDirectory': '/path'})
+  final Map<OrtProvider, Map<String, String>>? providerOptions;
+  // the session's own log level (0 verbose ... 4 fatal; iOS and macOS): 1 shows how much of the model an accelerator took
+  final int? logSeverityLevel;
 
   OrtSessionOptions({
     this.intraOpNumThreads,
@@ -117,6 +134,9 @@ class OrtSessionOptions {
     this.deviceId,
     this.sessionConfigs,
     this.lowPriority,
+    this.ownThread,
+    this.providerOptions,
+    this.logSeverityLevel,
   });
 
   Map<String, dynamic> toMap() {
@@ -128,6 +148,10 @@ class OrtSessionOptions {
       if (deviceId != null) 'deviceId': deviceId,
       if (sessionConfigs != null && sessionConfigs!.isNotEmpty) 'sessionConfigs': sessionConfigs,
       if (lowPriority == true) 'lowPriority': true,
+      if (ownThread == true) 'ownThread': true,
+      if (providerOptions != null && providerOptions!.isNotEmpty)
+        'providerOptions': {for (final e in providerOptions!.entries) e.key.name: e.value},
+      if (logSeverityLevel != null) 'logSeverityLevel': logSeverityLevel,
     };
   }
 }
