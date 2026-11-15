@@ -156,8 +156,10 @@ Future<OnnxRuntimePack> downloadOnnxRuntimePack(
       }
       final size = (f['bytes'] as num?)?.toInt() ?? 0;
       await fetch('${d.manifestUrl.substring(0, d.manifestUrl.length - 'manifest.json'.length)}$path', target, (x) => progress?.call(total == 0 ? 0 : (before + x * size) / total));
-      final want = f['sha256'] as String?;
-      if (want != null && (await sha256.bind(File(target).openRead()).first).toString() != want) throw FormatException('$path did not arrive whole (checksum)');
+      // a library that is opened by the app is never taken without a checksum: a manifest that leaves it out is refused
+      final want = f['sha256'];
+      if (want is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(want.toLowerCase())) throw FormatException('$path has no checksum in the manifest');
+      if ((await sha256.bind(File(target).openRead()).first).toString() != want.toLowerCase()) throw FormatException('$path did not arrive whole (checksum)');
       before += size;
     }
     await File(manifestFile).delete();

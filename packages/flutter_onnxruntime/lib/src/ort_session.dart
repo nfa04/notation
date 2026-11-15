@@ -67,6 +67,18 @@ class OrtSession {
     return outputs;
   }
 
+  /// Ends the profiling of a session made with [OrtSessionOptions.profile] (Android) and says what it saw until now: for each provider
+  /// ('CPUExecutionProvider', 'NnapiExecutionProvider') the milliseconds its kernels ran and how many kernels there were. Null where
+  /// the platform cannot say. Profiling is over after this.
+  Future<Map<String, ({double ms, int kernels})>?> endProfiling() async {
+    try {
+      final r = await FlutterOnnxruntimePlatform.instance.endProfiling(id);
+      return {for (final e in r.entries) e.key: (ms: (e.value['ms'] as num).toDouble(), kernels: (e.value['kernels'] as num).toInt())};
+    } on UnimplementedError {
+      return null;
+    }
+  }
+
   Future<void> close() async {
     await FlutterOnnxruntimePlatform.instance.closeSession(id);
   }
@@ -125,6 +137,8 @@ class OrtSessionOptions {
   final Map<OrtProvider, Map<String, String>>? providerOptions;
   // the session's own log level (0 verbose ... 4 fatal; iOS and macOS): 1 shows how much of the model an accelerator took
   final int? logSeverityLevel;
+  // collect what each provider ran, for [OrtSession.endProfiling] (Android)
+  final bool? profile;
 
   OrtSessionOptions({
     this.intraOpNumThreads,
@@ -137,10 +151,12 @@ class OrtSessionOptions {
     this.ownThread,
     this.providerOptions,
     this.logSeverityLevel,
+    this.profile,
   });
 
   Map<String, dynamic> toMap() {
     return {
+      if (profile == true) 'profile': true,
       if (intraOpNumThreads != null) 'intraOpNumThreads': intraOpNumThreads,
       if (interOpNumThreads != null) 'interOpNumThreads': interOpNumThreads,
       if (providers != null && providers!.isNotEmpty) 'providers': providers!.map((p) => p.name).toList(),

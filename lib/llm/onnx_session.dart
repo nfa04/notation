@@ -11,6 +11,7 @@ import 'package:flutter_onnxruntime/src/flutter_onnxruntime_platform_interface.d
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../l10n/language.dart' show tr;
 import '../web/blob_url_io.dart' if (dart.library.js_interop) '../web/blob_url_web.dart';
 import '../web/web_files.dart';
 
@@ -30,9 +31,13 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
     if (providers.isNotEmpty) {
       try {
         final extra = providers.contains(OrtProvider.CORE_ML) ? {OrtProvider.CORE_ML: await coreMlOptions(path)} : null;
-        final session = await OnnxRuntime().createSession(path, options: _withProviders(options, providers, extra));
+        // (NNAPI takes what it supports and leaves the rest to the processor without a word: the profiler says how much)
+        final profile = providers.first == OrtProvider.NNAPI;
+        final session = await OnnxRuntime().createSession(path, options: _withProviders(options, providers, extra, profile));
         _report(model, providers.first.name);
-        return _place(session, path, providers.first.name);
+        final placed = _place(session, path, providers.first.name);
+        if (profile) _toProfile.add(placed);
+        return placed;
       } catch (e) {
         _report(model, 'CPU (${providers.first.name} refused: $e)');
       }
@@ -126,6 +131,40 @@ String onnxModelName(String path) => path.split('/').reversed.take(2).toList().r
 
 final _places = Expando<String>('where the session runs');
 
+/// Sessions made with the profiler on, that have not finished a run yet (see [onnxSplits]).
+final _toProfile = <OrtSession>{};
+
+/// What really ran where, by model ("texteller/encoder-gpu.onnx"), for the sessions an accelerator took: "NNAPI 12 % of the time (7
+/// parts), processor 88 % (1900 kernels)". Written after the first run of the session, as the profiler of ONNX Runtime saw it (Android).
+/// An accelerator's session says only that it was accepted: the part of the model it took may be small or nothing.
+final onnxSplits = ValueNotifier<Map<String, String>>(const {});
+
+Future<void> _writeSplit(OrtSession session, String model) async {
+  try {
+    final seen = await session.endProfiling();
+    if (seen == null || seen.isEmpty) {
+      onnxSplits.value = {...onnxSplits.value, model: tr('the runtime could not say what ran on it')};
+      return;
+    }
+    final total = seen.values.fold<double>(0, (a, v) => a + v.ms);
+    final parts = <String>[];
+    for (final e in seen.entries.toList()..sort((a, b) => b.value.ms.compareTo(a.value.ms))) {
+      final name = e.key.replaceAll('ExecutionProvider', '');
+      final share = total <= 0 ? 0 : (100 * e.value.ms / total).round();
+      parts.add(name == 'CPU'
+          ? tr('processor {share} % ({kernels} kernels)', {'share': '$share', 'kernels': '${e.value.kernels}'})
+          : tr('{name} {share} % of the time ({kernels} parts)', {'name': name.toUpperCase(), 'share': '$share', 'kernels': '${e.value.kernels}'}));
+    }
+    if (!seen.keys.any((k) => !k.startsWith('CPU'))) parts.insert(0, tr('nothing ran on the accelerator'));
+    final text = parts.join(', ');
+    debugPrint('onnx: $model ran as: $text');
+    onnxSplits.value = {...onnxSplits.value, model: text};
+  } catch (e) {
+    debugPrint('onnx: could not read the profile of $model ($e)');
+    onnxSplits.value = {...onnxSplits.value, model: tr('the runtime could not say what ran on it')};
+  }
+}
+
 OrtSession _place(OrtSession session, String path, String on) {
   _places[session] = '${onnxModelName(path)}|$on';
   OrtSession.onRun ??= (s, running) {
@@ -133,6 +172,7 @@ OrtSession _place(OrtSession session, String path, String on) {
     if (place == null) return;
     final at = place.lastIndexOf('|');
     onnxNoteRun(place.substring(0, at), place.substring(at + 1), running: running);
+    if (!running && _toProfile.remove(s)) unawaited(_writeSplit(s, place.substring(0, at)));
   };
   return session;
 }
@@ -217,7 +257,8 @@ List<OrtProvider> onnxPlatformAccelerators() {
   }
 }
 
-OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra]) => OrtSessionOptions(
+OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra, bool profile = false]) => OrtSessionOptions(
+  profile: profile,
   intraOpNumThreads: o?.intraOpNumThreads,
   interOpNumThreads: o?.interOpNumThreads,
   providers: providers,

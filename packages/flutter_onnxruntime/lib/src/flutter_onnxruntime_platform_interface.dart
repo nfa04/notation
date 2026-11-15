@@ -75,6 +75,11 @@ abstract class FlutterOnnxruntimePlatform extends PlatformInterface {
     throw UnimplementedError('closeSession() has not been implemented.');
   }
 
+  /// What each provider ran in a session made with the `profile` option: provider name -> {ms, kernels} (Android only)
+  Future<Map<String, Map<String, dynamic>>> endProfiling(String sessionId) {
+    throw UnimplementedError('endProfiling() has not been implemented.');
+  }
+
   /// Get metadata about the model
   ///
   /// [sessionId] is the ID of the session to get metadata from
