@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart' show sha256;
 
 import '../web/web_files.dart';
 import 'download.dart';
+import 'model_pins.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -32,6 +33,10 @@ abstract class ModelFilesService extends DownloadableModel {
   final Future<Directory> Function() _modelDirectory;
   final Future<void> Function(String url, String path, void Function(double) progress) _download;
 
+  /// Whether the files of other publishers are fetched from a fixed commit and checked (see `model_pins.dart`); not when a test brings
+  /// its own download.
+  final bool _pinned;
+
   ModelFilesService({
     required this.files,
     required String folderName,
@@ -40,6 +45,7 @@ abstract class ModelFilesService extends DownloadableModel {
     Future<void> Function(String, String, void Function(double))? download,
   })  : _modelDirectory = modelDirectory ??
             (() async => Directory(p.join((await getApplicationSupportDirectory()).path, 'models', folderName))),
+        _pinned = download == null,
         _download = download ?? _downloadWithDio;
 
   HandwritingStatus _status = HandwritingStatus.notInstalled;
@@ -88,6 +94,8 @@ abstract class ModelFilesService extends DownloadableModel {
       var done = 0;
       for (final entry in files.entries) {
         final target = p.join(dir.path, entry.key);
+        final pin = _pinned ? pinnedDownload(entry.value.url) : (url: entry.value.url, sha256: null);
+        if (pin.sha256 != null) _pins[entry.key] = pin.sha256!;
         if (keepExisting && await File(target).exists()) {
           // (a file is only in its place once all of it came: see the .part below)
           if (await _isPublished(entry.key, target)) {
@@ -98,7 +106,7 @@ abstract class ModelFilesService extends DownloadableModel {
         }
         final partial = '$target.part'; // a half download must not look like a model
         final before = done;
-        await _download(entry.value.url, partial, (v) {
+        await _download(pin.url, partial, (v) {
           progress = (before + v * entry.value.megabytes) / total;
           notifyListeners();
         });
@@ -120,9 +128,12 @@ abstract class ModelFilesService extends DownloadableModel {
     }
   }
 
+  /// What the files of other publishers have to hash to (from `model_pins.dart`), by the name they are kept under.
+  final Map<String, String> _pins = {};
+
   /// True when [name] has no pinned checksum, or the file at [path] has it.
   Future<bool> _isPublished(String name, String path) async {
-    final want = checksums[name];
+    final want = checksums[name] ?? _pins[name];
     if (want == null) return true;
     await ensureWebFile(path); // (in a browser a model's file may be left empty until it is needed)
     final f = File(path);

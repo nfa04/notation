@@ -223,6 +223,11 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                             ortSessionOptions.setInterOpNumThreads((sessionOptions["interOpNumThreads"] as Number).toInt())
                         }
 
+                        // the profiler (see endProfiling): which provider ran how much of the model
+                        if (sessionOptions["profile"] == true) {
+                            ortSessionOptions.enableProfiling(File(System.getProperty("java.io.tmpdir") ?: ".", "ort_profile").path)
+                        }
+
                         // pass session config entries (e.g. "mlas.disable_kleidiai") through to ONNX Runtime
                         val sessionConfigs = sessionOptions["sessionConfigs"] as? Map<*, *>
                         sessionConfigs?.forEach { (key, value) ->
@@ -498,6 +503,39 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                         }
                     } catch (e: OrtException) {
                         result.error("INFERENCE_ERROR", e.message, e.stackTraceToString())
+                    } catch (e: Exception) {
+                        result.error("PLUGIN_ERROR", e.message, e.stackTraceToString())
+                    }
+                }
+                /** Ends the profiling of a session made with the option "profile" and says what it found: for each provider the
+                 milliseconds its kernels ran and the number of kernels (an accelerator's kernel is a whole part of the model it took).
+                 Profiling stops; the session goes on working. */
+                "endProfiling" -> {
+                    try {
+                        val sessionId = call.argument<String>("sessionId")
+                        if (sessionId == null || !sessions.containsKey(sessionId)) {
+                            result.error("INVALID_SESSION", "Session not found", null)
+                            return
+                        }
+                        val path = sessions[sessionId]!!.endProfiling()
+                        val file = File(path)
+                        val micros = HashMap<String, Double>()
+                        val kernels = HashMap<String, Int>()
+                        try {
+                            val events = org.json.JSONArray(file.readText())
+                            for (i in 0 until events.length()) {
+                                val e = events.getJSONObject(i)
+                                if (e.optString("cat") != "Node" || !e.optString("name").endsWith("_kernel_time")) continue
+                                val provider = e.optJSONObject("args")?.optString("provider") ?: continue
+                                micros[provider] = (micros[provider] ?: 0.0) + e.optDouble("dur", 0.0)
+                                kernels[provider] = (kernels[provider] ?: 0) + 1
+                            }
+                        } finally {
+                            file.delete()
+                        }
+                        result.success(micros.keys.associateWith { mapOf("ms" to micros[it]!! / 1000.0, "kernels" to kernels[it]!!) })
+                    } catch (e: OrtException) {
+                        result.error("ORT_ERROR", e.message, e.stackTraceToString())
                     } catch (e: Exception) {
                         result.error("PLUGIN_ERROR", e.message, e.stackTraceToString())
                     }

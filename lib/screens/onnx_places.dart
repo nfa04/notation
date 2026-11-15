@@ -23,7 +23,12 @@ class OnnxPlaces extends StatelessWidget {
   static const handwritingFolders = {'glm_ocr', 'paddleocr_vl'};
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<Map<String, OnnxRun>>(
+  Widget build(BuildContext context) => ValueListenableBuilder<Map<String, String>>(
+        valueListenable: onnxSplits,
+        builder: (context, splits, _) => _build(context, splits),
+      );
+
+  Widget _build(BuildContext context, Map<String, String> splits) => ValueListenableBuilder<Map<String, OnnxRun>>(
         valueListenable: onnxRuns,
         builder: (context, runs, _) {
           // (compact: what ran in the last half minute, so that the line does not blink between one run and the next)
@@ -48,11 +53,17 @@ class OnnxPlaces extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final e in byModel.entries)
-                Text.verbatim('${_model(e.key)}: ${_where(e.value)}', style: style),
+                Text.verbatim('${_model(e.key)}: ${_where(e.value)}${_detail(e.value, splits[e.key])}', style: style),
             ],
           );
         },
       );
+
+  /// What the profiler saw of a model an accelerator took (see [onnxSplits]): always there for NNAPI, from the first run's end; until then it says so.
+  static String _detail(List<OnnxRun> runs, String? split) {
+    if (split != null) return ' — $split';
+    return runs.any((r) => r.on == OrtProvider.NNAPI.name) ? ' — ${tr('measuring what ran on it...')}' : '';
+  }
 
   /// The places of one model: those where it runs now, or else the last one.
   static String _where(List<OnnxRun> runs) => _current(runs).map((r) => _long(r.on)).join(', ');
