@@ -173,6 +173,12 @@ Future<PaddleVlPicture> renderInkForPaddleVl(List<DrawingStroke> strokes,) async
   );
 }
 
+/// The widths (in columns of 28 pixels) a padded picture can have. Each is at most half as wide again as the one before, so a picture
+/// grows by a fifth on average (21 % on the benchmark lines). A line wider than the last is left as it is.
+const glmPaddedWidths = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
+
+int glmPaddedColumns(int columns) => glmPaddedWidths.firstWhere((w) => w >= columns, orElse: () => columns);
+
 /// How thick the pen is in the picture GLM-OCR gets, as a part of the height of the ink (what the benchmark was drawn with).
 const double glmOcrPen = 0.045;
 
@@ -180,7 +186,10 @@ const double glmOcrPen = 0.045;
 /// it (a seventh of white above and below), proportions kept, as wide as the line needs (a multiple of 28, at least what the model's
 /// smallest picture has in pixels; a line too long for the model is made smaller), cut into patches. Fewer rows are quicker and a
 /// little less exact (the vision network's work grows with the square of them): 10 is the standard, 8 the quick choice.
-Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 10}) async {
+///
+/// With [pad] the width is one of [glmPaddedColumns] (white on the right of the ink): an accelerator that compiles for the exact size of
+/// its input then compiles once for each of a handful of widths instead of once for nearly every line, at about a fifth more work.
+Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 10, bool pad = false}) async {
   final drawn = [for (final s in strokes) if (s.points.length >= 2) s];
   if (drawn.isEmpty) throw ArgumentError('Nothing is drawn.');
   rows = (rows ~/ 2 * 2).clamp(4, 16);
@@ -195,7 +204,9 @@ Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 1
   var scale = inkHeight / inkTall;
   scale = math.min(scale, (glmMaxPatchesPerSide * glmPatch - 2 * margin) / inkWidth);
   final minWidth = (glmMinPixels / height / 28).ceil() * 28;
-  final width = math.max(minWidth, ((inkWidth * scale + 2 * margin) / 28).ceil() * 28);
+  var columns = math.max(minWidth ~/ 28, ((inkWidth * scale + 2 * margin) / 28).ceil());
+  if (pad) columns = glmPaddedColumns(columns);
+  final width = columns * 28;
   // a line that is flatter than the picture sits in the middle of its height
   final top = (height - inkTall * scale) / 2;
   final recorder = ui.PictureRecorder();

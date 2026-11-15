@@ -420,7 +420,7 @@ void main() {
       expect(MathService.hubTellerRepo, 'https://huggingface.co/nfa04/texteller-onnx-8bit/resolve/main');
       expect(MathService.tellerFiles['encoder.onnx']!.url, '${MathService.defaultTellerRepo}/encoder.onnx');
       expect(MathService.tellerFiles['decoder.onnx']!.url, '${MathService.defaultTellerRepo}/decoder.onnx');
-      expect(MathService.tellerChecksums.keys.toSet(), MathService.tellerFiles.keys.toSet());
+      expect(MathService.tellerChecksums.keys.toSet(), {...MathService.tellerFiles.keys, 'encoder-gpu.onnx'});
       expect(MathService.tellerChecksums.values.every((h) => RegExp(r'^[0-9a-f]{64}$').hasMatch(h)), isTrue);
     });
 
@@ -444,7 +444,44 @@ void main() {
       await service.install();
       expect(service.status, HandwritingStatus.notInstalled);
       expect(service.error, allOf(contains('decoder.onnx'), contains('checksum')));
-      expect(Directory('${dir.path}/tt').existsSync(), isFalse, reason: 'nothing of it is kept');
+      // (the encoder was the published file and stays; the decoder is not kept, nor a half download)
+      expect(Directory('${dir.path}/tt').listSync().map((e) => e.path.split('/').last).toList(), ['encoder.onnx']);
+      expect(await service.hasFilesOf(FormulaModel.texteller), isFalse);
+    });
+
+    test('the 16-bit encoder: chosen, remembered, only the encoder is fetched, and the 8-bit one stays (no download to go back)', () async {
+      putTeller();
+      final service = make();
+      await service.load();
+      expect(service.weights, TellerWeights.standard);
+      expect(service.installed, isTrue);
+      await service.setWeights(TellerWeights.gpu);
+      expect(settings[MathService.weightsKey], 'gpu');
+      expect(service.installed, isFalse); // (the 16-bit file is not there yet)
+      await service.install();
+      expect(downloads, ['${MathService.hubTellerRepo}/encoder-gpu.onnx']); // (the decoder stayed)
+      expect(service.installed, isTrue);
+      expect(Directory('${dir.path}/tt').listSync().map((f) => f.path.split('/').last).toList()..sort(), ['decoder.onnx', 'encoder-gpu.onnx', 'encoder.onnx']);
+      // a new service starts with the choice, and reads with that file
+      String? opened;
+      final again = MathService(
+        defaultModel: FormulaModel.texteller,
+        checksums: const {},
+        modelDirectory: () async => Directory('${dir.path}/p2t'),
+        tellerDirectory: () async => Directory('${dir.path}/tt'),
+        loadTellerVocab: () async => File('assets/texteller/vocab.txt').readAsStringSync(),
+        openTeller: (e, _) async {
+          opened = e;
+          return teller;
+        },
+        readSetting: (k) async => settings[k],
+        writeSetting: (k, v) async => settings[k] = v,
+      );
+      await again.load();
+      expect(again.weights, TellerWeights.gpu);
+      expect(again.installed, isTrue);
+      await again.recognize([zigzag(0, 0, 300, 120)]);
+      expect(opened, endsWith('/encoder-gpu.onnx'));
     });
 
     test('the other model downloads from its own place into its own folder', () async {

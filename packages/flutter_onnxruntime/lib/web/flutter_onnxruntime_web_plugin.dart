@@ -13,6 +13,7 @@ import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:flutter_onnxruntime/src/flutter_onnxruntime_platform_interface.dart';
 import 'package:web/web.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart'; // Import for PlatformException
 
 // Import the onnxruntime-web package via JS interop
@@ -291,12 +292,19 @@ class FlutterOnnxruntimeWebPlugin extends FlutterOnnxruntimePlatform {
     // Check for WebGPU support
     // (navigator.gpu exists in browsers that have no usable GPU: only an adapter counts)
     final gpu = (_window.navigator as JSObject).getProperty('gpu'.toJS);
-    if (gpu.isDefinedAndNotNull) {
+    if (!gpu.isDefinedAndNotNull) {
+      debugPrint('onnx: no WebGPU: navigator.gpu is missing (secure context: ${(globalThis.getProperty('isSecureContext'.toJS) as JSBoolean?)?.toDart}; WebGPU needs https or localhost, '
+          'and on Linux Chrome it is behind chrome://flags/#enable-unsafe-webgpu)');
+    } else {
       try {
         final adapter = await ((gpu as JSObject).callMethod('requestAdapter'.toJS) as JSPromise<JSAny?>).toDart;
-        if (adapter.isDefinedAndNotNull) providers.add('WEB_GPU');
-      } catch (_) {
-        // (the browser refused: no WebGPU)
+        if (adapter.isDefinedAndNotNull) {
+          providers.add('WEB_GPU');
+        } else {
+          debugPrint('onnx: no WebGPU: the browser has the API but gave no GPU adapter (see chrome://gpu)');
+        }
+      } catch (e) {
+        debugPrint('onnx: no WebGPU: asking for an adapter failed: $e');
       }
     }
     // Check for WebNN support

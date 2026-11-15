@@ -1,0 +1,35 @@
+Additional permission under GNU AGPL version 3 section 7
+
+Notation is licensed under the GNU Affero General Public License, version 3 or
+(at your option) any later version (see the file LICENSE). As the copyright
+holder of Notation, I give the following additional permission under section 7
+of that license.
+
+Hardware acceleration libraries. Notation can run its AI models on the graphics
+card or other accelerator of the computer, through ONNX Runtime and the
+libraries of the maker of that hardware (for example NVIDIA CUDA, cuDNN and
+TensorRT, Intel OpenVINO, AMD ROCm and MIGraphX, Microsoft DirectML, and the
+drivers of these). If you convey a covered work that is combined with such a
+library, or that loads it at run time, you do not have to include the library,
+or the parts of it that are not under a free software license, in the
+Corresponding Source of the covered work, and the terms of the library's own
+license (including a license that is not a free software license) may apply to
+that library, as long as:
+
+  1. the library is not itself a part of the covered work, and you give it no
+     more rights over the covered work than this paragraph describes;
+  2. the library is made available to the recipients under its own license, and
+     you pass on that license and the notices it requires; and
+  3. all the other terms of the GNU Affero General Public License continue to
+     apply to the covered work, including the source of every part of the
+     covered work that is not such a library.
+
+This permission applies only to Notation code whose copyright is held by me. It
+does not change the license of code from other authors that Notation includes;
+that code stays under its own license (see assets/licenses/).
+
+If you modify Notation, you may remove this additional permission from your
+version, as section 7 of the license allows. It then no longer applies to your
+version.
+
+Noel Aeby, 2026

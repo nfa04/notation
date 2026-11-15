@@ -12,8 +12,9 @@ class QwenTokenizer {
   final Map<String, int> _added; // special and added tokens: text -> id
   final Set<int> _special;
   final RegExp _addedPattern;
+  final RegExp _words; // how the text is split into words before the merges
 
-  QwenTokenizer._(this._vocab, this._tokens, this._ranks, this._added, this._special, this._addedPattern);
+  QwenTokenizer._(this._vocab, this._tokens, this._ranks, this._added, this._special, this._addedPattern, this._words);
 
   /// Reads the contents of `tokenizer.json`.
   factory QwenTokenizer.parse(String json) {
@@ -39,14 +40,24 @@ class QwenTokenizer {
     added.forEach((k, v) => tokens[v] = k);
     final longestFirst = added.keys.toList()..sort((a, b) => b.length.compareTo(a.length));
     final pattern = RegExp(longestFirst.map(RegExp.escape).join('|'));
-    return QwenTokenizer._(vocab, tokens, ranks, added, special, pattern);
+    // Qwen3.5 lets combining marks join the letters of a word ([\p{L}\p{M}]+); the older tokenizers split them off
+    final marks = jsonEncode(data['pre_tokenizer']).contains(r'\\p{M}');
+    return QwenTokenizer._(vocab, tokens, ranks, added, special, pattern, marks ? _wordsWithMarks : _wordsPlain);
   }
 
   int? idOf(String special) => _added[special];
 
+  /// How the text is split into words before the merges (for tests).
+  List<String> splitWords(String text) => [for (final m in _words.allMatches(text)) m.group(0)!];
+
   // Qwen's split into words; (?i:...) is written out because Dart has no inline flags
-  static final _words = RegExp(
+  static final _wordsPlain = RegExp(
     r"(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",
+    unicode: true,
+  );
+
+  static final _wordsWithMarks = RegExp(
+    r"(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\r\n\p{L}\p{N}]?[\p{L}\p{M}]+|\p{N}| ?[^\s\p{L}\p{M}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",
     unicode: true,
   );
 

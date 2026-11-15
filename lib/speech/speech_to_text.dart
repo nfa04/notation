@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../llm/onnx_session.dart';
+import '../llm/warm_session.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -93,7 +94,8 @@ class OnnxWhisper implements WhisperEngine {
 
   OnnxWhisper({required this.encoderPath, required this.decoderPath, required this.tokenizer, required this.suppressed, required this.layers, required this.heads});
 
-  OrtSession? _encoder, _decoder;
+  WarmSession? _encoder;
+  OrtSession? _decoder;
   static final _options = OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1, useArena: false);
 
   static const _vocab = 51865;
@@ -113,7 +115,7 @@ class OnnxWhisper implements WhisperEngine {
     'ba', 'jw', 'su',
   ];
 
-  Future<OrtSession> _enc() async => _encoder ??= await openOnnxSession(encoderPath, options: _options);
+  Future<WarmSession> _enc() async => _encoder ??= await openWarmSession(encoderPath, options: _options);
   Future<OrtSession> _dec() async => _decoder ??= await openOnnxSession(decoderPath, options: _options, accelerate: false);
 
   static Future<void> _breathe() => Future<void>.delayed(const Duration(milliseconds: 4));
@@ -122,9 +124,8 @@ class OnnxWhisper implements WhisperEngine {
   Future<String> transcribe(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop}) async {
     final encoder = await _enc();
     final decoder = await _dec();
-    final mel = await OrtValue.fromList(logMelSpectrogram(window), [1, whisperBands, whisperFrames]);
-    final encoded = await encoder.run({'input_features': mel});
-    await mel.dispose();
+    // (30 seconds of audio, whatever was said: one size, one plan)
+    final encoded = await encoder.run(() async => {'input_features': await OrtValue.fromList(logMelSpectrogram(window), [1, whisperBands, whisperFrames])});
     final hidden = encoded['last_hidden_state']!;
     // the decoder wants a cache as input also for the first step, where the graph does not look at it: one position of zeros stands in
     final stand = await OrtValue.fromList(Float32List(heads * 64), [1, heads, 1, 64]);

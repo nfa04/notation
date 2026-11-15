@@ -1,12 +1,12 @@
 import 'dart:math' as math;
 
-import 'package:crypto/crypto.dart' show sha256;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import '../export/pdf_ink_text.dart' show plainI;
 import '../llm/model_files.dart';
+import '../llm/onnx_session.dart' show onnxAccelerationEnabled, onnxAccelerationVersion, padPicturesNow;
 import '../models/canvas_models.dart';
-import '../web/web_files.dart';
 import 'glm_ocr.dart';
 import 'ink_grouping.dart';
 import 'ink_image.dart';
@@ -24,6 +24,30 @@ enum GlmQuality {
   const GlmQuality(this.rows);
 }
 
+/// Which vision network is used. Both read the same way; they differ in the weights: 8 bits (more exact) or 4 bits (a third smaller). In a
+/// browser the 4-bit one is the only one the graphics card (WebGPU) can run, and the 8-bit one on the browser's processor is 12 times
+/// slower than it (36 s against 3 s a line, one thread, Radeon 780M); on 68 lines of real handwriting the 4-bit one read 13.3 % of the
+/// characters wrong against 10.9 %.
+enum GlmWeights {
+  standard('vision.onnx', 430),
+  compact('vision-web.onnx', 261),
+
+  /// Not quantised (16-bit numbers): the one for a graphics card whose runtime cannot run the quantised operators (AMD's MIGraphX). Same
+  /// readings as the unquantised original on the benchmark (10.9 % wrong, like the exact one); on the processor it is no faster and takes
+  /// about 1 GB more memory, so while models run on the processor the standard file is used ([GlmOcrService.inUse]).
+  gpu('vision-gpu.onnx', 870);
+
+  /// The weights sit in a second file next to it.
+  String? get dataFile => this == gpu ? 'vision-gpu.onnx.data' : null;
+
+  final String file;
+  final int megabytes;
+  const GlmWeights(this.file, this.megabytes);
+
+  /// What a browser starts with (see above); everywhere else the more exact one.
+  static const platformDefault = kIsWeb ? compact : standard;
+}
+
 /// Reads handwriting with GLM-OCR (zai-org, MIT licence, 0.9 billion parameters; the original model, not retrained, in ONNX files made
 /// from it by `tool/handwriting_bench/glm_onnx/` and published at https://huggingface.co/nfa04/glm-ocr-onnx, weights in 8 bits for the vision network and 4 bits for the language model, which reads
 /// as well as the full ones on the benchmark of real handwriting), run by ONNX Runtime so that it works wherever the app does. It reads
@@ -32,18 +56,26 @@ enum GlmQuality {
 class GlmOcrService extends ModelFilesService {
   /// Where the files are (Hugging Face, which also lets a browser read them): the original model, converted to ONNX and quantised, not
   /// retrained (see the model card there). Another place can be set with `--dart-define=GLM_OCR_REPO=https://...`; the files of
-  /// another place are not checked against [checksums] (they may be built differently).
+  /// another place are not checked against [publishedChecksums] (they may be built differently).
   static const defaultRepo = 'https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main';
   static const repo = String.fromEnvironment('GLM_OCR_REPO', defaultValue: defaultRepo);
-  static const modelFiles = {
-    'vision.onnx': (url: '$repo/vision.onnx', megabytes: 430),
-    'text.onnx': (url: '$repo/text.onnx', megabytes: 297),
-    'embeddings.bin': (url: '$repo/embeddings.bin', megabytes: 88),
-  };
+
+  /// The vision network's file. A browser gets a variant with 4-bit weights (261 MB, read 2.4 points worse on the benchmark: 13.3 % against
+  /// 10.9 %): the browser's graphics card (WebGPU) cannot run the 8-bit one (its MatMulNBits takes 2 and 4 bits only), and the 8-bit one on
+  /// the processor of a browser is 12 times slower than the 4-bit on the card (36 s against 3 s a line, one thread, Radeon 780M).
+  static Map<String, ({String url, int megabytes})> filesFor(GlmWeights w) => {
+        w.file: (url: '$repo/${w.file}', megabytes: w.dataFile == null ? w.megabytes : 1),
+        if (w.dataFile != null) w.dataFile!: (url: '$repo/${w.dataFile}', megabytes: w.megabytes - 1),
+        'text.onnx': (url: '$repo/text.onnx', megabytes: 297),
+        'embeddings.bin': (url: '$repo/embeddings.bin', megabytes: 88),
+      };
 
   /// SHA-256 of the three files: a download that does not match (cut short, or not the file that was published) is thrown away.
-  static const checksums = {
+  static const publishedChecksums = {
     'vision.onnx': 'e4565d57d7714b0b180718d8bb0a58d59fe7a68486028fe2fa774ce994f0f03a',
+    'vision-web.onnx': '7d70fa6cf6e9938f475e42c2b7b473ee560b4fd32d34a25b0400bf3f77500c3b',
+    'vision-gpu.onnx': '7f5cffc1f3589d9c8c4322fd904903ddc5759c9df96880516533ca6ab17ccc0e',
+    'vision-gpu.onnx.data': '966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99',
     'text.onnx': '1c886fa00f1b62c3a58728cadc49718c44fb046dca4e12171c1734cec9f00a41',
     'embeddings.bin': '9f74c48b8b5a645fbc438f2ee3c317a2102948149ff1deb3dfc678675b8094d5',
   };
@@ -59,20 +91,58 @@ class GlmOcrService extends ModelFilesService {
   /// Turns the pictures of lines into token ids, with how sure the model was of each. Tests pass a fake (of tokens only: sure of them).
   final Future<List<GlmReading>> Function(String visionPath, String textPath, String embeddingsPath, List<GlmPicture> pictures) _read;
   final Future<String> Function() _loadVocab;
-  final Map<String, String> _checks;
 
   GlmOcrService({
     Future<List<List<int>>> Function(String, String, String, List<GlmPicture>)? read,
     Future<String> Function()? loadVocab,
     Map<String, String>? checksums,
+    GlmWeights? weights,
     super.modelDirectory,
     super.download,
-  })  : _read = read == null
+  })  : _weights = weights ?? GlmWeights.platformDefault,
+        _read = read == null
             ? _onnx.readScored
             : ((a, b, c, d) async => [for (final t in await read(a, b, c, d)) (tokens: t, confidence: 1.0, logProbs: List.filled(t.length, 0.0))]),
         _loadVocab = loadVocab ?? (() => rootBundle.loadString('assets/glm_ocr/vocab.txt')),
-        _checks = checksums ?? (repo == defaultRepo ? GlmOcrService.checksums : const {}),
-        super(files: modelFiles, folderName: 'glm_ocr');
+        super(files: filesFor(_inUseOf(weights ?? GlmWeights.platformDefault)), folderName: 'glm_ocr', checksums: checksums ?? (repo == defaultRepo ? publishedChecksums : const {})) {
+    onnxAccelerationVersion.addListener(_follow);
+  }
+
+  GlmWeights _weights;
+
+  /// The vision network chosen (in the settings).
+  GlmWeights get weights => _weights;
+
+  /// The vision network used now: the chosen one, except that the one for graphics cards is not used while models run on the processor (it
+  /// reads the same as the standard one there at the same speed, with about 1 GB more memory): the standard one is, downloaded then.
+  GlmWeights get inUse => _inUseOf(_weights);
+
+  static GlmWeights _inUseOf(GlmWeights w) => w == GlmWeights.gpu && !onnxAccelerationEnabled ? GlmWeights.standard : w;
+
+  /// The file of the vision network in use.
+  String get visionFile => inUse.file;
+
+  /// The setting of where models run changed: the files of the vision network that is used now (counted as not installed until they are there).
+  Future<void> _follow() async {
+    final want = filesFor(inUse);
+    if (want.keys.toSet().containsAll(files.keys) && files.keys.toSet().containsAll(want.keys)) return;
+    await unload();
+    files = want;
+    await load();
+  }
+
+  @override
+  bool get keepExisting => true;
+
+  /// Changes which vision network is used. The other two files stay; only the vision file is fetched, and the one used before stays too
+  /// (switching back needs no download; "Remove" deletes them all). Until the new one is there the model counts as not installed.
+  Future<void> useWeights(GlmWeights w) async {
+    if (w == _weights) return;
+    await unload();
+    _weights = w;
+    files = filesFor(inUse);
+    await load();
+  }
 
   /// The networks, kept open between the readings of the background reader (see [GlmOnnxReader]).
   static final _onnx = GlmOnnxReader();
@@ -85,22 +155,6 @@ class GlmOcrService extends ModelFilesService {
     await _onnx.close();
   }
 
-  @override
-  Future<void> install() async {
-    await super.install();
-    if (!installed) return;
-    for (final entry in _checks.entries) {
-      final f = await file(entry.key);
-      await ensureWebFile(f.path); // (in a browser a model's file may be left empty until it is needed)
-      final got = await f.exists() ? (await sha256.bind(f.openRead()).first).toString() : '';
-      if (got == entry.value) continue;
-      await remove();
-      error = 'The downloaded file ${entry.key} is not the one that was published (its checksum differs). Try again.';
-      notifyListeners();
-      return;
-    }
-  }
-
   /// The text of each of [lines] (the strokes of one line of writing each), drawn [quality.rows] patches high. Throws if the model is
   /// not installed or cannot run.
   Future<List<String>> readLines(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async =>
@@ -109,9 +163,10 @@ class GlmOcrService extends ModelFilesService {
   /// [readLines], with the words of each that the model was unsure of (see [unsureBelow]).
   Future<List<({String text, List<String> unsure})>> readLinesScored(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async {
     if (!installed) throw StateError('The handwriting model is not installed.');
-    final pictures = [for (final line in lines) await renderInkForGlmOcr(line, rows: quality.rows)];
+    final pad = await padPicturesNow();
+    final pictures = [for (final line in lines) await renderInkForGlmOcr(line, rows: quality.rows, pad: pad)];
     final tokens = await _read(
-      (await file('vision.onnx')).path,
+      (await file(visionFile)).path,
       (await file('text.onnx')).path,
       (await file('embeddings.bin')).path,
       pictures,

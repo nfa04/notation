@@ -172,7 +172,10 @@ endif()
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES "src/flutter_onnxruntime_plugin.cc" "src/session_manager.cc" "src/value_conversion.cc"
-     "src/tensor_manager.cc")
+     "src/tensor_manager.cc" "src/ort_runtime.cc")
+
+# The API table of ONNX Runtime is set by src/ort_runtime.cc (the bundled runtime, or a pack of the user's choice)
+add_compile_definitions(ORT_API_MANUAL_INIT)
 
 # Define the plugin library target. Its name must not be changed (see comment on PLUGIN_NAME above).
 add_library(${PLUGIN_NAME} SHARED ${PLUGIN_SOURCES})
@@ -293,7 +296,7 @@ if(${include_${PROJECT_NAME}_tests})
     # ONNX operator schemas holding the affected constants are registered once per process. Compile only the source
     # under test so nothing else in this binary can create one first.
     set(LOCALE_TEST_RUNNER "${PROJECT_NAME}_locale_test")
-    add_executable(${LOCALE_TEST_RUNNER} test/session_manager_locale_test.cc src/session_manager.cc)
+    add_executable(${LOCALE_TEST_RUNNER} test/session_manager_locale_test.cc src/session_manager.cc src/ort_runtime.cc)
 
     foreach(TARGET ${TEST_RUNNER} ${LOCALE_TEST_RUNNER})
       apply_standard_settings(${TARGET})

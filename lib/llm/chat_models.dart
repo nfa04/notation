@@ -29,12 +29,20 @@ class ChatModelSpec {
   /// Memory a device must report to be offered it (a "4 GB" phone says about 3.7).
   final int minRamMb;
 
+  /// A separate model for the words (Qwen3.5 2B and up: the decoder takes vectors, not token numbers). It sits next to the model
+  /// file; its weights are among [dataFiles].
+  final String? embedFile;
+
   /// The shape of the attention cache.
   final int layers, kvHeads, headDim;
 
   /// Whether the chat format wants an empty thinking block before the answer
   /// (Qwen3); Qwen2.5 has none.
   final bool thinking;
+
+  /// Under a billion parameters: they work on a weak phone, but the answers are poor, so the list keeps them out of sight until
+  /// asked.
+  final bool extraSmall;
 
   const ChatModelSpec({
     required this.id,
@@ -53,6 +61,8 @@ class ChatModelSpec {
     this.modelDir = 'onnx',
     this.tokenizerDir = '',
     this.dataFiles = const [],
+    this.embedFile,
+    this.extraSmall = false,
     this.ramGb,
   });
 
@@ -71,10 +81,77 @@ class ChatModelSpec {
     final dataMb = dataFiles.fold<int>(0, (sum, f) => sum + f.megabytes);
     return {
       modelFile: (url: at(modelDir, modelFile), megabytes: modelMb - dataMb),
+      ?embedFile: (url: at(modelDir, embedFile!), megabytes: 0),
       for (final f in dataFiles) f.name: (url: at(modelDir, f.name), megabytes: f.megabytes),
       'tokenizer.json': (url: at(tokenizerDir, 'tokenizer.json'), megabytes: tokenizerMb),
     };
   }
+
+  /// Qwen3.5: three of every four layers are linear attention (a small state that does not grow with the text), so a token is
+  /// about four times quicker than with Qwen3 of the same size. This is the text-only export (no image part).
+  static const qwen35Small = ChatModelSpec(
+    id: 'qwen3.5-0.8b',
+    family: 'Qwen3.5',
+    size: '0.8B',
+    repo: 'Qwen3.5-0.8B-Text-ONNX',
+    folder: 'llm_qwen35_08b',
+    modelMb: 526,
+    tokenizerMb: 18,
+    minRamMb: 2500,
+    layers: 24,
+    kvHeads: 2,
+    headDim: 256,
+    thinking: true, // (its template also writes the empty thinking block when thinking is off)
+    modelFile: 'model_q4.onnx',
+    dataFiles: [(name: 'model_q4.onnx_data', megabytes: 525)],
+    extraSmall: true,
+  );
+
+  /// Qwen3.5 2B and 4B only come as one model for text and pictures, cut in three: the picture part is left out here, the words go
+  /// through their own small model (`embed_tokens_q4.onnx`) and the decoder takes the vectors.
+  static const qwen35Mid = ChatModelSpec(
+    id: 'qwen3.5-2b',
+    family: 'Qwen3.5',
+    size: '2B',
+    repo: 'Qwen3.5-2B-ONNX',
+    folder: 'llm_qwen35_2b',
+    modelMb: 1536,
+    tokenizerMb: 20,
+    minRamMb: 4000,
+    layers: 24,
+    kvHeads: 2,
+    headDim: 256,
+    thinking: true,
+    modelFile: 'decoder_model_merged_q4.onnx',
+    embedFile: 'embed_tokens_q4.onnx',
+    dataFiles: [
+      (name: 'decoder_model_merged_q4.onnx_data', megabytes: 1209),
+      (name: 'embed_tokens_q4.onnx_data', megabytes: 326),
+    ],
+  );
+
+  static const qwen35Large = ChatModelSpec(
+    id: 'qwen3.5-4b',
+    family: 'Qwen3.5',
+    size: '4B',
+    repo: 'Qwen3.5-4B-ONNX',
+    folder: 'llm_qwen35_4b',
+    modelMb: 3109,
+    tokenizerMb: 20,
+    minRamMb: 5500,
+    ramGb: 6,
+    layers: 32,
+    kvHeads: 4,
+    headDim: 256,
+    thinking: true,
+    modelFile: 'decoder_model_merged_q4.onnx',
+    embedFile: 'embed_tokens_q4.onnx',
+    dataFiles: [
+      (name: 'decoder_model_merged_q4.onnx_data', megabytes: 2093),
+      (name: 'decoder_model_merged_q4.onnx_data_1', megabytes: 607),
+      (name: 'embed_tokens_q4.onnx_data', megabytes: 407),
+    ],
+  );
 
   static const qwen3Small = ChatModelSpec(
     id: 'qwen3-0.6b',
@@ -90,6 +167,7 @@ class ChatModelSpec {
     headDim: 128,
     thinking: true,
     modelFile: 'model_q4.onnx',
+    extraSmall: true,
   );
 
   static const qwen3Large = ChatModelSpec(
@@ -122,6 +200,7 @@ class ChatModelSpec {
     headDim: 64,
     thinking: false,
     modelFile: 'model_q4.onnx',
+    extraSmall: true,
   );
 
   static const qwen25Large = ChatModelSpec(
@@ -203,5 +282,5 @@ class ChatModelSpec {
   );
 
   /// Smallest first.
-  static const all = [qwen25Small, qwen3Small, qwen25Large, qwen3Large, qwen3Mid, qwen3Big, qwen3Huge];
+  static const all = [qwen35Small, qwen25Small, qwen3Small, qwen25Large, qwen35Mid, qwen3Large, qwen35Large, qwen3Mid, qwen3Big, qwen3Huge];
 }

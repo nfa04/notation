@@ -47,6 +47,17 @@ class MethodChannelFlutterOnnxruntime extends FlutterOnnxruntimePlatform {
     return result?.map((item) => item.toString()).toList() ?? [];
   }
 
+  @override
+  Future<Map<String, dynamic>> getRuntimeInfo() async {
+    final result = await methodChannel.invokeMethod<Map<Object?, Object?>>('getRuntimeInfo');
+    return _convertMapToStringDynamic(result ?? {});
+  }
+
+  @override
+  Future<void> chooseRuntime(String path) async {
+    await methodChannel.invokeMethod<bool>('chooseRuntime', {'path': path});
+  }
+
   /// Run inference on a session
   ///
   /// [sessionId] is the ID of the session to run inference on

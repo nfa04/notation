@@ -31,7 +31,7 @@ class OnnxMathModel implements MathOcrModel {
 
   @override
   Future<Object> encode(Float32List pixels) async {
-    final encoder = _encoder ?? await openOnnxSession(_encoderPath, options: _options);
+    final encoder = _encoder ?? await openOnnxSession(_encoderPath, options: _options, accelerate: !await onnxNeedsFixedShapes());
     if (_keepEncoder) _encoder = encoder;
     try {
       final input = await OrtValue.fromList(pixels, [1, 3, formulaImageSize, formulaImageSize]);

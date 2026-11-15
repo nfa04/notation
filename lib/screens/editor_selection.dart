@@ -830,24 +830,47 @@ extension _EditorSelection on _FixedPageNoteEditorState {
       if (navigator.mounted) navigator.pop();
     }
 
+    // (false while the reading waits for the block that the background reading is on)
+    final started = ValueNotifier<bool>(_ink == null);
     if (ready == null) {
+    final opened = DateTime.now();
     showGeneralDialog<void>(
       context: context,
       barrierDismissible: false,
-      pageBuilder: (_, _, _) => PopScope(
+      pageBuilder: (context, _, _) => PopScope(
         canPop: false,
         child: Center(
           child: PlatformAlertDialog(
-            content: Row(
+            content: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator.adaptive(strokeWidth: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator.adaptive(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 16),
+                    Text.verbatim(tr('Reading the {what}...', {'what': tr(what)})),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Text.verbatim(tr('Reading the {what}...', {'what': tr(what)})),
+                // (which model of this reader runs where: the graphics card or the processor)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: started,
+                    builder: (context, on, _) {
+                      final style = TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant);
+                      return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        if (!on) Text.verbatim(tr('Waiting for the block that is being read in the background...'), key: const ValueKey('reading-waits'), style: style),
+                        OnnxPlaces(since: opened, folders: math ? OnnxPlaces.formulaFolders : OnnxPlaces.handwritingFolders, style: style),
+                      ]);
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -858,7 +881,12 @@ extension _EditorSelection on _FixedPageNoteEditorState {
     String text;
     try {
       // (one job at a time with what is being read in the background)
-      text = ready ?? await (_ink?.exclusive(() => hw.recognize(strokes)) ?? hw.recognize(strokes));
+      text = ready ??
+          await (_ink?.exclusive(() {
+                started.value = true;
+                return hw.recognize(strokes);
+              }) ??
+              hw.recognize(strokes));
       if (ready == null) _ink?.remember(strokes, text, math: math);
     } catch (e) {
       closeBusy();

@@ -20,3 +20,12 @@ Future<int?> totalRamMb() async {
   } catch (_) {}
   return null;
 }
+
+/// The memory a model may count on. On iOS and iPadOS the system ends an app that uses too much, long before the memory of the device
+/// is used up: about 12 GB of 16 GB on an iPad Pro, with the increased-memory-limit entitlement (ios/Runner/Runner.entitlements;
+/// without it about 5 GB). Seven tenths of the memory of the device is a little under that. Elsewhere the whole memory counts.
+Future<int?> usableRamMb() async {
+  final total = await totalRamMb();
+  if (total == null) return null;
+  return !kIsWeb && Platform.isIOS ? (total * 0.7).round() : total;
+}

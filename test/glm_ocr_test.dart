@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes/llm/onnx_session.dart' show onnxAccelerationEnabled;
 import 'package:notes/ink/glm_ocr.dart';
 import 'package:notes/ink/glm_ocr_service.dart';
+import 'package:notes/ink/glm_vision_bench.dart' show glmSizesToPrepare;
 import 'package:notes/ink/handwriting_service.dart';
 import 'package:notes/ink/ink_grouping.dart';
 import 'package:notes/ink/ink_image.dart';
@@ -150,6 +152,23 @@ void main() {
       expect(dot.gridWidth * dot.gridHeight * 196, greaterThanOrEqualTo(glmMinPixels));
     });
 
+    test('padding gives a picture one of a few widths', () async {
+      final widths = <int>{};
+      for (var right = 60.0; right < 3000; right += 37) {
+        final line = [_stroke(10, 10, right, 60)];
+        final plain = await renderInkForGlmOcr(line);
+        final padded = await renderInkForGlmOcr(line, pad: true);
+        expect(padded.gridHeight, plain.gridHeight);
+        expect(glmPaddedWidths, contains(padded.gridWidth ~/ 2));
+        expect(padded.gridWidth, greaterThanOrEqualTo(plain.gridWidth));
+        expect(padded.gridWidth, lessThanOrEqualTo(plain.gridWidth * 1.5));
+        widths.add(padded.gridWidth);
+      }
+      expect(widths.length, lessThanOrEqualTo(glmPaddedWidths.length));
+      expect(glmPaddedColumns(5), 6);
+      expect(glmPaddedColumns(300), 300);
+    });
+
     test('chunks of a line are put together up to a width, and not beyond', () {
       InkChunk chunk(double left, double right) =>
           InkChunk([_stroke(left, 0, right, 20)], Rect.fromLTRB(left, 0, right, 20));
@@ -183,7 +202,6 @@ void main() {
           glm: glm,
           readSetting: (k) async => settings[k],
           writeSetting: (k, v) async => settings[k] = v,
-          removeOldFiles: () async {},
         );
         await hw.load();
         expect(hw.reader, HandwritingReader.glm); // (the standard)
@@ -214,7 +232,6 @@ void main() {
         final again = HandwritingService(
           glm: glm,
           readSetting: (k) async => settings[k],
-          removeOldFiles: () async {},
         );
         await again.load();
         expect(again.reader, HandwritingReader.glm);
@@ -241,9 +258,53 @@ void main() {
         await glm.install();
         expect(glm.installed, isFalse);
         expect(glm.error, contains('checksum'));
-        expect(await dir.exists(), isFalse);
+        expect(await dir.list().toList(), isEmpty, reason: 'the file that was not the published one is not kept, nor a half download');
       });
     });
+  });
+
+  testWidgets('with models on the processor the graphics card file is not used (no gain there, 1 GB more memory); both are kept', (tester) async {
+    await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('glm_ocr_cpu');
+      addTearDown(() async {
+        onnxAccelerationEnabled = true;
+        if (await dir.exists()) await dir.delete(recursive: true);
+      });
+      final fetched = <String>[];
+      final glm = GlmOcrService(
+        modelDirectory: () async => dir,
+        checksums: const {},
+        weights: GlmWeights.gpu,
+        download: (url, path, progress) async {
+          fetched.add(url.split('/').last);
+          File(path).writeAsStringSync('x');
+          progress(1);
+        },
+      );
+      await glm.load();
+      await glm.install();
+      expect(glm.visionFile, 'vision-gpu.onnx');
+      onnxAccelerationEnabled = false; // (the setting: processor only)
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(glm.weights, GlmWeights.gpu); // (the choice stays)
+      expect(glm.inUse, GlmWeights.standard);
+      expect(glm.visionFile, 'vision.onnx');
+      expect(glm.installed, isFalse); // (its file is not there yet)
+      await glm.install();
+      expect(fetched.where((f) => f == 'vision.onnx'), hasLength(1));
+      expect(File('${dir.path}/vision-gpu.onnx').existsSync(), isTrue, reason: 'kept for when the card is used again');
+      onnxAccelerationEnabled = true;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(glm.visionFile, 'vision-gpu.onnx');
+      expect(glm.installed, isTrue); // (no download)
+    });
+  });
+
+  test('plans are made only for the widths a line can have', () {
+    final sizes = glmSizesToPrepare();
+    expect(sizes.first, 4);
+    expect(sizes.last, 128); // (a piece is at most 24 times its height: 120 columns)
+    expect(sizes.every(glmPaddedWidths.contains), isTrue);
   });
 }
 

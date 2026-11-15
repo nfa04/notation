@@ -5,7 +5,7 @@ import 'dart:typed_data';
 /// The side of the square picture the formula reader Pix2Text-MFR takes.
 const int formulaImageSize = 384;
 
-/// Pix2Text-MFR (a TrOCR retrained on formulas; MIT licence), run with ONNX
+/// Pix2Text-MFR (a vision encoder-decoder retrained on formulas; MIT licence), run with ONNX
 /// Runtime. Pictures are 384x384, normalised to -1..1, channels first; the
 /// decoder has no cache, so it is given all tokens so far at every step.
 const int mathStartToken = 1;

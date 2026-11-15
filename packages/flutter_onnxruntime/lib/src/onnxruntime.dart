@@ -110,6 +110,17 @@ class OnnxRuntime {
     }
   }
 
+  /// Which ONNX Runtime is in use: its version, the path of the pack it was opened from ('' for the one bundled with the app), why a
+  /// chosen pack was not used ('' if none), and the pack saved for the next start. Linux only; elsewhere the call throws.
+  Future<({String version, String path, String error, String chosen})> getRuntimeInfo() async {
+    final m = await FlutterOnnxruntimePlatform.instance.getRuntimeInfo();
+    return (version: '${m['version']}', path: '${m['path']}', error: '${m['error']}', chosen: '${m['chosen']}');
+  }
+
+  /// Saves which ONNX Runtime to open at the next start of the app: the path of a libonnxruntime.so (a runtime pack with the providers
+  /// of a graphics card next to it), or '' for the bundled one. Linux only.
+  Future<void> chooseRuntime(String path) => FlutterOnnxruntimePlatform.instance.chooseRuntime(path);
+
   /// Get the available providers
   ///
   /// Returns a list of the available providers. Provider names reported by the native runtime that match no

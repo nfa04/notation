@@ -7,7 +7,7 @@ import '../l10n/language.dart';
 import '../l10n/text.dart';
 
 import '../data/note_repository.dart';
-import '../ink/glm_ocr_service.dart' show GlmQuality;
+import '../ink/glm_ocr_service.dart' show GlmQuality, GlmWeights;
 import '../ink/handwriting_service.dart';
 import '../export/pdf_ink_text.dart' show pdfInkTextSetting;
 import '../search/ink_indexer.dart';
@@ -15,7 +15,7 @@ import '../images/subject_service.dart';
 import '../scan/ocr_service.dart';
 import '../style/accessibility.dart';
 import '../style/refresh_rate.dart' show refreshRateAdjustable;
-import '../llm/onnx_session.dart' show onnxPlatformAccelerators;
+import '../llm/onnx_session.dart' show onnxAvailableAccelerators, onnxNeedsFixedShapes, onnxPlatformAccelerators;
 import '../style/stylus_settings.dart';
 import 'about_settings.dart';
 import 'stylus_settings_card.dart';
@@ -23,6 +23,7 @@ import 'accessibility_settings.dart';
 import 'pdf_quality_settings.dart';
 import 'refresh_rate_settings.dart';
 import 'acceleration_settings.dart';
+import '../ink/glm_vision_bench.dart';
 import '../ink/ink_recognizer.dart';
 import '../ink/math_service.dart';
 import '../ink/texteller_decoder.dart' show SecondLook;
@@ -255,7 +256,47 @@ class SettingsScreen extends StatelessWidget {
         sections: [
           ..._spaced([
             if (aiSwitch != null) _AiSwitchCard(aiSwitch: aiSwitch!),
-            if (repository != null && onnxPlatformAccelerators().isNotEmpty) AccelerationSettings(repository: repository!),
+            if (repository != null && onnxPlatformAccelerators().isNotEmpty) AccelerationSettings(
+                repository: repository!,
+                benchmark: handwriting != null && handwriting!.glm.installed ? () => benchmarkGlmVision(handwriting!.glm) : null,
+                precompile: handwriting == null && math == null ? null : (progress, cancelled) async {
+                        // (decided when it is pressed: what is installed and which size is chosen is known only after the page opened. The
+                        // handwriting sizes first, then the one plan of the formula encoder)
+                        final reader = handwriting != null && handwriting!.glm.installed && handwriting!.glm.inUse == GlmWeights.gpu;
+                        final formulas = math != null && math!.installed && math!.weights == TellerWeights.gpu;
+                        if (!reader && !formulas) {
+                          throw StateError(tr('Plans can only be made for the "Graphics card" size of the handwriting or the formula model (see their settings), once it is installed.'));
+                        }
+                        final rows = handwriting?.quality.rows ?? 10; // (a plan is for exact sizes: the picture height of the chosen quality)
+                        final sizes = reader ? glmSizesToPrepare(rows: rows).length : 0;
+                        final total = sizes + (formulas ? 1 : 0);
+                        progress(0, total);
+                        if (reader) await precompileGlmSizes(handwriting!.glm, rows: rows, progress: (d, t) => progress(d, total), cancelled: cancelled);
+                        if (formulas && !cancelled()) {
+                          await math!.precompileEncoder();
+                          progress(total, total);
+                        }
+                      },
+                planStatus: handwriting == null && math == null ? null : () async {
+                        final lines = <String>[];
+                        if (handwriting != null) {
+                          final rows = handwriting!.quality.rows;
+                          final missing = await glmSizesMissing(handwriting!.glm, rows: rows);
+                          if (missing != null) {
+                            final all = glmSizesToPrepare(rows: rows).length;
+                            lines.add(missing.isEmpty
+                                ? tr('Handwriting: all {all} picture sizes of this quality have their plan.', {'all': '$all'})
+                                : tr('Handwriting: {done} of {all} picture sizes of this quality have their plan. Missing: {missing} (widths in columns of 28 pixels). Plans made before this was noted are found again by "Precompile picture sizes", in seconds each.',
+                                    {'done': '${all - missing.length}', 'all': '$all', 'missing': missing.join(', ')}));
+                          }
+                        }
+                        if (math != null) {
+                          final planned = await math!.encoderPlanned();
+                          if (planned != null) lines.add(planned ? tr('Formulas: the plan is made.') : tr('Formulas: no plan yet.'));
+                        }
+                        return lines;
+                      },
+              ),
             if (handwriting != null) _HandwritingSettings(service: handwriting!, repository: repository),
             if (math != null) _MathSettings(service: math!),
             if (ocr != null) _OcrSettings(service: ocr!),
@@ -609,6 +650,41 @@ class _HandwritingSettings extends StatelessWidget {
                   tr('Quick takes about two thirds of the time and reads a little less exactly. Light takes less than half of it and reads clearly less exactly: for a slow device.'),
                   style: muted,
                 ),
+                const SizedBox(height: 12),
+                Text(tr('Size of the model'), style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                FutureBuilder<List<Object>>(
+                  future: onnxAvailableAccelerators(),
+                  builder: (context, snap) => Wrap(spacing: 8, runSpacing: 8, children: [
+                    // (the 16-bit network is for a graphics card: offered where the runtime found one, and when it is the one in use)
+                    for (final w in GlmWeights.values.where((w) => w != GlmWeights.gpu || service.weights == w || (snap.data?.isNotEmpty ?? false)))
+                      ChoiceChip(
+                        key: ValueKey('handwriting-weights-${w.name}'),
+                        label: Text(switch (w) {
+                          GlmWeights.standard => tr('Exact ({mb} MB)', {'mb': w.megabytes}),
+                          GlmWeights.compact => tr('Compact ({mb} MB)', {'mb': w.megabytes}),
+                          GlmWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
+                        }),
+                        selected: service.weights == w,
+                        onSelected: busy ? null : (_) => service.setWeights(w),
+                      ),
+                  ]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  tr('Compact is a third smaller and reads about two points less exactly. In a browser it is the one the graphics card can run (WebGPU), and much faster there. Changing it downloads the other file.'),
+                  style: muted,
+                ),
+                const SizedBox(height: 6),
+                Text(tr('Graphics card is for a graphics card runtime (AMD\'s cannot run the quantised ones): not shrunk, reads like Exact.'), style: muted),
+                if (service.glm.inUse != service.weights) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    tr('Models run on the processor now, so Exact is used: it reads the same there, as fast, with about 1 GB less memory. The graphics card file is kept for when the card is used again.'),
+                    key: const ValueKey('handwriting-weights-in-use'),
+                    style: muted,
+                  ),
+                ],
               ],
             ]);
           },
@@ -759,6 +835,31 @@ class _MathSettings extends StatelessWidget {
             ),
             if (service.model == FormulaModel.texteller) ...[
               const SizedBox(height: 16),
+              Text(tr('Size of the model'), style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              FutureBuilder<List<Object>>(
+                future: onnxAvailableAccelerators(),
+                builder: (context, snap) => Wrap(spacing: 8, runSpacing: 8, children: [
+                  // (the 16-bit encoder is for a graphics card: offered where the runtime found one, and when it is the one in use)
+                  for (final w in TellerWeights.values.where((w) => w != TellerWeights.gpu || service.weights == w || (snap.data?.isNotEmpty ?? false)))
+                    ChoiceChip(
+                      key: ValueKey('math-weights-${w.name}'),
+                      label: Text(switch (w) {
+                        TellerWeights.standard => tr('Small ({mb} MB)', {'mb': w.megabytes}),
+                        TellerWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
+                      }),
+                      selected: service.weights == w,
+                      onSelected: busy ? null : (_) => service.setWeights(w),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                tr('Graphics card is the encoder in 16 bits, for a graphics card runtime (AMD\'s cannot run the 8-bit one): twice the size, much quicker there, reads about as well. Changing it downloads the encoder.'),
+                style: muted,
+              ),
+              if (service.weights == TellerWeights.gpu && service.installed) _TellerPlan(service: service),
+              const SizedBox(height: 16),
               Text(tr('A second look at doubtful formulas'), style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
@@ -812,6 +913,67 @@ class _LanguageSettings extends StatelessWidget {
             ),
         ]),
       ]),
+    );
+  }
+}
+
+/// The formula encoder on a graphics card that compiles for exact sizes (AMD): its picture is always the same size (448 x 448), so there is
+/// nothing to pad and one plan to make; this makes it now (about 2 minutes, once) so that the first formula does not wait or read on the processor.
+class _TellerPlan extends StatefulWidget {
+  final MathService service;
+
+  const _TellerPlan({required this.service});
+
+  @override
+  State<_TellerPlan> createState() => _TellerPlanState();
+}
+
+class _TellerPlanState extends State<_TellerPlan> {
+  bool _working = false;
+  bool _done = false;
+  String? _error;
+
+  Future<void> _make() async {
+    setState(() {
+      _working = true;
+      _done = false;
+      _error = null;
+    });
+    try {
+      await widget.service.precompileEncoder();
+      if (mounted) setState(() => _done = true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13);
+    return FutureBuilder<bool>(
+      future: onnxNeedsFixedShapes(),
+      builder: (context, snap) {
+        if (snap.data != true) return const SizedBox.shrink();
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SizedBox(height: 16),
+          Text(tr('Plan for the graphics card'), style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Row(children: [
+            OutlinedButton(key: const ValueKey('math-precompile'), onPressed: _working ? null : _make, child: Text(_working ? tr('Preparing…') : tr('Precompile the formula plan'))),
+            if (_working) const Padding(padding: EdgeInsets.only(left: 12), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            _done
+                ? tr('Done: the plan is made and kept.')
+                : tr('Formula pictures are always the same size, so there is nothing to pad and one plan to make. The graphics card works it out once (about 2 minutes) and keeps it; until then the first formula can wait.'),
+            style: muted,
+          ),
+          if (_error != null) Text.verbatim(_error!, key: const ValueKey('math-precompile-error'), style: muted.copyWith(color: Theme.of(context).colorScheme.error)),
+        ]);
+      },
     );
   }
 }

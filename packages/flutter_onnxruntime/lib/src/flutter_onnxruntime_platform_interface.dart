@@ -44,6 +44,17 @@ abstract class FlutterOnnxruntimePlatform extends PlatformInterface {
     throw UnimplementedError('getAvailableProviders() has not been implemented.');
   }
 
+  /// Which ONNX Runtime the plugin uses (Linux only so far): {version, path ("" for the bundled one), error, chosen}.
+  Future<Map<String, dynamic>> getRuntimeInfo() {
+    throw UnimplementedError('getRuntimeInfo() has not been implemented.');
+  }
+
+  /// Saves which ONNX Runtime to open at the next start of the app (Linux only so far): the path of a libonnxruntime.so, or ''
+  /// for the bundled one.
+  Future<void> chooseRuntime(String path) {
+    throw UnimplementedError('chooseRuntime() has not been implemented.');
+  }
+
   /// Run inference on a session
   ///
   /// [sessionId] is the ID of the session to run inference on

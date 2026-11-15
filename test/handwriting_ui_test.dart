@@ -33,7 +33,6 @@ HandwritingService fakeService(Directory dir, {bool installed = true, List<List<
       read: (_, _, _, pictures) async => [for (final _ in pictures) tokens?.first ?? [0, 1, 2]],
       download: (_, _, _) async {},
     ),
-    removeOldFiles: () async {},
   );
 }
 

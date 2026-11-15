@@ -235,7 +235,9 @@ Future<void> _closeSession() async {
 Future<List<double>> _runOnnx(String path, List<int> ids, bool tokenTypes, int width) async {
   if (_sessionPath != path) {
     await _closeSession();
-    _session = await openOnnxSession(path, options: OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1));
+    // Not on an accelerator: in a browser's WebGPU this model gave other numbers than on the processor (the first values of the output
+    // 0.425 against 0.334 for the same input) and was twice as slow; the search index must not depend on which device made it.
+    _session = await openOnnxSession(path, options: OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1), accelerate: false);
     _sessionPath = path;
   }
   final session = _session!;

@@ -9,6 +9,8 @@ import 'package:notes/data/note_repository.dart';
 import 'package:notes/data/task_repository.dart';
 import 'package:notes/ink/ink_recognizer.dart';
 import 'package:notes/llm/causal_lm.dart';
+import 'package:notes/llm/chat_models.dart';
+import 'package:notes/llm/onnx_qwen.dart';
 import 'package:notes/llm/llm_service.dart';
 import 'package:notes/llm/qwen_tokenizer.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -64,6 +66,7 @@ class _FakeLm implements CausalLm {
 
 void main() {
   setUpAll(AppDatabase.initFfi);
+  qwen35Tests();
 
   group('the tokenizer', () {
     final tok = QwenTokenizer.parse(tinyTokenizer());
@@ -312,4 +315,52 @@ class _Editor implements NoteEditorHandle {
   Future<List<String>> pdfTextLines() async => lines;
   @override
   Future<String?> exportPdfTo(String path) async => null;
+}
+
+void qwen35Tests() {
+  group('Qwen3.5', () {
+    // the pre-tokenizer of Qwen3.5 lets combining marks join the letters of a word; Qwen3's does not
+    String withPattern(String pattern) {
+      final base = jsonDecode(tinyTokenizer()) as Map<String, Object?>;
+      base['pre_tokenizer'] = {
+        'type': 'Sequence',
+        'pretokenizers': [
+          {'type': 'Split', 'pattern': {'Regex': pattern}},
+        ],
+      };
+      return jsonEncode(base);
+    }
+
+    test('a combining mark stays with its letter, but only for the tokenizer that says so', () {
+      const text = 'café au lait';
+      final old = QwenTokenizer.parse(withPattern(r'[^\r\n\p{L}\p{N}]?\p{L}+'));
+      final next = QwenTokenizer.parse(withPattern(r'[^\r\n\p{L}\p{N}]?[\p{L}\p{M}]+'));
+      expect(old.splitWords(text), ['cafe', '́', ' au', ' lait']);
+      expect(next.splitWords(text), ['café', ' au', ' lait']);
+      expect(QwenTokenizer.parse(tinyTokenizer()).splitWords(text), ['cafe', '́', ' au', ' lait'], reason: 'no pre-tokenizer: as before');
+    });
+
+    test('the model is offered with its files, and the old names of the cache still map', () {
+      final spec = ChatModelSpec.qwen35Small;
+      expect(spec.files.keys, containsAll(['model_q4.onnx', 'model_q4.onnx_data', 'tokenizer.json']));
+      expect(spec.files['model_q4.onnx_data']!.url, 'https://huggingface.co/onnx-community/Qwen3.5-0.8B-Text-ONNX/resolve/main/onnx/model_q4.onnx_data');
+      expect(ChatModelSpec.all.map((s) => s.id).toSet().length, ChatModelSpec.all.length, reason: 'ids are unique');
+      expect(OnnxQwen.pastName('present.3.key'), 'past_key_values.3.key');
+      expect(OnnxQwen.pastName('present_conv.4'), 'past_conv.4');
+      expect(OnnxQwen.pastName('present_recurrent.0'), 'past_recurrent.0');
+    });
+
+    test('the 2B and 4B come as a decoder and a model for the words, all of it offered for download', () {
+      for (final spec in [ChatModelSpec.qwen35Mid, ChatModelSpec.qwen35Large]) {
+        final files = spec.files;
+        expect(files.keys, containsAll([spec.modelFile, spec.embedFile, 'embed_tokens_q4.onnx_data', '${spec.modelFile}_data', 'tokenizer.json']));
+        expect(files[spec.embedFile]!.url, endsWith('${spec.repo}/resolve/main/onnx/embed_tokens_q4.onnx'));
+        // what is listed adds up to what the card says
+        expect(files.values.fold<int>(0, (a, f) => a + f.megabytes), spec.downloadMb);
+      }
+      expect(ChatModelSpec.qwen35Large.files.keys, contains('decoder_model_merged_q4.onnx_data_1'));
+      final sizes = ChatModelSpec.all.map((s) => s.downloadMb).toList();
+      expect(sizes.indexOf(ChatModelSpec.qwen35Mid.downloadMb), lessThan(sizes.indexOf(ChatModelSpec.qwen3Large.downloadMb)), reason: 'smallest first');
+    });
+  });
 }
