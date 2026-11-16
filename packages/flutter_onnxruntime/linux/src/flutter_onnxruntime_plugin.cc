@@ -24,7 +24,6 @@
 #include <set>
 #include <vector>
 #include <mutex>
-#include <new>
 #include <onnxruntime_cxx_api.h>
 #include <string>
 #include <unordered_map>
