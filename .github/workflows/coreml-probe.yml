@@ -50,7 +50,7 @@ jobs:
         run: |
           python -c "import onnxruntime as o; print(o.__version__, o.get_available_providers())"
           model="$RUNNER_TEMP/models/glm/vision-gpu.onnx"; out="$RUNNER_TEMP/probe"; mkdir -p "$out"
-          probe() { echo "::group::$*"; timeout 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
+          probe() { echo "::group::$*"; perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
           for size in 10x24 10x96; do
             probe reference $size
             probe coreml $size ALL 0                 # (as the app tried: the input size left free; expected to fail with -14)
