@@ -23,8 +23,10 @@ void main() {
   late List<String> log;
   late Completer<void> plan; // the accelerator finishes its plan when this completes
 
-  WarmSession make({bool processorWorks = true, bool acceleratorWorks = true, Duration grace = const Duration(milliseconds: 30)}) => WarmSession.test(
+  WarmSession make({bool processorWorks = true, bool acceleratorWorks = true, Duration grace = const Duration(milliseconds: 30), bool waitForPlan = false}) =>
+      WarmSession.test(
         grace: grace,
+        waitForPlan: waitForPlan,
         accelerated: () async => WarmEngine((_) async {
           log.add('accelerator starts');
           await plan.future;
@@ -58,6 +60,24 @@ void main() {
     log.clear();
     await go(s, 'a');
     expect(log, ['accelerator starts', 'accelerator done']); // (the plan is there: no processor)
+  });
+
+  test('waiting for the plan (QNN on a phone): the processor is not opened beside the compile, only when the accelerator fails', () async {
+    final s = make(waitForPlan: true);
+    final reading = go(s, 'a');
+    await Future<void>.delayed(const Duration(milliseconds: 100)); // (well past the grace)
+    expect(log, ['accelerator starts']);
+    plan.complete();
+    await reading;
+    expect(log, ['accelerator starts', 'accelerator done']);
+
+    log.clear();
+    plan = Completer<void>();
+    final failing = make(waitForPlan: true, acceleratorWorks: false);
+    final second = go(failing, 'b');
+    plan.complete();
+    await second;
+    expect(log, ['accelerator starts', 'processor']);
   });
 
   test('a plan that is on disk is used at once, with no reading on the processor', () async {

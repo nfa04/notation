@@ -1,4 +1,3 @@
-import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -118,8 +117,7 @@ class GlmOcrService extends ModelFilesService {
   /// reads the same as the standard one there at the same speed, with about 1 GB more memory): the standard one is, downloaded then.
   GlmWeights get inUse => _inUseOf(_weights);
 
-  // (Android: the 16-bit file only costs memory there, see [qnnForHandwriting])
-  static GlmWeights _inUseOf(GlmWeights w) => w == GlmWeights.gpu && (!onnxAccelerationEnabled || (!kIsWeb && Platform.isAndroid)) ? GlmWeights.standard : w;
+  static GlmWeights _inUseOf(GlmWeights w) => w == GlmWeights.gpu && !onnxAccelerationEnabled ? GlmWeights.standard : w;
 
   /// The file of the vision network in use.
   String get visionFile => inUse.file;

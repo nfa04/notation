@@ -15,7 +15,61 @@ class WarmEngine {
   const WarmEngine(this.run, this.close);
 
   static WarmEngine of(OrtSession s) => WarmEngine((inputs) => s.run(inputs), s.close);
+
+  /// A model cut into parts that run one after the other (see tool/split_glm_vision.py), ONE PART OPEN AT A TIME: each is opened ([open]),
+  /// run and closed before the next. On a phone the parts are there for memory: QNN's GPU backend holds about three times a part's weights
+  /// (0.6 GB for 210 MB of 16-bit weights), and with the parts of the handwriting reader's vision network held together the app went
+  /// past 3.3 GB and Android killed it. After the first time a part opens from its compiled file (see [openOnnxSession]), not compiled.
+  ///
+  /// Each part takes what it needs of the inputs and of the outputs of the parts before it; the last part's outputs are the answer. The
+  /// values between parts are let go of here (the caller's inputs are not).
+  ///
+  /// A part the accelerator cannot run (it opens, and fails when run: QNN's GPU backend on a Snapdragon 865 with the rotary tables of the
+  /// handwriting reader) is run on the processor, then and from then on ([open] with accelerate false); the others stay on the accelerator.
+  static WarmEngine parts(List<String> paths, Future<OrtSession> Function(String path, bool accelerate) open) {
+    final onProcessor = <int>{};
+    return WarmEngine((inputs) async {
+        final known = <String, OrtValue>{...inputs};
+        final between = <OrtValue>[];
+        Future<Map<String, OrtValue>> runPart(int i, bool accelerate) async {
+          final part = await open(paths[i], accelerate);
+          try {
+            return await part.run({
+              for (final name in part.inputNames) name: known[name] ?? (throw StateError('part ${i + 1} needs $name, which no part before it made')),
+            });
+          } finally {
+            await part.close();
+          }
+        }
+
+        try {
+          for (var i = 0; i < paths.length; i++) {
+            Map<String, OrtValue> out;
+            if (onProcessor.contains(i)) {
+              out = await runPart(i, false);
+            } else {
+              try {
+                out = await runPart(i, true);
+              } catch (e) {
+                debugPrint('onnx: part ${i + 1} of ${paths.first.split('/').last}: the accelerator could not run it, the processor does from now on ($e)');
+                onProcessor.add(i);
+                out = await runPart(i, false);
+              }
+            }
+            if (i == paths.length - 1) return out;
+            known.addAll(out);
+            between.addAll(out.values);
+          }
+          throw StateError('a model of no parts');
+        } finally {
+          for (final v in between) {
+            await v.dispose();
+          }
+        }
+      }, () async {});
+  }
 }
+
 
 /// A model on an accelerator that works out a plan for each input size it meets (MIGraphX: minutes the first time, kept on disk for
 /// the next), which must not make a reading wait. A size whose plan is not known to be ready is run on the processor at once, with a
@@ -30,7 +84,7 @@ class WarmSession {
   final Duration grace;
 
   WarmSession.test(
-      {required Future<WarmEngine> Function() accelerated, required Future<WarmEngine> Function() processor, this.grace = const Duration(seconds: 4), this.onPlanned, this.oneSize = false})
+      {required Future<WarmEngine> Function() accelerated, required Future<WarmEngine> Function() processor, this.grace = const Duration(seconds: 4), this.onPlanned, this.oneSize = false, this.waitForPlan = false})
       : _openAccelerated = accelerated,
         _openProcessor = processor;
 
@@ -40,11 +94,18 @@ class WarmSession {
         grace = Duration.zero,
         onPlanned = null,
         oneSize = false,
+        waitForPlan = false,
         _plain = true;
 
   // (8 s: loading a plan of the handwriting reader from disk took 2.4 to 5 s on a Radeon 780M, and the first run of a session up to 7 s, a
   // run on the stale plan and the load of the right one; making a plan takes 6 to 8 minutes)
-  WarmSession._compiling(this._openAccelerated, this._openProcessor, this.onPlanned, this.oneSize, this._model) : grace = const Duration(seconds: 8);
+  WarmSession._compiling(this._openAccelerated, this._openProcessor, this.onPlanned, this.oneSize, this._model, {this.waitForPlan = false})
+      : grace = const Duration(seconds: 8);
+
+  /// While a plan is made, wait for it instead of reading on the processor meanwhile (QNN on a phone: the processor's copy of the model
+  /// beside the one being compiled took the app past what Android allows it, and it was killed). The processor is used only if the
+  /// accelerator fails.
+  final bool waitForPlan;
 
   /// The model's name as [onnxRuns] has it (null in tests).
   String? _model;
@@ -90,12 +151,15 @@ class WarmSession {
     } else if (!_acceleratorFailed && _compiling == null) {
       _compiling = key;
       final attempt = _tryAccelerated(inputs, key, accept);
-      final first = await Future.any<Map<String, OrtValue>?>([attempt, Future<Map<String, OrtValue>?>.delayed(grace)]);
+      final model = _model;
+      if (waitForPlan && model != null) onnxNoteRun(model, onnxMakingPlan, running: true);
+      final first = waitForPlan
+          ? await attempt.whenComplete(() => model == null ? null : onnxNoteRun(model, onnxMakingPlan, running: false))
+          : await Future.any<Map<String, OrtValue>?>([attempt, Future<Map<String, OrtValue>?>.delayed(grace)]);
       if (first != null) return _checked(first, inputs, key);
-      if (!_acceleratorFailed) {
+      if (!_acceleratorFailed && !waitForPlan) {
         debugPrint('onnx: no plan for size "$key" yet: reading on the processor while the accelerator makes one');
         pending = attempt;
-        final model = _model;
         if (model != null) {
           onnxNoteRun(model, onnxMakingPlan, running: true);
           unawaited(attempt.whenComplete(() => onnxNoteRun(model, onnxMakingPlan, running: false)));
@@ -271,8 +335,11 @@ class OneSizeAtATime {
 /// The sizes whose plan is made are noted in [AcceleratorPlans] (for the settings); [oneSize]: the model takes one input size only.
 /// [processorPath]: another file of the same model for the processor (the handwriting reader's 8-bit vision file is quicker there than
 /// the 16-bit one CoreML takes).
+///
+/// [parts]: the same model cut into parts (QNN on a phone: compiling the whole 868 MB vision network at once took the app past what
+/// Android allows); used for the accelerated sessions of a pinned model, each part with the size fixed.
 Future<WarmSession> openWarmSession(String path,
-    {OrtSessionOptions? options, bool accelerate = true, bool oneSize = false, PinnedSize? pin, String? processorPath}) async {
+    {OrtSessionOptions? options, bool accelerate = true, bool oneSize = false, PinnedSize? pin, String? processorPath, List<String>? parts}) async {
   if (accelerate && pin != null && await onnxPinsSizes(path)) {
     OrtSessionOptions fixed(int size) => OrtSessionOptions(
           intraOpNumThreads: options?.intraOpNumThreads,
@@ -281,13 +348,19 @@ Future<WarmSession> openWarmSession(String path,
           sessionConfigs: options?.sessionConfigs,
           freeDimensions: {...?options?.freeDimensions, pin.name: size},
         );
-    final sized = OneSizeAtATime(pin, (size) async => WarmEngine.of(await openOnnxSession(path, options: fixed(size))));
+    final sized = OneSizeAtATime(
+        pin,
+        (size) async => parts != null && parts.isNotEmpty
+            ? WarmEngine.parts(parts, (p, accelerate) => accelerate ? openOnnxSession(p, options: fixed(size)) : openOnnxSession(p, options: options, accelerate: false))
+            : WarmEngine.of(await openOnnxSession(path, options: fixed(size))));
     return WarmSession._compiling(
       () async => sized.engine,
       () async => WarmEngine.of(await openOnnxSession(processorPath ?? path, options: options, accelerate: false)),
       null,
       false,
       onnxModelName(path),
+      // (QNN: a phone has no room for the processor's copy beside the one being compiled; CoreML reads on the processor meanwhile)
+      waitForPlan: !await onnxUsesCoreMl(),
     );
   }
   if (accelerate && await onnxNeedsFixedShapes()) {
