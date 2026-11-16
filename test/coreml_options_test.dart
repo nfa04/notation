@@ -44,4 +44,12 @@ void main() {
     expect(options.containsKey('ModelCacheDirectory'), isFalse);
     expect(options['ModelFormat'], 'MLProgram');
   });
+
+  test('only the checked 16-bit files get the CoreML settings', () {
+    expect(onnxCheckedForFp16('/m/texteller/encoder-gpu.onnx'), isTrue);
+    expect(onnxCheckedForFp16('/m/glm_ocr/vision-gpu.onnx'), isTrue);
+    for (final other in ['/m/texteller/encoder.onnx', '/m/texteller/encoder-fp32.onnx', '/m/glm_ocr/vision.onnx', '/m/glm_ocr/vision-web.onnx']) {
+      expect(onnxCheckedForFp16(other), isFalse, reason: other);
+    }
+  });
 }

@@ -17,6 +17,12 @@ concurrency:
 
 env:
   FLUTTER_VERSION: 3.47.7
+  # (what is checked: empty = every model and way; the full set takes over an hour on these machines. Measured already, 2026-11-16:
+  # the formula encoders and the 8-bit vision network)
+  MODELS: glm/vision-gpu.onnx
+  WAYS: processor,mlprogram-all,mlprogram-all-again,mlprogram-gpu
+  RUNS: 1
+  STEP_MINUTES: 25
 
 jobs:
   coreml:
@@ -68,14 +74,15 @@ jobs:
       - name: Control (a test that passes on these machines)
         run: flutter test integration_test/session_priority_test.dart -d macos
       - name: Test
-        timeout-minutes: 40
+        timeout-minutes: 75
         run: |
           set -o pipefail
-          # (what every thread of the app is doing, 8 and 20 minutes in: if the test hangs, this says where)
-          ( for at in 480 720; do sleep $at; pid=$(pgrep -n -f 'Notation.app/Contents/MacOS' || true)
+          # (what every thread of the app is doing, 15 and 35 minutes in: if the test hangs, this says where)
+          ( for at in 900 1200; do sleep $at; pid=$(pgrep -n -f 'Notation.app/Contents/MacOS' || true)
               [ -n "$pid" ] && sample "$pid" 5 -file "$RUNNER_TEMP/sample-$at.txt" >/dev/null 2>&1; done ) &
           flutter test integration_test/coreml_check_test.dart -d macos \
-            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json 2>&1 | tee coreml.log
+            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json \
+            --dart-define=MODELS="$MODELS" --dart-define=WAYS="$WAYS" --dart-define=RUNS=$RUNS --dart-define=STEP_MINUTES=$STEP_MINUTES 2>&1 | tee coreml.log
       - name: Summary
         if: always()
         run: |

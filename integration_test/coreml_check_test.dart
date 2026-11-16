@@ -24,6 +24,10 @@ import 'package:notes/models/canvas_models.dart';
 const modelDir = String.fromEnvironment('MODEL_DIR');
 const outFile = String.fromEnvironment('OUT');
 const runs = int.fromEnvironment('RUNS', defaultValue: 3);
+// (comma lists to make a run shorter: the model files, as 'glm/vision-gpu.onnx', and the ways, as 'processor,mlprogram-all'; empty: all)
+const onlyModels = String.fromEnvironment('MODELS');
+const onlyWays = String.fromEnvironment('WAYS');
+bool picked(String list, String name) => list.isEmpty || list.split(',').map((s) => s.trim()).contains(name);
 
 DrawingStroke pen(List<Offset> points) => DrawingStroke(color: const Color(0xFF000000), width: 3, points: points);
 
@@ -154,12 +158,14 @@ void main() {
     for (final MapEntry(key: name, value: pictures) in models.entries) {
       if (stuck) break;
       final path = '$modelDir/$name';
+      if (!picked(onlyModels, name)) continue;
       if (!File(path).existsSync()) {
         say('$name not in $modelDir, left out');
         continue;
       }
       final reference = <String, Float32List>{};
       for (final way in ways) {
+        if (!picked(onlyWays, way.name)) continue;
         final row = <String, Object?>{'model': name, 'way': way.name};
         results.add(row);
         OrtSession? session;

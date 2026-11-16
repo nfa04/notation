@@ -66,8 +66,9 @@ class GlmOnnxReader with WidgetsBindingObserver {
     }
     try {
       // (a quantised network cannot run on an accelerator that compiles for exact sizes: it is cut into pieces, each compiled, and the
-      // quantised ones run on the processor anyway, so it would only make the first reading take for ever)
-      final vision = _vision ??= await openWarmSession(visionPath, options: _options(), accelerate: visionPath.endsWith('vision-gpu.onnx') || !await onnxNeedsFixedShapes());
+      // quantised ones run on the processor anyway, so it would only make the first reading take for ever; CoreML cannot build the 8-bit
+      // one as an MLProgram, and its older format ran it 3 to 10 times slower than the processor on a Mac)
+      final vision = _vision ??= await openWarmSession(visionPath, options: _options(), accelerate: onnxCheckedForFp16(visionPath) || !await onnxTakesOnlyFp16Files());
       final features = await _seeAll(vision, pictures);
       final table = _table ??= await GlmEmbeddings.open(embeddingsPath);
       final language = _language ??= await openOnnxSession(textPath, options: _options(), accelerate: false);

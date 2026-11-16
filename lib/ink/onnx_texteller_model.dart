@@ -95,7 +95,8 @@ class OnnxTexTeller implements ScoredTexTeller {
 
   Future<WarmSession> _encoderSession() async {
     // (shapes are not fixed: with them NNAPI took so much of the 32-bit encoder that its compile ran past ten minutes on a Pixel 8 Pro)
-    final made = _encoder ?? await _timed<WarmSession>('open', () async => openWarmSession(_encoderPath, options: _options, oneSize: true, accelerate: _encoderPath.endsWith('encoder-gpu.onnx') || !await onnxNeedsFixedShapes()));
+    // (MIGraphX and CoreML get the fixed 16-bit encoder only: on a Mac's CoreML the 8-bit one answered 15 % off, see [onnxFp16Files])
+    final made = _encoder ?? await _timed<WarmSession>('open', () async => openWarmSession(_encoderPath, options: _options, oneSize: true, accelerate: onnxCheckedForFp16(_encoderPath) || !await onnxTakesOnlyFp16Files()));
     _encoder = made;
     return made;
   }
