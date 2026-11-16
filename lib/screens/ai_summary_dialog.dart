@@ -8,6 +8,7 @@ import '../ai/ai_service.dart';
 import '../ai/text_provider.dart';
 import '../ink/ink_recognizer.dart' show DownloadableModel;
 import '../style/platform_dialog.dart';
+import 'openai_model_switcher.dart';
 
 /// Writes a summary of [text] (or, for another [task], an explanation of it, or
 /// the answer to a question about it) with the AI provider of [ai] and shows it:
@@ -129,6 +130,7 @@ class _AiSummaryDialogState extends State<AiSummaryDialog> {
         width: 460,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Align(alignment: Alignment.centerLeft, child: OpenAiModelSwitcher(ai: widget.ai)),
             if (_stage == _Stage.download) ...[
               Text('${provider.label}: ${provider.description}'),
               const SizedBox(height: 12),

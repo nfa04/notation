@@ -312,13 +312,19 @@ Future<bool> onnxTakesOnlyFp16Files() async {
 /// [openWarmSession]), so pictures of handwriting are padded to a few widths.
 Future<bool> onnxUsesCoreMl() async => onnxAccelerationEnabled && (await onnxAvailableAccelerators()).firstOrNull == OrtProvider.CORE_ML;
 
+/// Whether the handwriting reader's 16-bit picture network (868 MB) is given to QNN, one picture width at a time. Off: on a phone with 6 GB
+/// the compile of it and the processor reading meanwhile with the other copy (450 MB) took the app past 2.6 GB, and Android killed it every
+/// time; the picture part is also a small share of the reading, the text part runs on the processor in any case.
+const qnnForHandwriting = false;
+
 /// True when the accelerator in use runs a model whose input size is free one size at a time (see [openWarmSession]): CoreML, and QNN
 /// on a phone where it runs something (its graphs have fixed shapes). Pictures of handwriting are then padded to a few widths.
 Future<bool> onnxPinsSizes(String file) async {
   if (!onnxAccelerationEnabled) return false;
   if (await onnxUsesCoreMl()) return true;
-  // (QNN: the 16-bit files only; the others hold operators it has not, and would be compiled for nothing)
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android || !onnxCheckedForFp16(file)) return false;
+  // (QNN: the 16-bit files only; the others hold operators it has not, and would be compiled for nothing. And not for the handwriting
+  // reader at all, see [qnnForHandwriting])
+  if (!qnnForHandwriting || kIsWeb || defaultTargetPlatform != TargetPlatform.android || !onnxCheckedForFp16(file)) return false;
   if (!(await onnxAvailableAccelerators()).contains(OrtProvider.QNN)) return false;
   return (await _qnnBackends()).isNotEmpty;
 }

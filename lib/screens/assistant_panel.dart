@@ -9,10 +9,12 @@ import '../ai/flashcards.dart' show Flashcard;
 import '../ai/line_diff.dart';
 import '../ai/note_agent.dart';
 import '../ai/note_ai.dart' show NoteAiKind;
+import '../ai/openai_provider.dart' show OpenAiProvider;
 import '../ai/text_provider.dart';
 import '../ink/ink_recognizer.dart' show DownloadableModel;
 import 'add_to_note.dart';
 import 'flashcard_view.dart';
+import 'openai_model_switcher.dart';
 
 /// Questions and answers about the whole document, beside it (or over it on a
 /// narrow screen). Who answers is the AI provider chosen in the Settings.
@@ -140,6 +142,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
       final chosen = models.modelOptions.where((o) => o.id == models.selectedModelId).firstOrNull;
       if (chosen != null) name = '${tr(name)} - ${tr(chosen.label)}';
     }
+    if (provider is OpenAiProvider && provider.config.model.isNotEmpty) name = '${tr(name)} - ${provider.config.model}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
       child: Row(children: [
@@ -152,6 +155,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                 style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ]),
         ),
+        OpenAiModelSwitcher(ai: widget.ai, compact: true),
         if (widget.ai.providers.length > 1)
           PopupMenuButton<String>(
             key: const ValueKey('assistant-provider'),

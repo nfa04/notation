@@ -6,6 +6,7 @@ import '../ai/text_provider.dart';
 import '../ink/ink_recognizer.dart' show DownloadableModel;
 import '../l10n/language.dart';
 import '../style/platform_dialog.dart';
+import 'openai_model_switcher.dart';
 
 /// What the person took from the ideas: colours for the palette, or a text for the note.
 class IdeasResult {
@@ -130,6 +131,7 @@ class _IdeasDialogState extends State<IdeasDialog> {
         width: 460,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Align(alignment: Alignment.centerLeft, child: OpenAiModelSwitcher(ai: widget.ai)),
             if (_stage == _Stage.download) ...[
               Text('${provider.label}: ${provider.description}'),
               const SizedBox(height: 12),
