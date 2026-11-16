@@ -312,10 +312,12 @@ Future<bool> onnxTakesOnlyFp16Files() async {
 /// [openWarmSession]), so pictures of handwriting are padded to a few widths.
 Future<bool> onnxUsesCoreMl() async => onnxAccelerationEnabled && (await onnxAvailableAccelerators()).firstOrNull == OrtProvider.CORE_ML;
 
-/// Whether the handwriting reader's 16-bit picture network (868 MB) is given to QNN, one picture width at a time. Off: on a phone with 6 GB
-/// the compile of it and the processor reading meanwhile with the other copy (450 MB) took the app past 2.6 GB, and Android killed it every
-/// time; the picture part is also a small share of the reading, the text part runs on the processor in any case.
-const qnnForHandwriting = false;
+/// Whether the handwriting reader's 16-bit picture network (868 MB) is given to QNN, one picture width at a time. Memory is the limit: on a
+/// phone with 6 GB the compile of the whole network took the app past 3.3 GB and Android killed it. It runs when cut into parts
+/// (tool/split_glm_vision.py), one part open at a time ([WarmEngine.parts]), the processor waiting for a compile instead of reading
+/// meanwhile ([WarmSession.waitForPlan]): on a Snapdragon 865 the four parts with weights ran on the QNN GPU backend at about 1.9 GB, the
+/// picture network about 4 times slower than the processor (a proof that the path works; the NPU of newer chips is the one to measure).
+const qnnForHandwriting = true;
 
 /// True when the accelerator in use runs a model whose input size is free one size at a time (see [openWarmSession]): CoreML, and QNN
 /// on a phone where it runs something (its graphs have fixed shapes). Pictures of handwriting are then padded to a few widths.

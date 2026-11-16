@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -83,7 +83,8 @@ class GlmOnnxReader with WidgetsBindingObserver {
           options: _options(),
           accelerate: onnxCheckedForFp16(visionPath) || !await onnxTakesOnlyFp16Files(),
           pin: glmVisionPin,
-          processorPath: _quickerOnProcessor(visionPath));
+          processorPath: _quickerOnProcessor(visionPath),
+          parts: _parts(visionPath));
       final seeing = Stopwatch()..start();
       final features = await _seeAll(vision, pictures);
       spent['vision'] = (spent['vision'] ?? 0) + seeing.elapsedMicroseconds;
@@ -281,6 +282,16 @@ typedef GlmReading = ({List<int> tokens, double confidence, List<double> logProb
 /// The vision network's free input size: the number of patches (pixel_values is [patches, 1176]). CoreML can only build the network
 /// with it fixed (it fails on the free one, error -14), so it runs one picture width at a time (see [PinnedSize]).
 const PinnedSize glmVisionPin = (name: '4*m', input: 'pixel_values', axis: 0);
+
+/// The 16-bit vision network cut into parts (tool/split_glm_vision.py: vision-gpu.part1.onnx, part2, ...), when they are next to it: on
+/// Android, where QNN compiles and runs each on its own, one at a time (the whole at once took the app past 3.3 GB on a phone with 6 GB,
+/// and Android killed it).
+List<String>? _parts(String visionPath) {
+  if (kIsWeb || !Platform.isAndroid || !visionPath.endsWith('/vision-gpu.onnx')) return null;
+  final stem = visionPath.substring(0, visionPath.length - '.onnx'.length);
+  final parts = [for (var i = 1; File('$stem.part$i.onnx').existsSync(); i++) '$stem.part$i.onnx'];
+  return parts.length >= 2 ? parts : null;
+}
 
 /// The 8-bit vision file next to the 16-bit one, if it is there: the processor reads quicker with it (the answers have the same shape).
 String? _quickerOnProcessor(String visionPath) {
