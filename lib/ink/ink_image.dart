@@ -177,7 +177,13 @@ Future<PaddleVlPicture> renderInkForPaddleVl(List<DrawingStroke> strokes,) async
 /// grows by a fifth on average (21 % on the benchmark lines). A line wider than the last is left as it is.
 const glmPaddedWidths = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
 
-int glmPaddedColumns(int columns) => glmPaddedWidths.firstWhere((w) => w >= columns, orElse: () => columns);
+int glmPaddedColumns(int columns, [List<int> widths = glmPaddedWidths]) => widths.firstWhere((w) => w >= columns, orElse: () => columns);
+
+/// The widths under CoreML (iOS, macOS): it builds the vision network once for each width it meets and keeps each on disk, about 1.6 GB
+/// a width (the converted model and the compiled one), so only three; a line wider than the last is drawn smaller to fit it. The
+/// reader's pieces are at most 120 columns at 10 rows ([GlmOcrService.widestPiece]); CoreML reads even the widest about ten times as
+/// fast as the processor, so the extra padding of short lines costs little.
+const glmCoreMlWidths = [32, 64, 128];
 
 /// How thick the pen is in the picture GLM-OCR gets, as a part of the height of the ink (what the benchmark was drawn with).
 const double glmOcrPen = 0.045;
@@ -189,7 +195,9 @@ const double glmOcrPen = 0.045;
 ///
 /// With [pad] the width is one of [glmPaddedColumns] (white on the right of the ink): an accelerator that compiles for the exact size of
 /// its input then compiles once for each of a handful of widths instead of once for nearly every line, at about a fifth more work.
-Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 10, bool pad = false}) async {
+/// [padTo] gives the widths instead (and implies [pad]); a line wider than the last of them is drawn smaller, so no other width ever
+/// comes (see [glmCoreMlWidths]).
+Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 10, bool pad = false, List<int>? padTo}) async {
   final drawn = [for (final s in strokes) if (s.points.length >= 2) s];
   if (drawn.isEmpty) throw ArgumentError('Nothing is drawn.');
   rows = (rows ~/ 2 * 2).clamp(4, 16);
@@ -203,9 +211,14 @@ Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 1
   final inkWidth = math.max(bounds.width, 1.0), inkTall = math.max(bounds.height, 1.0);
   var scale = inkHeight / inkTall;
   scale = math.min(scale, (glmMaxPatchesPerSide * glmPatch - 2 * margin) / inkWidth);
+  if (padTo != null) scale = math.min(scale, (padTo.last * 28 - 2 * margin) / inkWidth);
   final minWidth = (glmMinPixels / height / 28).ceil() * 28;
   var columns = math.max(minWidth ~/ 28, ((inkWidth * scale + 2 * margin) / 28).ceil());
-  if (pad) columns = glmPaddedColumns(columns);
+  if (padTo != null) {
+    columns = glmPaddedColumns(math.min(columns, padTo.last), padTo);
+  } else if (pad) {
+    columns = glmPaddedColumns(columns);
+  }
   final width = columns * 28;
   // a line that is flatter than the picture sits in the middle of its height
   final top = (height - inkTall * scale) / 2;

@@ -163,9 +163,10 @@ class GlmOcrService extends ModelFilesService {
   /// [readLines], with the words of each that the model was unsure of (see [unsureBelow]).
   Future<List<({String text, List<String> unsure})>> readLinesScored(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async {
     if (!installed) throw StateError('The handwriting model is not installed.');
-    // (CoreML runs the 16-bit vision file one picture width at a time: few widths, few conversions)
-    final pad = await padPicturesNow() || (onnxCheckedForFp16(visionFile) && await onnxUsesCoreMl());
-    final pictures = [for (final line in lines) await renderInkForGlmOcr(line, rows: quality.rows, pad: pad)];
+    // (CoreML runs the 16-bit vision file one picture width at a time and keeps each on disk: three widths only, see glmCoreMlWidths)
+    final coreMl = onnxCheckedForFp16(visionFile) && await onnxUsesCoreMl();
+    final pad = await padPicturesNow();
+    final pictures = [for (final line in lines) await renderInkForGlmOcr(line, rows: quality.rows, pad: pad, padTo: coreMl ? glmCoreMlWidths : null)];
     final tokens = await _read(
       (await file(visionFile)).path,
       (await file('text.onnx')).path,

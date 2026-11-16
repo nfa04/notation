@@ -63,6 +63,8 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
           }
           final label = attempt.label ?? list.first.name;
           _report(model, label);
+          // (the session is made, so CoreML's compiled copy is on disk: the converted copy's weights are not needed again)
+          if (extra?[OrtProvider.CORE_ML]?['ModelCacheDirectory'] case final String cache?) unawaited(coreMlDropConvertedWeights(cache));
           final placed = _place(session, path, list.first.name);
           if (profile) {
             _toProfile.add(placed);
@@ -421,6 +423,28 @@ Future<String?> coreMlCacheFolder(String path, {Map<String, int>? fixed, Directo
     debugPrint('onnx: no CoreML cache folder for $path ($e)');
     return null;
   }
+}
+
+/// Deletes the weights of CoreML's converted models under [cache] where the compiled model is next to them (ModelCacheDirectory holds
+/// both, each with all the weights: 1.6 GB for the handwriting vision network, 0.8 GB without the converted ones). ONNX Runtime only
+/// checks that the converted model's folder is there and then loads the compiled one (model.mm CompileOrReadCachedModel), so nothing is
+/// built again: checked on a Mac (.github/workflows/coreml-probe.yml), the next session opened in half a second with the same answer.
+/// Returns how many folders were deleted.
+Future<int> coreMlDropConvertedWeights(String cache) async {
+  var dropped = 0;
+  try {
+    final root = Directory(cache);
+    if (!await root.exists()) return 0;
+    await for (final e in root.list(recursive: true, followLinks: false)) {
+      if (e is! Directory || p.basename(e.path) != 'Data' || p.basename(e.parent.path) != 'model') continue;
+      if (!await Directory(p.join(e.parent.path, 'compiled_model.mlmodelc')).exists()) continue; // (not built yet: leave it)
+      await e.delete(recursive: true);
+      dropped++;
+    }
+  } catch (e) {
+    debugPrint('onnx: could not tidy the CoreML cache $cache ($e)');
+  }
+  return dropped;
 }
 
 /// A tensor of 64-bit whole numbers (the ids of tokens, the masks, the positions). A browser has no `Int64List` (it throws), so
