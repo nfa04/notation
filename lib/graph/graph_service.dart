@@ -114,6 +114,9 @@ class GraphService extends ChangeNotifier {
   List<SavedGraph> _saved = const [];
   bool _listed = false;
 
+  /// Whether the list of kept graphs was read (before that [graphs] is empty because nothing was asked yet).
+  bool get listed => _listed;
+
   /// The kept graphs, oldest first (after [refresh]).
   List<SavedGraph> get graphs => _saved;
 

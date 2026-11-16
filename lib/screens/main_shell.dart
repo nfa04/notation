@@ -130,37 +130,65 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   void _aiSwitched() {
     if (!mounted) return;
-    if (!_aiOn && _tabs.contains(_graphKey)) {
-      // (the graph goes with the AI: its tab too)
-      _tabs = [..._tabs]..remove(_graphKey);
-      _shown = [..._shown]..remove(_graphKey);
-      if (_focused == _graphKey) _focused = _shown.isEmpty ? null : _shown.last;
-      if (_selectedNavIndex == 8) _selectedNavIndex = _focused == null ? 0 : 3;
-      _focusedPane.value = _focused;
-    }
-    if (!_navItems.contains(_selectedNavIndex)) _selectedNavIndex = 0; // (the assistant page goes with the AI)
+    _pruneTabs(); // (the assistant and the graph go with the AI)
     setState(() {});
   }
 
   void _featuresChanged() {
     if (!mounted) return;
-    // a place of the menu that goes away while it is shown: back to the dashboard
-    if (!_navItems.contains(_selectedNavIndex)) _selectedNavIndex = 0;
+    _pruneTabs(); // a place of the menu that goes away while it is shown: its tab goes
     setState(() {});
   }
 
-  /// The work area: the tabs that are open (notes, and the graph under the key [_graphKey]), the ones that are on screen next to
-  /// each other (wide windows hold several), and the one the keyboard is for. The area is shown for the places 3 (notes) and 8 (graph) of the menu.
+  /// A tab of a place that is not in the menu any more (the AI is off, a tool was switched off) goes.
+  void _pruneTabs() {
+    bool stale(String k) {
+      final p = _isGraph(k) ? 8 : _pageOf(k);
+      return p != null && p != 3 && !_navItems.contains(p);
+    }
+
+    if (_tabs.any(stale)) {
+      _tabs = [..._tabs]..removeWhere(stale);
+      _shown = [..._shown]..removeWhere(stale);
+      if (_tabs.isEmpty) _tabs = [_homeKey];
+      if (_shown.isEmpty) _shown = [_tabs.first];
+      if (!_shown.contains(_focused)) _focused = _shown.last;
+      _focusedPane.value = _focused;
+    }
+    _selectedNavIndex = _navOf(_focused);
+  }
+
+  /// The work area: the tabs that are open (notes, graphs, and the places of the menu, `page:<n>`: `graph:<id>` holds one kept graph, [_graphKey] the view that has none yet), the ones that are on screen next to
+  /// each other (wide windows hold several), and the one the keyboard is for. A place of the menu opens as a tab too (once).
   static const _graphKey = 'graph';
-  List<String> _tabs = [];
-  List<String> _shown = [];
-  String? _focused;
+  List<String> _tabs = [_homeKey];
+  List<String> _shown = [_homeKey];
+  String? _focused = _homeKey;
+  final List<String> _recent = []; // the tabs that had the keyboard, the last one first
   List<String> _visible = const []; // what the last layout had room for
   int _maxPanes = 1; // how many fit next to each other
   final Map<String, double> _weights = {}; // the share of the width of a pane
   final Map<String, String> _titles = {}; // the titles of the tabs (a note that is open gives its own)
-  final _graphWidgetKey = GlobalKey();
-  final ValueNotifier<String?> _focusedPane = ValueNotifier(null);
+  final Map<String, GlobalKey> _graphWidgetKeys = {};
+
+  /// The places and graphs that were on screen once: they stay built (out of sight, not painted, no animations) while their tab is
+  /// not on screen, so that coming back to one is a move, not a build from scratch (and the scroll place, the search, the open graph stay).
+  final Set<String> _alive = {};
+
+  /// Rung when a kept page (dashboard, folders, calendar) comes to the front again: what changed while it was away is read.
+  final _pageRefresh = _Refresh();
+  final Map<String, GlobalKey> _pageKeys = {};
+  String? _lastGraph;
+  static const _homeKey = 'page:0'; // the dashboard
+  static bool _isPage(String? k) => k != null && k.startsWith('page:');
+  static int? _pageOf(String? k) => _isPage(k) ? int.tryParse(k!.substring(5)) : null;
+  static bool _isNote(String? k) => k != null && !_isGraph(k) && !_isPage(k);
+
+  /// The place of the menu a tab belongs to (a note: the place of the notes).
+  static int _navOf(String? k) => k == null ? 0 : (_pageOf(k) ?? (_isGraph(k) ? 8 : 3));
+  static bool _isGraph(String? k) => k != null && (k == _graphKey || k.startsWith('graph:'));
+  static int? _graphIdOf(String k) => k.startsWith('graph:') ? int.tryParse(k.substring(6)) : null;
+  final ValueNotifier<String?> _focusedPane = ValueNotifier(_homeKey);
 
   /// New notes from templates (needs the note files, which it keeps templates in).
   late final TemplateService? _templates = _app.noteFiles == null ? null : TemplateService(_app.repository, _app.noteFiles!);
@@ -168,11 +196,10 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   int _selectedNavIndex = 0;
 
   /// The note the keyboard is for (null when the graph has it, or nothing is open).
-  String? get _activeNoteId => _focused == null || _focused == _graphKey ? null : _focused;
-  bool get _onWorkspace => _selectedNavIndex == 3 || _selectedNavIndex == 8;
+  String? get _activeNoteId => _isNote(_focused) ? _focused : null;
 
-  /// The notes that are on screen when the menu is at [index] and the work area shows [shown].
-  Set<String> _liveNotes(int index, List<String> shown) => index == 3 || index == 8 ? {for (final k in shown) if (k != _graphKey) k} : const {};
+  /// The notes among the tabs that are on screen.
+  Set<String> _liveNotes(List<String> shown) => {for (final k in shown) if (_isNote(k)) k};
 
   /// The search of all notes as it was left, and the search a note is opened with (taken by that note once).
   SearchQuery? _searchQuery;
@@ -209,27 +236,25 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   /// Goes to another part of the app and/or another note. A note (or the graph, place 8) opens in the work area: as a tab if it is
   /// not one yet, and on screen in place of the one that has the keyboard (or as it was, if it is on screen already).
-  Future<void> _go({int? index, String? note}) async {
-    final to = index ?? (note != null ? 3 : _selectedNavIndex);
-    if (to != 3 && to != 8) return _transition(index: to);
-    final key = to == 8 ? _graphKey : (note ?? (_activeNoteId ?? _lastNote));
+  Future<void> _go({int? index, String? note, String? tab}) async {
+    var key = tab ?? note;
     if (key == null) {
-      // the place of the notes with no note to go to: what was on screen comes back, or there is nothing yet
-      final anyNote = _tabs.any((k) => k != _graphKey);
-      return _transition(index: 3, shown: anyNote ? _shown : const [], focus: _focused);
+      final to = index ?? _selectedNavIndex;
+      key = to == 8 ? await _defaultGraphKey() : (to == 3 ? (_activeNoteId ?? _lastNote ?? 'page:3') : 'page:$to');
     }
+    if (!mounted) return;
     final tabs = _tabs.contains(key) ? _tabs : [..._tabs, key];
     var shown = _shown;
     if (!shown.contains(key)) {
-      final at = _onWorkspace ? shown.indexOf(_focused ?? '') : -1;
-      shown = _onWorkspace ? [...shown] : [];
+      final at = shown.indexOf(_focused ?? '');
+      shown = [...shown];
       if (at >= 0) {
         shown[at] = key;
       } else {
         shown.add(key);
       }
     }
-    return _transition(index: 3, tabs: tabs, shown: shown, focus: key);
+    return _transition(tabs: tabs, shown: shown, focus: key);
   }
 
   String? _lastNote;
@@ -237,14 +262,18 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// The one step of everything that changes what is on screen: the menu place, the tabs, the ones shown, the one with the keyboard.
   /// A note that leaves the screen runs the automations for closing it (while its editor is still there) and is put away if locked; one
   /// that comes onto it is fetched and unlocked first, and the automations for opening it run once it has loaded.
-  Future<void> _transition({required int index, List<String>? tabs, List<String>? shown, String? focus}) async {
+  Future<void> _transition({List<String>? tabs, List<String>? shown, String? focus}) async {
     if (_navigating) return;
     final automations = _app.automations;
-    final newTabs = tabs ?? _tabs;
+    var newTabs = tabs ?? _tabs;
     var newShown = shown ?? _shown;
-    final oldLive = _liveNotes(_selectedNavIndex, _shown);
-    final onWorkspace = index == 3 || index == 8;
-    final newLive = _liveNotes(index, newShown);
+    if (newTabs.isEmpty) {
+      newTabs = [_homeKey];
+      newShown = [_homeKey];
+      focus = _homeKey;
+    }
+    final oldLive = _liveNotes(_shown);
+    final newLive = _liveNotes(newShown);
     final entering = [for (final n in newLive) if (!oldLive.contains(n)) n];
     final leaving = [for (final n in oldLive) if (!newLive.contains(n)) n];
 
@@ -282,27 +311,41 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       await _putAway(id);
     }
     if (!mounted) return;
+    final before = _visible.contains(_focused) ? _focused : null;
     var focused = focus ?? _focused;
-    if (onWorkspace && !newShown.contains(focused)) focused = newShown.isEmpty ? null : newShown.last;
+    if (!newShown.contains(focused)) focused = newShown.isEmpty ? null : newShown.last;
     if (!newTabs.contains(focused)) focused = null;
-    if (!onWorkspace) _openWithFind = null;
+    if (_openWithFind != null && !newShown.contains(_openWithFind!.note)) _openWithFind = null;
     final lost = {..._tabs}.difference({...newTabs});
     setState(() {
       _tabs = newTabs;
       _shown = newShown;
       _focused = focused;
-      _selectedNavIndex = onWorkspace ? (focused == _graphKey ? 8 : 3) : index;
+      _selectedNavIndex = _navOf(focused);
       for (final k in lost) {
         _weights.remove(k);
         _titles.remove(k);
         _editorKeys.remove(k);
+        _graphWidgetKeys.remove(k);
+        _recent.remove(k);
+        _alive.remove(k);
+        _pageKeys.remove(k);
       }
-      if (focused != null && focused != _graphKey) _lastNote = focused;
+      if (focused != null) {
+        _recent.remove(focused);
+        _recent.insert(0, focused);
+      }
+      if (_isNote(focused)) _lastNote = focused;
+      if (focused != null && focused != before && _alive.contains(focused) && const {0, 1, 2}.contains(_pageOf(focused))) WidgetsBinding.instance.addPostFrameCallback((_) => _pageRefresh.ring());
+      if (focused != null && _isGraph(focused)) _lastGraph = focused;
+      if (_lastGraph != null && !newTabs.contains(_lastGraph)) _lastGraph = null;
       if (_lastNote != null && !newTabs.contains(_lastNote)) _lastNote = null;
     });
     _focusedPane.value = focused;
+    final graphId = focused == null ? null : _graphIdOf(focused);
+    if (graphId != null) _graphs.selectedId = graphId; // (the one looked at last is the one the menu opens)
     for (final k in newTabs) {
-      if (k != _graphKey && !_titles.containsKey(k)) unawaited(_loadTitle(k));
+      if (_isNote(k) && !_titles.containsKey(k)) unawaited(_loadTitle(k));
     }
     for (final id in entering) {
       unawaited(_app.repository.markOpened(id)); // for "not opened for a while"
@@ -333,17 +376,21 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   Future<void> _loadTitle(String id) async {
     final info = await _app.repository.noteInfo(id);
-    if (!mounted || info == null || _titles[id] == info.title) return;
-    setState(() => _titles[id] = info.title);
+    if (!mounted || info == null) return;
+    // (a locked note's tab says what its list says, never its title)
+    final locked = await _app.repository.locks.lockModeOf(id) != 0;
+    final title = locked ? tr('Locked note') : info.title;
+    if (!mounted || _titles[id] == title) return;
+    setState(() => _titles[id] = title);
   }
 
   /// A tab was clicked: it comes onto the screen in place of the one that has the keyboard, or, with [beside] (Ctrl or Shift), next to
   /// the ones that are there (or out of them, if it is there already).
   Future<void> _selectTab(String key, {required bool beside}) async {
-    if (!beside || _maxPanes < 2) return _go(index: key == _graphKey ? 8 : 3, note: key == _graphKey ? null : key);
+    if (!beside || _maxPanes < 2) return _go(tab: key);
     if (_shown.contains(key)) {
-      if (_shown.length > 1 && _onWorkspace) return _unshow(key);
-      return _go(index: key == _graphKey ? 8 : 3, note: key == _graphKey ? null : key);
+      if (_shown.length > 1) return _unshow(key);
+      return _go(tab: key);
     }
     return _showBeside(key);
   }
@@ -351,44 +398,52 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// Puts [key] (a tab, or a note that gets one) next to the ones on screen; when they are too many for the width, the oldest goes.
   Future<void> _showBeside(String key) async {
     final tabs = _tabs.contains(key) ? _tabs : [..._tabs, key];
-    final shown = [if (_onWorkspace) ..._shown.where((k) => k != key), key];
+    final shown = [..._shown.where((k) => k != key), key];
     while (shown.length > _maxPanes && shown.length > 1) {
       shown.remove(shown.firstWhere((k) => k != key));
     }
-    return _transition(index: 3, tabs: tabs, shown: shown, focus: key);
+    return _transition(tabs: tabs, shown: shown, focus: key);
   }
 
   /// The pane of [key] leaves the screen (its tab stays).
   Future<void> _unshow(String key) async {
     if (_shown.length < 2) return;
     final shown = [..._shown]..remove(key);
-    return _transition(index: 3, shown: shown, focus: _focused == key ? shown.last : _focused);
+    return _transition(shown: shown, focus: _focused == key ? shown.last : _focused);
   }
 
-  Future<void> _showAlone(String key) => _transition(index: 3, shown: [key], focus: key);
+  Future<void> _showAlone(String key) => _transition(shown: [key], focus: key);
 
-  Future<void> _closeOthers(String key) => _transition(index: 3, tabs: [key], shown: [key], focus: key);
+  Future<void> _closeOthers(String key) => _transition(tabs: [key], shown: [key], focus: key);
 
+  /// A tab is closed: when it was the only one on screen, the one that had the keyboard before it takes its place.
   Future<void> _closeTab(String key) async {
     final at = _tabs.indexOf(key);
+    if (at < 0) return;
     final tabs = [..._tabs]..remove(key);
-    if (tabs.isEmpty) return _transition(index: 0, tabs: tabs, shown: const []);
+    if (tabs.isEmpty) return _transition(tabs: tabs);
     var shown = [..._shown]..remove(key);
-    if (shown.isEmpty) shown = [tabs[at.clamp(0, tabs.length - 1)]];
-    return _transition(index: 3, tabs: tabs, shown: shown, focus: _focused == key ? shown.last : _focused);
+    var focus = _focused;
+    if (shown.isEmpty) {
+      focus = _recent.firstWhere((k) => k != key && tabs.contains(k), orElse: () => tabs[at.clamp(0, tabs.length - 1)]);
+      shown = [focus];
+    } else if (_focused == key) {
+      focus = shown.last;
+    }
+    return _transition(tabs: tabs, shown: shown, focus: focus);
   }
 
   Future<void> _toggleAll() {
     if (_shown.length > 1) {
       final keep = _focused ?? _shown.first;
-      return _transition(index: 3, shown: [keep], focus: keep);
+      return _transition(shown: [keep], focus: keep);
     }
     final focus = _focused ?? (_tabs.isEmpty ? null : _tabs.first);
     var all = [..._tabs];
     while (all.length > _maxPanes && all.length > 1) {
       all.remove(all.firstWhere((k) => k != focus));
     }
-    return _transition(index: 3, shown: all, focus: focus);
+    return _transition(shown: all, focus: focus);
   }
 
   /// "+": a note of the list opens in a tab of its own.
@@ -491,7 +546,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text.verbatim(title == null ? tr('An agent changed your notes.') : tr('An agent changed "{title}".', {'title': title})),
-        action: title == null || (_onWorkspace && _shown.contains(id)) ? null : SnackBarAction(label: tr('Open'), onPressed: () => _go(index: 3, note: id)),
+        action: title == null || _shown.contains(id) ? null : SnackBarAction(label: tr('Open'), onPressed: () => _go(index: 3, note: id)),
         persist: false,
         duration: const Duration(seconds: 4),
       ));
@@ -691,7 +746,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   late final WindowCloser _closer = WindowCloser(
     saveNote: () async {
-      for (final id in _liveNotes(_selectedNavIndex, _shown)) {
+      for (final id in _liveNotes(_shown)) {
         await _editorOf(id)?.saveNow();
       }
       await _app.locks?.sealAll(); // (locked notes are put away; nothing of them stays open)
@@ -727,8 +782,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void _lockAway() {
     final locks = _app.locks;
     if (locks != null && locks.repository.locks.unlocked.isNotEmpty && mounted) {
-      if (_liveNotes(_selectedNavIndex, _shown).isNotEmpty) {
-        _go(index: 0);
+      if (_liveNotes(_shown).isNotEmpty) {
+        unawaited(_transition(tabs: _tabs.contains(_homeKey) ? _tabs : [..._tabs, _homeKey], shown: [_homeKey], focus: _homeKey));
       } else {
         unawaited(locks.sealAll());
       }
@@ -775,7 +830,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void _reportOpenNotes() {
     final sync = _app.sync;
     if (!mounted || (sync == null && _app.collab?.nativeShares == null)) return;
-    final ids = <String>{if (_inFront) for (final k in _visible) if (k != _graphKey && _onWorkspace) k};
+    final ids = <String>{if (_inFront) for (final k in _visible) if (_isNote(k)) k};
     if (ids.length == _reportedOpen.length && ids.containsAll(_reportedOpen)) return;
     _reportedOpen = ids;
     sync?.setOpenNotes(ids);
@@ -795,7 +850,9 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     _app.aiSwitch?.removeListener(_aiSwitched);
     _app.features?.removeListener(_featuresChanged);
     _shortcuts.removeHandler(_onShortcut);
+    _graphs.removeListener(_graphsChanged);
     _focusedPane.dispose();
+    _pageRefresh.dispose();
     _railSlide.dispose();
     super.dispose();
   }
@@ -807,12 +864,13 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void initState() {
     super.initState();
     // a sync does not replace a note under an editor that has it open
-    _app.sync?.library.busy = () => _liveNotes(_selectedNavIndex, _shown);
+    _app.sync?.library.busy = () => _liveNotes(_shown);
     if (kIsWeb) {
       _app.sync?.addListener(_markSignedIn);
       _markSignedIn();
     }
     _app.automations?.openEditor = _editorOf; // (a note that is open is changed through its editor)
+    _graphs.addListener(_graphsChanged);
     WidgetsBinding.instance.addObserver(this);
     _shortcuts.addHandler(_onShortcut);
     _app.repository.purgeTrash().catchError((Object _) => 0); // what lay in the trash for long enough
@@ -866,7 +924,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   Future<void> _fireTrigger(int n) async {
     final automations = _app.automations;
     if (automations == null || !mounted) return;
-    final id = _onWorkspace ? _activeNoteId : null;
+    final id = _activeNoteId;
     final handle = id == null ? null : _editorOf(id);
     final info = id == null ? null : await _app.repository.noteInfo(id);
     final rules = automations.all.where((a) => a.enabled && a.event == AutomationEvent.triggerPressed && (a.params['trigger'] ?? '1') == '$n').length;
@@ -981,7 +1039,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         const VerticalDivider(width: 1, thickness: 1),
       ]),
     );
-    final page = RepaintBoundary(child: _buildActiveView());
+    final page = RepaintBoundary(child: _workspace());
     return Scaffold(
       body: Stack(children: [
         Positioned.fill(
@@ -1044,12 +1102,12 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       return NavigationDestination(icon: d.icon, selectedIcon: d.selectedIcon, label: tr((d.label as Text).data!), tooltip: '');
     }
 
-    final editing = _selectedNavIndex == 3 && _activeNoteId != null;
+    final editing = _activeNoteId != null;
     return PopScope(
       // the system back gesture closes the open note instead of leaving the app
       canPop: !editing,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _go(index: 0);
+        if (!didPop && _activeNoteId != null) _closeTab(_activeNoteId!);
       },
       child: Scaffold(
       key: _phoneScaffold,
@@ -1080,7 +1138,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           // the pages bring their own bars: the title makes room for the menu button over their top left corner
           Theme(
             data: Theme.of(context).copyWith(appBarTheme: Theme.of(context,).appBarTheme.copyWith(titleSpacing: 56)),
-            child: _selectedNavIndex == 9 ? Padding(padding: const EdgeInsets.only(top: 48), child: _buildActiveView()) : _buildActiveView(),
+            child: _workspace(),
           ),
           if (!editing)
             Positioned(
@@ -1118,8 +1176,17 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         onPressed: () => _setRailHidden(true),
       );
 
-  Widget _buildActiveView() {
-    switch (_selectedNavIndex) {
+  /// What a tab shows: a note, a graph, or a place of the menu.
+  Widget _viewFor(String key) {
+    if (_isNote(key)) return _editor(key);
+    if (_isGraph(key)) return _graphView(key);
+    final page = KeyedSubtree(key: _pageKeys.putIfAbsent(key, () => GlobalKey()), child: _pageView(_pageOf(key) ?? 0));
+    // (on a phone the button of the menu sits over the top left corner of the assistant's page)
+    return MediaQuery.sizeOf(context).width < 600 && _pageOf(key) == 9 ? Padding(padding: const EdgeInsets.only(top: 48), child: page) : page;
+  }
+
+  Widget _pageView(int place) {
+    switch (place) {
       case 1:
         return FolderView(
           collab: _app.collab,
@@ -1131,6 +1198,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           tags: _app.tags,
           reminders: _app.reminders,
           onOpenNote: (id) => _go(index: 3, note: id),
+          refresh: _pageRefresh,
         );
       case 9:
         final ai = _app.ai;
@@ -1150,7 +1218,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           ),
         );
       case 8:
-        return _workspace();
+        return const SizedBox.shrink();
       case 6:
         return SearchView(
           repository: _app.repository,
@@ -1162,9 +1230,9 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           onOpen: _openFromSearch,
         );
       case 2:
-        return CalendarView(reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style);
+        return CalendarView(reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style, refresh: _pageRefresh);
       case 3:
-        return _workspace();
+        return const Center(child: Text('Open a note from the dashboard or create a new one.'));
       case 4:
         final automations = _app.automations;
         if (automations == null) return const Center(child: Text('Automations are not available here.'));
@@ -1191,33 +1259,14 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           onJoinSession: _app.collab == null || !_f(Feature.live) ? null : _joinByLink,
           sync: _app.sync,
           onOpenNote: (id) => _go(index: 3, note: id),
+          refresh: _pageRefresh,
         );
     }
   }
 
   /// The tabs and under them the notes (or the graph) that are on screen, side by side as far as the width allows.
   Widget _workspace() {
-    final phone = MediaQuery.sizeOf(context).width < 600;
-    final editing = _selectedNavIndex == 3 && _activeNoteId != null;
-    final showStrip = _tabs.isNotEmpty && (!phone || _tabs.length > 1);
     return Column(children: [
-      if (showStrip)
-        ValueListenableBuilder<String?>(
-          valueListenable: _focusedPane,
-          builder: (context, focused, _) => WorkspaceTabStrip(
-            tabs: [for (final k in _tabs) WorkspaceTab(key: k, graph: k == _graphKey, title: _editorOf(k)?.noteTitle ?? _titles[k] ?? '')],
-            shown: {..._shown},
-            focused: focused,
-            onSelect: _selectTab,
-            onClose: _closeTab,
-            onShowAlone: _showAlone,
-            onCloseOthers: _closeOthers,
-            onNewTab: _newTab,
-            onToggleAll: _toggleAll,
-            allShown: _shown.length > 1,
-            leading: phone && !editing ? 48 : 0,
-          ),
-        ),
       Expanded(
         child: LayoutBuilder(builder: (context, box) {
           // several tabs need room each; on a narrow window one is shown and the others wait
@@ -1227,12 +1276,12 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
             visible.remove(visible.firstWhere((k) => k != _focused, orElse: () => visible.first));
           }
           _visible = visible;
-          if (visible.isEmpty) return const Center(child: Text('Open a note from the dashboard or create a new one.'));
+          if (visible.isEmpty) return Column(children: [_strip(null), const Expanded(child: Center(child: Text('Open a note from the dashboard or create a new one.')))]);
           const gap = 10.0;
           final share = box.maxWidth - gap * (visible.length - 1);
           final weights = [for (final k in visible) _weights[k] ?? 1.0];
           final total = weights.fold(0.0, (a, b) => a + b);
-          return Row(children: [
+          final row = Row(children: [
             for (var i = 0; i < visible.length; i++) ...[
               if (i > 0)
                 MouseRegion(
@@ -1261,21 +1310,125 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
               SizedBox(
                 key: ValueKey('pane-${visible[i]}'),
                 width: share * weights[i] / total,
-                child: _pane(visible[i], visible[i] == _graphKey ? _graphView() : _editor(visible[i])),
+                child: _pane(visible[i], _viewFor(visible[i])),
               ),
             ],
+          ]);
+          _alive.addAll(visible.where((k) => !_isNote(k)));
+          final hidden = [for (final k in _tabs) if (_alive.contains(k) && !visible.contains(k)) k];
+          return Stack(fit: StackFit.expand, children: [
+            Positioned.fill(child: row),
+            for (final k in hidden)
+              Offstage(key: ValueKey('off-$k'), child: TickerMode(enabled: false, child: SizedBox(width: box.maxWidth, height: box.maxHeight, child: _viewFor(k)))),
           ]);
         }),
       ),
     ]);
   }
 
-  Widget _graphView() => GraphView(key: _graphWidgetKey, service: _graphs, onOpen: _openAtPage, cards: _app.cards);
+  /// The tab strip of one pane (every pane has its own, with all the tabs: a click shows that tab in this pane); [pane] null: nothing is
+  /// on screen yet.
+  Widget _strip(String? pane) {
+    if (_tabs.isEmpty || MediaQuery.sizeOf(context).width < 600) return const SizedBox.shrink(); // (a phone has its bar and its menu)
+    return ListenableBuilder(
+      listenable: Listenable.merge([_focusedPane, _graphs]),
+      builder: (context, _) => WorkspaceTabStrip(
+        tabs: [for (final k in _tabs) _tabOf(k)],
+        shown: {..._shown},
+        focused: pane,
+        onSelect: (key, {required beside}) => pane == null || beside ? _selectTab(key, beside: beside) : _selectInPane(pane, key),
+        onClose: _closeTab,
+        onShowAlone: _showAlone,
+        onCloseOthers: _closeOthers,
+        onNewTab: () {
+          if (pane != null) _focusPane(pane);
+          _newTab();
+        },
+        onToggleAll: _toggleAll,
+        allShown: _shown.length > 1,
+      ),
+    );
+  }
+
+  WorkspaceTab _tabOf(String k) {
+    if (_isNote(k)) return WorkspaceTab(key: k, icon: Icons.note_alt_outlined, title: (_visible.contains(k) ? _editorOf(k)?.noteTitle : null) ?? _titles[k] ?? "", untitled: true); // (an editor that is leaving still answers during that very build)
+    if (_isGraph(k)) {
+      final name = _graphName(k);
+      return WorkspaceTab(key: k, icon: Icons.hub_outlined, title: name.isEmpty ? tr('Graph') : name);
+    }
+    final d = _destinations[_pageOf(k)] ?? _destinations[3]!;
+    return WorkspaceTab(key: k, icon: (d.icon as Icon).icon!, title: tr((d.label as Text).data!));
+  }
+
+  /// A tab was clicked in the strip of [pane]: it is shown in that pane (if it is in another pane, the two swap places).
+  Future<void> _selectInPane(String pane, String key) {
+    if (key == pane) {
+      _focusPane(pane);
+      return Future.value();
+    }
+    final shown = [..._shown];
+    final at = shown.indexOf(pane), other = shown.indexOf(key);
+    if (at < 0) return _go(tab: key);
+    if (other >= 0) {
+      shown[other] = pane;
+      shown[at] = key;
+    } else {
+      shown[at] = key;
+    }
+    return _transition(shown: shown, focus: key);
+  }
+
+  Widget _graphView(String key) => GraphView(
+        key: _graphWidgetKeys.putIfAbsent(key, () => GlobalKey()),
+        service: _graphs,
+        onOpen: _openAtPage,
+        cards: _app.cards,
+        graphId: _graphIdOf(key),
+        pinned: true,
+        onOpenGraph: (id) => _showGraph(id, from: key),
+      );
+
+  String _graphName(String key) {
+    final id = _graphIdOf(key);
+    return _graphs.graphs.where((g) => g.id == id).map((g) => g.name).firstOrNull ?? '';
+  }
+
+  /// Which graph the menu place opens: the one that was in front last, or the one that was looked at last, or (none was made yet) the view that makes one.
+  Future<String> _defaultGraphKey() async {
+    await _graphs.refresh();
+    if (_lastGraph != null && _tabs.contains(_lastGraph)) return _lastGraph!;
+    final id = _graphs.selectedId;
+    return id == null ? _graphKey : 'graph:$id';
+  }
+
+  /// A graph tab asks for another graph (one it made, one picked in the library): the tab that has no graph yet becomes that graph's,
+  /// else the graph gets a tab of its own.
+  Future<void> _showGraph(int id, {required String from}) async {
+    final target = 'graph:$id';
+    if (from != _graphKey || !_tabs.contains(from)) return _go(tab: target);
+    List<String> swap(List<String> l) => [for (final k in l) if (k == from) ...(l.contains(target) ? const <String>[] : [target]) else k];
+    return _transition(tabs: swap(_tabs), shown: swap(_shown), focus: target);
+  }
+
+  /// A graph that was deleted loses its tab.
+  void _graphsChanged() {
+    if (!mounted || !_graphs.listed) return;
+    final ids = {for (final g in _graphs.graphs) g.id};
+    for (final k in _tabs.toList()) {
+      final id = _graphIdOf(k);
+      if (id != null && !ids.contains(id)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tabs.contains(k)) unawaited(_closeTab(k));
+        });
+      }
+    }
+  }
 
   /// One of the tabs on screen: a click or a touch in it makes the keyboard shortcuts its own, and a bar on top says which.
   Widget _pane(String key, Widget child) => Listener(
         onPointerDown: (_) => _focusPane(key),
         child: Column(children: [
+          _strip(key),
           ValueListenableBuilder<String?>(
             valueListenable: _focusedPane,
             builder: (context, focused, _) => Container(height: 3, color: _visible.length > 1 && focused == key ? Theme.of(context).colorScheme.primary : Colors.transparent),
@@ -1294,8 +1447,12 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     if (_focused == key) return;
     _focused = key;
     _focusedPane.value = key;
-    if (key != _graphKey) _lastNote = key;
-    final index = key == _graphKey ? 8 : 3;
+    if (_isGraph(key)) {
+      _lastGraph = key;
+    } else {
+      _lastNote = key;
+    }
+    final index = _navOf(key);
     if (_selectedNavIndex != index) setState(() => _selectedNavIndex = index);
   }
 
@@ -1322,7 +1479,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           onOpenBeside: _maxPanes < 2 ? null : _openBeside,
           onCloseSplit: _visible.length > 1 ? () => _unshow(id) : null,
           locks: _app.locks,
-          onLeave: _visible.length > 1 ? () => _unshow(id) : () => _go(index: 0),
+          onLeave: () => _closeTab(id),
           paneActive: _visible.length < 2 ? null : () => _focused == id,
           onPdfImported: () => _scanDates(id),
           ai: _aiOn && _f(Feature.assistant) ? _app.ai : null,
@@ -1347,4 +1504,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           initialPage: _openWithFind?.note == id ? _openWithFind!.page : 0,
         );
   }
+}
+
+class _Refresh extends ChangeNotifier {
+  void ring() => notifyListeners();
 }

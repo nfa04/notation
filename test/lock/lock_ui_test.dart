@@ -191,6 +191,7 @@ void main() {
     // leaving puts it away; opening it again asks
     await tester.tap(find.byIcon(Icons.home_outlined).first);
     await settle();
+    await settle(); // (the tab of the note then reads its title again, and says what the list says)
     expect(locks.isOpen(id), isFalse);
     expect(find.text('Locked note'), findsWidgets);
     expect(find.text('Plain at first'), findsNothing);

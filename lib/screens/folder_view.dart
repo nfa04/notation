@@ -39,6 +39,8 @@ import '../style/platform_dialog.dart';
 
 /// Folder tree on the left, the notes of the selected folder on the right.
 class FolderView extends StatefulWidget {
+  /// Tells the page it was brought to the front again (it was kept, out of sight): it reads what changed meanwhile.
+  final Listenable? refresh;
   final NoteRepository repository;
   final ValueChanged<String> onOpenNote;
   final NoteFileService? noteFiles;
@@ -61,7 +63,7 @@ class FolderView extends StatefulWidget {
   /// "Remind me" in a note's menu; null hides it.
   final ReminderService? reminders;
 
-  const FolderView({super.key, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.collab, this.previews, this.sync, this.tags, this.reminders});
+  const FolderView({super.key, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.collab, this.previews, this.sync, this.tags, this.reminders, this.refresh});
 
   @override
   State<FolderView> createState() => _FolderViewState();
@@ -174,6 +176,7 @@ class _FolderViewState extends State<FolderView> {
   @override
   void initState() {
     super.initState();
+    widget.refresh?.addListener(_reload);
     _reload().then((_) => _loadSort());
     _live = debouncedChanges([_repo.changes, _repo.created, widget.tags?.changes,]).listen((_) {
       if (mounted) _reload();
@@ -183,6 +186,7 @@ class _FolderViewState extends State<FolderView> {
   @override
   void dispose() {
     _live?.cancel();
+    widget.refresh?.removeListener(_reload);
     super.dispose();
   }
 

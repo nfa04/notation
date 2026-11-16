@@ -9,8 +9,11 @@ class WorkspaceTab {
   /// 'graph' for the graph, else the id of the note.
   final String key;
   final String title;
-  final bool graph;
-  const WorkspaceTab({required this.key, required this.title, required this.graph});
+  final IconData icon;
+
+  /// A note with no title is shown as "Untitled".
+  final bool untitled;
+  const WorkspaceTab({required this.key, required this.title, required this.icon, this.untitled = false});
 }
 
 /// The tab strip of the work area: the notes and the graph that are open, one tab each. The tabs that are on screen are marked (the one
@@ -31,7 +34,6 @@ class WorkspaceTabStrip extends StatelessWidget {
   /// Shows all tabs side by side (as far as they fit), or one again.
   final VoidCallback onToggleAll;
   final bool allShown;
-  final double leading;
 
   const WorkspaceTabStrip({
     super.key,
@@ -45,7 +47,6 @@ class WorkspaceTabStrip extends StatelessWidget {
     required this.onNewTab,
     required this.onToggleAll,
     required this.allShown,
-    this.leading = 0,
   });
 
   @override
@@ -56,7 +57,6 @@ class WorkspaceTabStrip extends StatelessWidget {
       child: SizedBox(
         height: 40,
         child: Row(children: [
-          SizedBox(width: leading),
           Expanded(
             child: ListView(
               scrollDirection: Axis.horizontal,
@@ -80,7 +80,7 @@ class WorkspaceTabStrip extends StatelessWidget {
   Widget _tab(BuildContext context, WorkspaceTab t) {
     final scheme = Theme.of(context).colorScheme;
     final on = shown.contains(t.key), hasKeys = focused == t.key;
-    final title = t.graph ? tr('Graph') : (t.title.trim().isEmpty ? tr('Untitled') : t.title.trim());
+    final title = t.title.trim().isEmpty ? tr('Untitled') : t.title.trim();
     Future<void> menu(Offset at) async {
       final box = Overlay.of(context).context.findRenderObject() as RenderBox;
       final choice = await showMenu<String>(
@@ -121,7 +121,7 @@ class WorkspaceTabStrip extends StatelessWidget {
           border: Border(bottom: BorderSide(width: 2, color: hasKeys ? scheme.primary : (on ? scheme.primary.withValues(alpha: 0.4) : Colors.transparent))),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(t.graph ? Icons.hub_outlined : Icons.note_alt_outlined, size: 16, color: hasKeys ? scheme.primary : scheme.onSurfaceVariant),
+          Icon(t.icon, size: 16, color: hasKeys ? scheme.primary : scheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Flexible(child: Text.verbatim(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: hasKeys ? FontWeight.w600 : FontWeight.normal))),
           IconButton(

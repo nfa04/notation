@@ -33,7 +33,14 @@ class GraphView extends StatefulWidget {
   /// Keeps study cards for spaced repetition; null: not offered.
   final CardRepository? cards;
 
-  const GraphView({super.key, required this.service, required this.onOpen, this.cards});
+  /// A view that shows one graph of its own (a tab of the work area): [graphId] is the kept graph it holds (null: it has none yet and
+  /// offers to make one), and what would bring another graph to the front is handed to [onOpenGraph] instead, which gives it a tab.
+  /// Not pinned, the view has the tabs of all kept graphs itself.
+  final bool pinned;
+  final int? graphId;
+  final void Function(int graphId)? onOpenGraph;
+
+  const GraphView({super.key, required this.service, required this.onOpen, this.cards, this.pinned = false, this.graphId, this.onOpenGraph});
 
   @override
   State<GraphView> createState() => _GraphViewState();
@@ -131,7 +138,10 @@ class _GraphViewState extends State<GraphView> {
   Size _viewport = Size.zero;
   Offset _origin = Offset.zero;
 
-  int? get _id => widget.service.selectedId;
+  int? get _id => widget.pinned ? widget.graphId : widget.service.selectedId;
+
+  /// A run that this view started ended: if it made a graph of its own, that graph gets the tab.
+  bool _startedHere = false;
   SavedGraph? get _saved =>
       widget.service.graphs.where((g) => g.id == _id).firstOrNull;
 
@@ -181,6 +191,10 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
   /// Another tab in front: what was chosen or filtered in the other graph does not carry over.
   void _selectTab(int id) {
     if (id == _id) return;
+    if (widget.pinned) {
+      widget.onOpenGraph?.call(id);
+      return;
+    }
     widget.service.selectedId = id;
     setState(() {
       _compare = null;
@@ -299,7 +313,10 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
         );
       }),
     );
-    if (go == true) await service.start(mode, noteHubs: _noteHubs, replace: again?.id);
+    if (go == true) {
+      _startedHere = true;
+      await service.start(mode, noteHubs: _noteHubs, replace: again?.id);
+    }
   }
 
 
@@ -478,7 +495,16 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
         _seenFinished = widget.service.finished;
         final made =widget.service.lastMade,
             madeId = widget.service.lastMadeId;
-        if (made != null && madeId != null && !identical(made, _seenMade)) {
+        final here = _startedHere;
+        _startedHere = false;
+        if (widget.pinned && made != null && madeId != null && madeId != _id) {
+          // (another graph was made: of this tab only if it was started here, then that graph gets the tab)
+          if (here && !identical(made, _seenMade)) {
+            _seenMade = made;
+            _graphs[madeId] = made;
+            WidgetsBinding.instance.addPostFrameCallback((_) => widget.onOpenGraph?.call(madeId));
+          }
+        } else if (made != null && madeId != null && !identical(made, _seenMade)) {
           // (a graph was made: its tab is in front)
           _seenMade = made;
           _graphs[madeId] = made;
@@ -558,7 +584,13 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
     if (!mounted) return;
     await widget.service.refresh(force: true);
     _graphs.clear(); // (a picture may have been brought back, a graph renamed or removed: the front one is read again below, the others when opened)
-    if (result != null && result.action == GraphLibraryAction.open) widget.service.selectedId = result.graphId;
+    if (result != null && result.action == GraphLibraryAction.open) {
+      if (widget.pinned) {
+        if (result.graphId != _id) widget.onOpenGraph?.call(result.graphId);
+      } else {
+        widget.service.selectedId = result.graphId;
+      }
+    }
     setState(() {
       _compare = null;
       _selected = null;
@@ -753,6 +785,65 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
     _open(_id);
   }
 
+  /// The menu of a kept graph: rename, make again, compare, export, delete.
+  Widget _graphMenu(SavedGraph g) =>
+PopupMenuButton<String>(
+                              key: const ValueKey('graph-tab-menu'),
+                              tooltip: tr('This graph'),
+                              padding: EdgeInsets.zero,
+                              iconSize: 18,
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (v) {
+                                switch (v) {
+                                  case 'rename':
+                                    _rename(g);
+                                  case 'again':
+                                    _generate(again: g);
+                                  case 'compare':
+                                    _pickCompare(g);
+                                  case 'json':
+                                    _export(g, svg: false);
+                                  case 'svg':
+                                    _export(g, svg: true);
+                                  case 'delete':
+                                    _delete(g);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-rename'),
+                                  value: 'rename',
+                                  child: Text(tr('Rename')),
+                                ),
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-again'),
+                                  value: 'again',
+                                  enabled: !_generating,
+                                  child: Text(tr('Generate again')),
+                                ),
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-compare'),
+                                  value: 'compare',
+                                  child: Text(tr('Compare with...')),
+                                ),
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-json'),
+                                  value: 'json',
+                                  child: Text(tr('Export as JSON')),
+                                ),
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-svg'),
+                                  value: 'svg',
+                                  child: Text(tr('Export as SVG')),
+                                ),
+                                PopupMenuItem(
+                                  key: const ValueKey('graph-tab-delete'),
+                                  value: 'delete',
+                                  child: Text(tr('Delete')),
+                                ),
+                              ],
+                            );
+
   /// The tabs: one per kept graph (the one in front has a menu to rename, make again and delete it) and a button for a new one.
   Widget _tabs(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -809,62 +900,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                             ),
                           ),
                           if (g.id == _id)
-                            PopupMenuButton<String>(
-                              key: const ValueKey('graph-tab-menu'),
-                              tooltip: tr('This graph'),
-                              padding: EdgeInsets.zero,
-                              iconSize: 18,
-                              icon: const Icon(Icons.more_vert),
-                              onSelected: (v) {
-                                switch (v) {
-                                  case 'rename':
-                                    _rename(g);
-                                  case 'again':
-                                    _generate(again: g);
-                                  case 'compare':
-                                    _pickCompare(g);
-                                  case 'json':
-                                    _export(g, svg: false);
-                                  case 'svg':
-                                    _export(g, svg: true);
-                                  case 'delete':
-                                    _delete(g);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                PopupMenuItem(
-                                  key: const ValueKey('graph-tab-rename'),
-                                  value: 'rename',
-                                  child: Text(tr('Rename')),
-                                ),
-                                PopupMenuItem(
-                                  key: const ValueKey('graph-tab-again'),
-                                  value: 'again',
-                                  enabled: !_generating,
-                                  child: Text(tr('Generate again')),
-                                ),
-                                PopupMenuItem(
-                                  key: const ValueKey('graph-tab-compare'),
-                                  value: 'compare',
-                                  child: Text(tr('Compare with...')),
-                                ),
-                                PopupMenuItem(
-                                  key: const ValueKey('graph-tab-json'),
-                                  value: 'json',
-                                  child: Text(tr('Export as JSON')),
-                                ),
-                                PopupMenuItem(
-                                  key: const ValueKey('graph-tab-svg'),
-                                  value: 'svg',
-                                  child: Text(tr('Export as SVG')),
-                                ),
-                                PopupMenuItem(
-                                  key: const ValueKey('graph-tab-delete'),
-                                  value: 'delete',
-                                  child: Text(tr('Delete')),
-                                ),
-                              ],
-                            ),
+_graphMenu(g),
                         ],
                       ),
                     ),
@@ -952,6 +988,10 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
                   CheckedPopupMenuItem(value: p.id, checked: p.id == widget.service.ai!.provider?.id, enabled: p.state != ProviderState.unavailable, child: Text(p.label)),
               ],
             ),
+          if (widget.pinned && _saved != null) _graphMenu(_saved!),
+          // (a graph tab has no strip of graphs with its "+": the new graph gets a tab of its own)
+          if (widget.pinned && widget.service.graphs.isNotEmpty)
+            IconButton(key: const ValueKey('graph-new'), tooltip: tr('Make a new graph'), icon: const Icon(Icons.add), onPressed: _generating ? null : _generate),
           if (widget.service.graphs.isNotEmpty)
             IconButton(key: const ValueKey('graph-library'), tooltip: tr('Graph library'), icon: const Icon(Icons.collections_bookmark_outlined), onPressed: _openLibrary),
           const SizedBox(width: 8),
@@ -961,7 +1001,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
           ? const Center(child: CircularProgressIndicator.adaptive())
           : Column(
               children: [
-                if (widget.service.graphs.isNotEmpty) _tabs(context),
+                if (!widget.pinned && widget.service.graphs.isNotEmpty) _tabs(context),
                 if (_generating || widget.service.graphs.isEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),

@@ -46,6 +46,8 @@ import '../style/platform_dialog.dart';
 /// The first screen: recent and starred notes, tasks, and the buttons that make a note (blank, from a PDF, a template,
 /// a recording) or ask the assistant about all notes.
 class DashboardView extends StatefulWidget {
+  /// Tells the page it was brought to the front again (it was kept, out of sight): it reads what changed meanwhile.
+  final Listenable? refresh;
   final NoteRepository repository;
   final ValueChanged<String> onOpenNote;
   final NoteFileService? noteFiles;
@@ -92,7 +94,7 @@ class DashboardView extends StatefulWidget {
   /// The tags notes can have (the tags of imported notes are set through it); null: none are set.
   final TagRepository? tags;
 
-  const DashboardView({super.key, this.tags, this.planner, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations});
+  const DashboardView({super.key, this.tags, this.planner, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -169,6 +171,7 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void initState() {
     super.initState();
+    widget.refresh?.addListener(_reload);
     widget.sync?.addListener(_syncChanged);
     widget.collab?.nativeShares?.addListener(_syncChanged); // (what is shared with people changes notes too)
     _syncChanged();
@@ -189,6 +192,7 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void dispose() {
     _live?.cancel();
+    widget.refresh?.removeListener(_reload);
     widget.sync?.removeListener(_syncChanged);
     widget.collab?.nativeShares?.removeListener(_syncChanged);
     _cloud?.removeListener(_syncChanged);

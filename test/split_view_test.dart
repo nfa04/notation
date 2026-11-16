@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/app_services.dart';
 import 'package:notes/data/app_database.dart';
+import 'package:notes/graph/graph_model.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/data/settings_repository.dart';
 import 'package:notes/data/task_repository.dart';
@@ -144,12 +145,85 @@ void main() {
     expect(find.byType(FixedPageNoteEditor), findsNWidgets(2));
     expect(find.widgetWithText(TextField, 'Alpha tab'), findsOneWidget);
 
-    // a click on a tab while both are shown only gives it the keyboard; closing a tab leaves the other, alone
-    await tester.tap(find.byKey(ValueKey('tab-close-$b')));
+    // both sides have all the tabs; a click on a tab in the right pane shows it there (the two swap places)
+    // (three panes: the dashboard tab stays open)
+    expect(find.byKey(ValueKey('tab-$a')), findsNWidgets(3));
+    expect(find.byKey(ValueKey('tab-$b')), findsNWidgets(3));
+    final before = tester.getTopLeft(find.widgetWithText(TextField, 'Alpha tab')).dx;
+    await tester.tap(find.byKey(ValueKey('tab-$a')).last);
+    await settle();
+    expect(find.byType(FixedPageNoteEditor), findsNWidgets(2));
+    expect(tester.getTopLeft(find.widgetWithText(TextField, 'Alpha tab')).dx, isNot(before));
+
+    await tester.tap(find.byKey(const ValueKey('tab-close-page:0')).first); // (the dashboard's tab first, there is room for two only then)
+    await settle();
+    await tester.tap(find.byKey(ValueKey('tab-close-$b')).first);
     await settle();
     expect(find.byType(FixedPageNoteEditor), findsOneWidget);
     expect(find.byKey(ValueKey('tab-$b')), findsNothing);
     expect(find.widgetWithText(TextField, 'Alpha tab'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
+  });
+
+  testWidgets('a graph tab holds one graph, and sits beside a note', (tester) async {
+    tester.view.physicalSize = const Size(1900, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    late TaskRepository tasks;
+    late CalDavService caldav;
+    late DeviceCalendarService device;
+    late String a;
+    late int g2;
+    await tester.runAsync(() async {
+      final db = await AppDatabase.open(path: inMemoryDatabasePath);
+      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('notes');
+      await db.delete('saved_graphs');
+      repo = NoteRepository(db);
+      tasks = TaskRepository(db);
+      caldav = CalDavService(SettingsRepository(db), tasks);
+      device = DeviceCalendarService.forPlatform(SettingsRepository(db));
+      a = await repo.createNote(title: 'Alpha graph');
+      final payload = KnowledgeGraph(mode: 'facts', builtAt: DateTime.now(), nodes: [], edges: [], clusters: []).encode();
+      await repo.knowledge.saveGraph(name: 'Graph One', mode: 'facts', folderId: null, payload: payload);
+      g2 = await repo.knowledge.saveGraph(name: 'Graph Two', mode: 'facts', folderId: null, payload: payload);
+    });
+    await tester.pumpWidget(NotationApp(services: AppServices(
+      repository: repo,
+      tasks: tasks,
+      caldav: caldav,
+      device: device,
+      style: StyleService.inMemory(),
+      appTheme: AppTheme.inMemory(),
+    )));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    Future<void> settle([int n = 6]) async {
+      for (var i = 0; i < n; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    await tester.tap(find.text('Alpha graph').first);
+    await settle();
+    await tester.tap(find.byIcon(Icons.hub_outlined).first); // the menu place of the graph
+    await settle(10);
+    // one graph in the tab: the last one made; the view has no tabs of graphs of its own
+    expect(find.byKey(ValueKey('tab-graph:$g2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('graph-tabs')), findsNothing);
+    expect(find.byKey(const ValueKey('graph-new')), findsOneWidget); // (a new graph is made from the tab)
+    expect(find.byKey(ValueKey('tab-$a')), findsOneWidget);
+    expect(find.text('Graph Two'), findsWidgets);
+    expect(find.text('Graph One'), findsNothing);
+
+    // beside the note (both sides have all the tabs)
+    await tester.tap(find.byKey(const ValueKey('tab-all')));
+    await settle();
+    expect(find.byType(FixedPageNoteEditor), findsOneWidget);
+    expect(find.byKey(ValueKey('tab-graph:$g2')), findsNWidgets(3));
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
   });

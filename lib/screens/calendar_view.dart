@@ -27,6 +27,8 @@ import '../style/platform_dialog.dart';
 
 /// Month calendar on the left, tasks on the right.
 class CalendarView extends StatefulWidget {
+  /// Tells the page it was brought to the front again (it was kept, out of sight): it reads what changed meanwhile.
+  final Listenable? refresh;
   final TaskRepository repository;
 
   /// Optional: without it the calendar works on local tasks only.
@@ -45,7 +47,7 @@ class CalendarView extends StatefulWidget {
   /// "Remind me" on a task (it can come back every day, week...); null: not offered.
   final ReminderService? reminders;
 
-  const CalendarView({super.key, required this.repository, this.caldav, this.device, this.ics, this.style, this.mirror, this.reminders});
+  const CalendarView({super.key, required this.repository, this.caldav, this.device, this.ics, this.style, this.mirror, this.reminders, this.refresh});
 
   @override
   State<CalendarView> createState() => _CalendarViewState();
@@ -85,6 +87,7 @@ class _CalendarViewState extends State<CalendarView> {
   @override
   void initState() {
     super.initState();
+    widget.refresh?.addListener(_reload);
     _reload();
     _live = debouncedChanges([_repo.changes]).listen((_) {
       if (mounted) _reload();
@@ -104,6 +107,7 @@ class _CalendarViewState extends State<CalendarView> {
   @override
   void dispose() {
     _live?.cancel();
+    widget.refresh?.removeListener(_reload);
     widget.mirror?.removeListener(_onStyleChanged);
     _syncTimer?.cancel();
     _caldav?.removeListener(_onServiceChanged);
