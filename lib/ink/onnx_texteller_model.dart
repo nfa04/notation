@@ -94,9 +94,13 @@ class OnnxTexTeller implements ScoredTexTeller {
   }
 
   Future<WarmSession> _encoderSession() async {
-    // (shapes are not fixed: with them NNAPI took so much of the 32-bit encoder that its compile ran past ten minutes on a Pixel 8 Pro)
+    // (the picture is always one size, which Qualcomm's QNN needs to be told: it takes nothing of a model with free dimensions. NNAPI does
+    // not get them, see openOnnxSession: with them it took so much of the 32-bit encoder that its compile ran past ten minutes on a Pixel 8 Pro)
+    final options = !kIsWeb && Platform.isAndroid
+        ? OrtSessionOptions(intraOpNumThreads: threads, interOpNumThreads: 1, useArena: false, lowPriority: true, freeDimensions: {'batch_size': 1, 'num_channels': 1, 'height': texTellerImageSize, 'width': texTellerImageSize})
+        : _options;
     // (MIGraphX and CoreML get the fixed 16-bit encoder only: on a Mac's CoreML the 8-bit one answered 15 % off, see [onnxFp16Files])
-    final made = _encoder ?? await _timed<WarmSession>('open', () async => openWarmSession(_encoderPath, options: _options, oneSize: true, accelerate: onnxCheckedForFp16(_encoderPath) || !await onnxTakesOnlyFp16Files()));
+    final made = _encoder ?? await _timed<WarmSession>('open', () async => openWarmSession(_encoderPath, options: options, oneSize: true, accelerate: onnxCheckedForFp16(_encoderPath) || !await onnxTakesOnlyFp16Files()));
     _encoder = made;
     return made;
   }
