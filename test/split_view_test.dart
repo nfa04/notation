@@ -227,4 +227,59 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
   });
+
+  testWidgets('a note that was left stays in memory for a while, and comes back as it was', (tester) async {
+    tester.view.physicalSize = const Size(1900, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    late TaskRepository tasks;
+    late CalDavService caldav;
+    late DeviceCalendarService device;
+    late String a, b;
+    await tester.runAsync(() async {
+      final db = await AppDatabase.open(path: inMemoryDatabasePath);
+      await db.delete('settings', where: "key = 'rail_hidden'");
+      repo = NoteRepository(db);
+      tasks = TaskRepository(db);
+      caldav = CalDavService(SettingsRepository(db), tasks);
+      device = DeviceCalendarService.forPlatform(SettingsRepository(db));
+      a = await repo.createNote(title: 'Alpha split');
+      b = await repo.createNote(title: 'Beta split');
+    });
+    await tester.pumpWidget(NotationApp(services: AppServices(
+      repository: repo,
+      tasks: tasks,
+      caldav: caldav,
+      device: device,
+      style: StyleService.inMemory(),
+      appTheme: AppTheme.inMemory(),
+    )));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha split').first);
+    for (var i = 0; i < 6; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    final editor = tester.state(find.byType(FixedPageNoteEditor));
+    await tester.tap(find.descendant(of: find.byType(NavigationRail), matching: find.text('Dashboard')));
+    for (var i = 0; i < 6; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(FixedPageNoteEditor), findsNothing, reason: 'out of sight');
+    expect(find.byType(FixedPageNoteEditor, skipOffstage: false), findsOneWidget, reason: 'but kept');
+    await tester.tap(find.byKey(ValueKey('tab-$a')).first);
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(FixedPageNoteEditor), findsOneWidget);
+    expect(identical(tester.state(find.byType(FixedPageNoteEditor)), editor), isTrue, reason: 'the same editor, not a new one');
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
+  });
+
 }

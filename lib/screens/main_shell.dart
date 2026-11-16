@@ -175,6 +175,39 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// not on screen, so that coming back to one is a move, not a build from scratch (and the scroll place, the search, the open graph stay).
   final Set<String> _alive = {};
 
+  /// Notes that were left but whose editors are kept for a while (out of sight), so that coming back is instant: when they were left.
+  /// At most [_keptMax] of them, each for [_keptFor]; a locked note is never kept (it is put away when left).
+  final Map<String, DateTime> _kept = {};
+  static const _keptMax = 4;
+  static const _keptFor = Duration(minutes: 10);
+  Timer? _keptTimer;
+
+  /// A kept editor is let go (a note that is to open at a page, or with a search, starts anew).
+  void _forgetKept(String id) {
+    if (_kept.remove(id) == null || !mounted) return;
+    setState(() => _editorKeys.remove(id));
+  }
+
+  /// Drops the kept notes that are too many or too old (their editors go with them).
+  void _expireKept() {
+    final now = DateTime.now();
+    final old = [for (final e in _kept.entries) if (now.difference(e.value) >= _keptFor) e.key];
+    final ordered = _kept.keys.toList()..sort((a, b) => _kept[b]!.compareTo(_kept[a]!));
+    final surplus = ordered.skip(_keptMax);
+    final drop = {...old, ...surplus};
+    if (drop.isNotEmpty && mounted) {
+      setState(() {
+        for (final k in drop) {
+          _kept.remove(k);
+          _editorKeys.remove(k);
+        }
+      });
+    }
+    _keptTimer?.cancel();
+    _keptTimer = _kept.isEmpty ? null : Timer(const Duration(seconds: 30), _expireKept);
+  }
+
+
   /// Rung when a kept page (dashboard, folders, calendar) comes to the front again: what changed while it was away is read.
   final _pageRefresh = _Refresh();
   final Map<String, GlobalKey> _pageKeys = {};
@@ -201,6 +234,9 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// The notes among the tabs that are on screen.
   Set<String> _liveNotes(List<String> shown) => {for (final k in shown) if (_isNote(k)) k};
 
+  /// The notes whose editors exist: on screen, or kept.
+  Set<String> get _heldNotes => {..._liveNotes(_shown), ..._kept.keys};
+
   /// The search of all notes as it was left, and the search a note is opened with (taken by that note once).
   SearchQuery? _searchQuery;
   SearchFilter? _searchFilter;
@@ -209,11 +245,13 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// Opens a note at a page (an answer of the assistant points at it).
   Future<void> _openAtPage(String id, int? page) async {
     _openWithFind = page == null ? null : (note: id, query: null, page: page);
+    if (page != null) _forgetKept(id);
     await _go(index: 3, note: id);
   }
 
   Future<void> _openFromSearch(String id, SearchQuery query, int page) async {
     _openWithFind = (note: id, query: query, page: page);
+    _forgetKept(id);
     await _go(index: 3, note: id);
   }
 
@@ -307,6 +345,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     }
     if (!mounted) return;
     // a locked note that is left is put away (an encrypted one is taken out of the database again)
+    final sealed = {for (final id in leaving) if (_app.locks?.isOpen(id) == true) id};
     for (final id in leaving) {
       await _putAway(id);
     }
@@ -330,12 +369,20 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         _recent.remove(k);
         _alive.remove(k);
         _pageKeys.remove(k);
+        _kept.remove(k);
+      }
+      for (final id in entering) {
+        _kept.remove(id);
+      }
+      for (final id in leaving) {
+        if (!sealed.contains(id) && newTabs.contains(id) && _app.locks?.repository.locks.unlocked.contains(id) != true) _kept[id] = DateTime.now();
       }
       if (focused != null) {
         _recent.remove(focused);
         _recent.insert(0, focused);
       }
       if (_isNote(focused)) _lastNote = focused;
+      if (_kept.length > _keptMax) WidgetsBinding.instance.addPostFrameCallback((_) => _expireKept());
       if (focused != null && focused != before && _alive.contains(focused) && const {0, 1, 2}.contains(_pageOf(focused))) WidgetsBinding.instance.addPostFrameCallback((_) => _pageRefresh.ring());
       if (focused != null && _isGraph(focused)) _lastGraph = focused;
       if (_lastGraph != null && !newTabs.contains(_lastGraph)) _lastGraph = null;
@@ -746,7 +793,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   late final WindowCloser _closer = WindowCloser(
     saveNote: () async {
-      for (final id in _liveNotes(_shown)) {
+      for (final id in _heldNotes) {
         await _editorOf(id)?.saveNow();
       }
       await _app.locks?.sealAll(); // (locked notes are put away; nothing of them stays open)
@@ -841,6 +888,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void dispose() {
     _notesChat?.dispose();
     _lockTimer?.cancel();
+    _keptTimer?.cancel();
     _app.automations?.openEditor = null;
     WidgetsBinding.instance.removeObserver(this);
     _app.collab?.removeListener(_collabChanged);
@@ -864,7 +912,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void initState() {
     super.initState();
     // a sync does not replace a note under an editor that has it open
-    _app.sync?.library.busy = () => _liveNotes(_shown);
+    _app.sync?.library.busy = () => _heldNotes;
     if (kIsWeb) {
       _app.sync?.addListener(_markSignedIn);
       _markSignedIn();
@@ -1315,7 +1363,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
             ],
           ]);
           _alive.addAll(visible.where((k) => !_isNote(k)));
-          final hidden = [for (final k in _tabs) if (_alive.contains(k) && !visible.contains(k)) k];
+          final hidden = [for (final k in _tabs) if ((_alive.contains(k) || _kept.containsKey(k)) && !visible.contains(k)) k];
+          if (_kept.isNotEmpty && _keptTimer == null) _keptTimer = Timer(const Duration(seconds: 30), _expireKept);
           return Stack(fit: StackFit.expand, children: [
             Positioned.fill(child: row),
             for (final k in hidden)
