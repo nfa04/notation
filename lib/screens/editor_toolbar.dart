@@ -60,6 +60,9 @@ _ToolbarLayout _decodeToolbarLayout(String? saved) {
   return (top, bottom);
 }
 
+/// The height of a line of buttons that scrolls sideways, and of the title line above the top one.
+const _stripHeight = 44.0;
+
 /// Rearranging the toolbars: which sections show, in what order, and in which bar.
 extension _EditorToolbar on _FixedPageNoteEditorState {
   /// What the top and bottom bars hold: the saved order, then the sections never placed, each in its default bar. No section is in both.
@@ -67,6 +70,26 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
 
   List<String> _toolbarTopIds() => _toolbarPlaced().$1;
   List<String> _toolbarBottomIds() => _toolbarPlaced().$2;
+
+  /// Whether the bars are laid out for a phone: each in one line that scrolls sideways, instead of wrapping onto rows that eat the page.
+  /// The sections, their order, the profile and what is hidden are the same as on a wide screen; only how they are shown changes.
+  /// A phone, or a narrow window on a computer (the same laid out for a phone), and a phone held sideways is wide but not high, and rows of buttons would take the page there too.
+  bool get _phoneBars {
+    final size = MediaQuery.sizeOf(context);
+    return size.width < 720 || size.height < 500;
+  }
+
+  /// [buttons] in one line that scrolls sideways (a phone is too narrow for them in one row, and rows of them would take the page).
+  Widget _buttonStrip(List<Widget> buttons, {Key? key}) => SizedBox(
+        key: key,
+        height: _stripHeight,
+        width: double.infinity,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          children: [for (final b in buttons) Center(child: b)],
+        ),
+      );
 
   /// The bar at the bottom of the screen: the formatting bar for the Markdown being edited, and the bottom toolbar.
   Widget? _bottomBars() {
@@ -84,10 +107,12 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
           child: ConstrainedBox(
             key: const ValueKey('bottom-toolbar'),
             constraints: const BoxConstraints(minHeight: 52),
-            child: SizedBox(
-              width: double.infinity,
-              child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: buttons),
-            ),
+            child: _phoneBars
+                ? _buttonStrip(buttons, key: const ValueKey('bottom-strip'))
+                : SizedBox(
+                    width: double.infinity,
+                    child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: buttons),
+                  ),
           ),
         ),
       ),

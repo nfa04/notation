@@ -45,6 +45,8 @@ import '../style/platform_dialog.dart';
 
 /// The first screen: recent and starred notes, tasks, and the buttons that make a note (blank, from a PDF, a template,
 /// a recording) or ask the assistant about all notes.
+typedef _DashboardTool = ({String key, IconData icon, String label, VoidCallback onTap, Widget? widget});
+
 class DashboardView extends StatefulWidget {
   final NoteRepository repository;
   final ValueChanged<String> onOpenNote;
@@ -317,6 +319,61 @@ class _DashboardViewState extends State<DashboardView> {
 
   Widget _page(BuildContext context) {
     final selectedIds = _selectedIds;
+    final phone = MediaQuery.sizeOf(context).width < 600;
+    final tools = <_DashboardTool>[
+      (key: 'select-notes', icon: Icons.checklist_rtl, label: tr('Select notes'), onTap: () => setState(() => _selecting = true), widget: null),
+      if (widget.capture != null) ...[
+        (key: 'quick-note', icon: Icons.bolt_outlined, label: tr('Quick note'), onTap: _quickNote, widget: null),
+        (key: 'clip-page', icon: Icons.language, label: tr('Keep a web page'), onTap: _clipPage, widget: null),
+      ],
+      if (widget.review != null)
+        (
+          key: 'weekly-review',
+          icon: Icons.event_note_outlined,
+          label: tr('Weekly review'),
+          onTap: () => showWeeklyReview(context, service: widget.review!, reminders: widget.reminders, onOpenNote: widget.onOpenNote),
+          widget: null,
+        ),
+      if (widget.reminders != null)
+        (
+          key: 'open-reminders',
+          icon: Icons.notifications_none,
+          label: tr('Reminders'),
+          onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => RemindersScreen(service: widget.reminders!))),
+          widget: RemindersButton(service: widget.reminders!),
+        ),
+      if (widget.cards != null)
+        (key: 'review-cards', icon: Icons.event_repeat, label: tr('Review cards'), onTap: () {}, widget: ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository)),
+      if (widget.speech != null) (key: 'record-meeting', icon: Icons.mic_none, label: tr('Record a meeting'), onTap: _meeting, widget: null),
+      if (widget.templates != null) (key: 'new-from-template', icon: Icons.dashboard_customize_outlined, label: tr('New note from a template'), onTap: _fromTemplate, widget: null),
+      if (widget.onJoinSession != null)
+        (key: 'join-session', icon: Icons.group_add_outlined, label: tr('Join a live session or open a shared note (paste a link)'), onTap: widget.onJoinSession!, widget: null),
+      if (widget.noteFiles != null)
+        (
+          key: 'open-note-file',
+          icon: Icons.file_open_outlined,
+          label: tr('Open a note file (.uninote)'),
+          onTap: () async {
+            final id = await openNoteFile(context, widget.noteFiles!);
+            if (id != null && mounted) widget.onOpenNote(id);
+          },
+          widget: null,
+        ),
+      // (the two round buttons at the foot of the page on a wide screen)
+      if (phone) ...[
+        (key: 'new-from-pdf', icon: Icons.picture_as_pdf_outlined, label: tr('New note from a PDF'), onTap: _fromPdf, widget: null),
+        (
+          key: 'import-from-apps',
+          icon: Icons.move_to_inbox_outlined,
+          label: tr('Bring your notes from another app'),
+          onTap: () async {
+            await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
+            if (mounted) _reload();
+          },
+          widget: null,
+        ),
+      ],
+    ];
     return Scaffold(
       appBar: _selecting
           ? SelectionBar(
@@ -333,56 +390,20 @@ class _DashboardViewState extends State<DashboardView> {
         title: const Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           if (widget.sync != null) SyncNowButton(sync: widget.sync!, shares: widget.collab?.nativeShares),
-          IconButton(
-              key: const ValueKey('select-notes'),
-              tooltip: tr('Select notes'),
-              icon: const Icon(Icons.checklist_rtl),
-              onPressed: () => setState(() => _selecting = true),
+          if (phone) ...[
+            // a phone has room for few buttons: the rest are in a menu, the same actions
+            if (widget.cards != null) ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository),
+            PopupMenuButton<String>(
+              key: const ValueKey('dashboard-more'),
+              tooltip: tr('More'),
+              onSelected: (key) => tools.firstWhere((t) => t.key == key).onTap(),
+              itemBuilder: (_) => [
+                for (final t in tools)
+                  if (t.key != 'review-cards') PopupMenuItem(key: ValueKey('menu-${t.key}'), value: t.key, child: ListTile(leading: Icon(t.icon), title: Text.verbatim(t.label), contentPadding: EdgeInsets.zero)),
+              ],
             ),
-          if (widget.capture != null) ...[
-            IconButton(key: const ValueKey('quick-note'), tooltip: tr('Quick note'), icon: const Icon(Icons.bolt_outlined), onPressed: _quickNote),
-            IconButton(key: const ValueKey('clip-page'), tooltip: tr('Keep a web page'), icon: const Icon(Icons.language), onPressed: _clipPage),
-          ],
-          if (widget.review != null)
-            IconButton(
-              key: const ValueKey('weekly-review'),
-              tooltip: tr('Weekly review'),
-              icon: const Icon(Icons.event_note_outlined),
-              onPressed: () => showWeeklyReview(context, service: widget.review!, reminders: widget.reminders, onOpenNote: widget.onOpenNote),
-            ),
-          if (widget.reminders != null) RemindersButton(service: widget.reminders!),
-          if (widget.cards != null) ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository),
-          if (widget.speech != null)
-            IconButton(
-              key: const ValueKey('record-meeting'),
-              tooltip: tr('Record a meeting'),
-              icon: const Icon(Icons.mic_none),
-              onPressed: _meeting,
-            ),
-          if (widget.templates != null)
-            IconButton(
-              key: const ValueKey('new-from-template'),
-              tooltip: tr('New note from a template'),
-              icon: const Icon(Icons.dashboard_customize_outlined),
-              onPressed: _fromTemplate,
-            ),
-          if (widget.onJoinSession != null)
-            IconButton(
-              key: const ValueKey('join-session'),
-              tooltip: tr('Join a live session or open a shared note (paste a link)'),
-              icon: const Icon(Icons.group_add_outlined),
-              onPressed: widget.onJoinSession,
-            ),
-          if (widget.noteFiles != null)
-            IconButton(
-              key: const ValueKey('open-note-file'),
-              tooltip: tr('Open a note file (.uninote)'),
-              icon: const Icon(Icons.file_open_outlined),
-              onPressed: () async {
-                final id = await openNoteFile(context, widget.noteFiles!);
-                if (id != null && mounted) widget.onOpenNote(id);
-              },
-            ),
+          ] else
+            for (final t in tools) t.widget ?? IconButton(key: ValueKey(t.key), tooltip: t.label, icon: Icon(t.icon), onPressed: t.onTap),
           const SizedBox(width: 8),
         ],
       ),
@@ -399,7 +420,8 @@ class _DashboardViewState extends State<DashboardView> {
           return CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.all(24.0),
+                // (a phone: less margin, and room under the last cards for the button)
+                padding: phone ? const EdgeInsets.fromLTRB(16, 12, 16, 96) : const EdgeInsets.all(24.0),
                 sliver: SliverMainAxisGroup(
                   slivers: [
                     SliverToBoxAdapter(
@@ -435,7 +457,7 @@ class _DashboardViewState extends State<DashboardView> {
                           ],
                         ),
                       ),
-                      _grid(favourites),
+                      _grid(favourites, phone),
                       SliverToBoxAdapter(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,7 +469,7 @@ class _DashboardViewState extends State<DashboardView> {
                         ),
                       ),
                     ],
-                    _grid(others),
+                    _grid(others, phone),
                   ],
                 ),
               ),
@@ -456,6 +478,7 @@ class _DashboardViewState extends State<DashboardView> {
         },
       ),
       floatingActionButton: Wrap(spacing: 12, runSpacing: 12, alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        if (!phone) ...[
         FloatingActionButton.small(
           key: const ValueKey('new-from-pdf'),
           heroTag: 'new-from-pdf',
@@ -473,6 +496,7 @@ class _DashboardViewState extends State<DashboardView> {
           },
           child: const Icon(Icons.move_to_inbox_outlined),
         ),
+        ],
         FloatingActionButton.extended(
           heroTag: 'new-note',
           onPressed: _createNote,
@@ -483,12 +507,13 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  Widget _grid(List<NoteSummary> notes) => SliverGrid.builder(
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 280,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          childAspectRatio: 0.85,
+  Widget _grid(List<NoteSummary> notes, bool phone) => SliverGrid.builder(
+        // (a phone shows two cards side by side, not one as big as the screen)
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: phone ? 200 : 280,
+          mainAxisSpacing: phone ? 12 : 16,
+          crossAxisSpacing: phone ? 12 : 16,
+          childAspectRatio: phone ? 0.8 : 0.85,
         ),
         itemCount: notes.length,
         itemBuilder: (context, index) => _card(notes[index], _cardColors[index % _cardColors.length]),

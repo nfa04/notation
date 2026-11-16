@@ -47,7 +47,7 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
           try {
             // (QNN: the compiled model is kept in a file of its own: the first session writes it, later ones read it instead of compiling.
             // A backend that cannot keep it, or a file that does not load, costs nothing but the compile: it is made again without)
-            final cache = list.first == OrtProvider.QNN ? _qnnCache(path, attempt.label!) : null;
+            final cache = list.first == OrtProvider.QNN ? _qnnCache(path, attempt.label!, options?.freeDimensions) : null;
             Future<OrtSession> open(bool useCache) {
               final cached = useCache && File(cache!).existsSync();
               if (cached) debugPrint('onnx: $model: the compiled model of ${attempt.label} is read from $cache');
@@ -312,6 +312,17 @@ Future<bool> onnxTakesOnlyFp16Files() async {
 /// [openWarmSession]), so pictures of handwriting are padded to a few widths.
 Future<bool> onnxUsesCoreMl() async => onnxAccelerationEnabled && (await onnxAvailableAccelerators()).firstOrNull == OrtProvider.CORE_ML;
 
+/// True when the accelerator in use runs a model whose input size is free one size at a time (see [openWarmSession]): CoreML, and QNN
+/// on a phone where it runs something (its graphs have fixed shapes). Pictures of handwriting are then padded to a few widths.
+Future<bool> onnxPinsSizes(String file) async {
+  if (!onnxAccelerationEnabled) return false;
+  if (await onnxUsesCoreMl()) return true;
+  // (QNN: the 16-bit files only; the others hold operators it has not, and would be compiled for nothing)
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android || !onnxCheckedForFp16(file)) return false;
+  if (!(await onnxAvailableAccelerators()).contains(OrtProvider.QNN)) return false;
+  return (await _qnnBackends()).isNotEmpty;
+}
+
 /// Whether the picture of a line of writing is padded now: the setting, or the provider needs it.
 Future<bool> padPicturesNow() async => padToFixedSizes || await onnxNeedsFixedShapes();
 
@@ -456,11 +467,13 @@ double _worstDifference(Float32List a, Float32List b) {
 
 /// Where the compiled form of the model at [path] is kept for QNN's [label] (NPU or GPU): next to the model, named by the model's size so
 /// that a changed file is not read from an old one's compile.
-String _qnnCache(String path, String label) {
+String _qnnCache(String path, String label, [Map<String, int>? fixed]) {
   final dir = Directory(p.join(p.dirname(path), 'qnn_cache'));
   if (!dir.existsSync()) dir.createSync(recursive: true);
   final size = File(path).existsSync() ? File(path).lengthSync() : 0;
-  return p.join(dir.path, '${p.basename(path)}.$size.${label.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.onnx');
+  // (the sizes fixed are part of the name: a compile for one size is not the model for another)
+  final sizes = fixed == null ? '' : '.${(fixed.entries.toList()..sort((a, b) => a.key.compareTo(b.key))).map((e) => '${e.key}=${e.value}').join(',').replaceAll(RegExp(r'[^A-Za-z0-9=,]+'), '_')}';
+  return p.join(dir.path, '${p.basename(path)}.$size$sizes.${label.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.onnx');
 }
 
 /// What a session asking [providers] is opened with ([_withProviders]): for the tests.
