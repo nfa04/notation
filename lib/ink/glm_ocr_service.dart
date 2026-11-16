@@ -74,7 +74,7 @@ class GlmOcrService extends ModelFilesService {
   static const publishedChecksums = {
     'vision.onnx': 'e4565d57d7714b0b180718d8bb0a58d59fe7a68486028fe2fa774ce994f0f03a',
     'vision-web.onnx': '7d70fa6cf6e9938f475e42c2b7b473ee560b4fd32d34a25b0400bf3f77500c3b',
-    'vision-gpu.onnx': '7f5cffc1f3589d9c8c4322fd904903ddc5759c9df96880516533ca6ab17ccc0e',
+    'vision-gpu.onnx': '7a4eedee27741d1b5314bfc62de280b080790d62e52c1d51f417f8feb0e562c4',
     'vision-gpu.onnx.data': '966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99',
     'text.onnx': '1c886fa00f1b62c3a58728cadc49718c44fb046dca4e12171c1734cec9f00a41',
     'embeddings.bin': '9f74c48b8b5a645fbc438f2ee3c317a2102948149ff1deb3dfc678675b8094d5',

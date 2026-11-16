@@ -40,7 +40,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/models
           # (the checksums the app pins: a new file is a new key)
-          key: coreml-models-8ea8a061-6194708c-e4565d57-7f5cffc1-966e02f2
+          key: coreml-models-8ea8a061-6194708c-e4565d57-7a4eedee-966e02f2
       - name: Download the models
         if: steps.models.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}
@@ -59,7 +59,7 @@ jobs:
           8ea8a061533b7fd8fbb746b0bd9ddd8d26d324fe07647dcf9059ddd07c2d77c4  teller/encoder.onnx
           6194708cf94bf4b2a34a07bc08fe13279cd382f22772f54bd9082c11a3ff4563  teller/encoder-gpu.onnx
           e4565d57d7714b0b180718d8bb0a58d59fe7a68486028fe2fa774ce994f0f03a  glm/vision.onnx
-          7f5cffc1f3589d9c8c4322fd904903ddc5759c9df96880516533ca6ab17ccc0e  glm/vision-gpu.onnx
+          7a4eedee27741d1b5314bfc62de280b080790d62e52c1d51f417f8feb0e562c4  glm/vision-gpu.onnx
           966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99  glm/vision-gpu.onnx.data
           EOF
       - run: flutter pub get

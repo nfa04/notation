@@ -81,11 +81,13 @@ void main() {
     expect(await onnxUsesCoreMl(), isTrue, reason: 'this check is for a Mac (or iPad) with CoreML');
 
     final gpu = '$modelDir/glm/vision-gpu.onnx', standard = '$modelDir/glm/vision.onnx', teller = '$modelDir/teller/encoder-gpu.onnx';
-    // two lines of different widths, padded as the app pads them under CoreML
+    // lines of the three widths, drawn as the app draws them under CoreML (glmCoreMlWidths)
     final pictures = [
-      await renderInkForGlmOcr([word(0, 120, 20), word(140, 260, 22)], rows: 10, pad: true),
-      await renderInkForGlmOcr([for (var i = 0; i < 5; i++) word(i * 140.0, i * 140.0 + 120, 20)], rows: 10, pad: true),
+      await renderInkForGlmOcr([word(0, 60, 20)], rows: 10, padTo: glmCoreMlWidths),
+      await renderInkForGlmOcr([word(0, 120, 20), word(140, 260, 22)], rows: 10, padTo: glmCoreMlWidths),
+      await renderInkForGlmOcr([for (var i = 0; i < 5; i++) word(i * 140.0, i * 140.0 + 120, 20)], rows: 10, padTo: glmCoreMlWidths),
     ];
+    expect({for (final p in pictures) p.gridWidth ~/ 2}, glmCoreMlWidths.toSet());
     String keyOf(GlmPicture p) => '${p.gridHeight}x${p.gridWidth}';
     Future<Map<String, OrtValue>> Function() inputsOf(GlmPicture p) => () async => {
           'pixel_values': await OrtValue.fromList(p.patches, [p.count, 3 * 2 * glmPatch * glmPatch]),
@@ -120,6 +122,7 @@ void main() {
           await numbers(await vision.run(inputsOf(p), key: key)); // (the build ended: run again on the accelerator)
         }
       }
+      final builtMs = building.elapsedMilliseconds;
       if (!vision.ready.contains(key)) {
         failures.add('$key: CoreML did not take the vision network (${onnxSessionReport['vision-gpu.onnx']})');
         continue;
@@ -127,10 +130,11 @@ void main() {
       final run = Stopwatch()..start();
       final answer = await numbers(await vision.run(inputsOf(p), key: key));
       final err = relative(answer, reference[key]!);
-      results['vision $key first start'] = {'firstReadMs': firstMs, 'builtWithinMs': building.elapsedMilliseconds, 'runMs': run.elapsedMilliseconds, 'relativeError': err};
-      say('vision $key: first read $firstMs ms, built within ${building.elapsedMilliseconds} ms, then ${run.elapsedMilliseconds} ms, ${(err * 100).toStringAsFixed(2)} % from the processor');
-      // (the network magnifies small differences: 5 to 9 % was measured with the same text read; far more is a wrong answer)
-      if (!(err < 0.15)) failures.add('vision $key: ${(err * 100).toStringAsFixed(1)} % from the processor');
+      results['vision $key first start'] = {'firstReadMs': firstMs, 'readyAfterMs': builtMs, 'runMs': run.elapsedMilliseconds, 'relativeError': err};
+      say('vision $key: first read $firstMs ms (the processor while CoreML builds), CoreML ready $builtMs ms later, a run on it ${run.elapsedMilliseconds} ms, ${(err * 100).toStringAsFixed(2)} % from the processor');
+      // (the network itself magnifies tiny differences, more on long lines: 5 to 17 % was measured, and the text read stays the same,
+      // tool/coreml_probe/read_lines.py; this only catches a broken answer, such as the 16-bit overflow, 69 % and more)
+      if (!(err < 0.30)) failures.add('vision $key: ${(err * 100).toStringAsFixed(1)} % from the processor');
       save();
     }
     await vision.close();
