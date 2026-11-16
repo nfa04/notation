@@ -70,7 +70,12 @@ const stepLimit = Duration(minutes: int.fromEnvironment('STEP_MINUTES', defaultV
 final _clock = Stopwatch()..start();
 
 /// A line for the job's log, with the seconds since the start.
-void say(String text) => debugPrint('coreml-check [${(_clock.elapsedMilliseconds / 1000).toStringAsFixed(1)} s] $text');
+void say(String text) {
+  final line = 'coreml-check [${(_clock.elapsedMilliseconds / 1000).toStringAsFixed(1)} s] $text';
+  debugPrint(line);
+  // (also to a file, written at once: if the log of the app never reaches the job, the file still says how far it got)
+  if (outFile.isNotEmpty) File('$outFile.progress').writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
+}
 
 /// [work], or a [TimeoutException] after [stepLimit]; says what it is about to do first.
 Future<T> step<T>(String what, Future<T> Function() work) {
@@ -109,9 +114,12 @@ Future<Float32List> runOnce(OrtSession session, Inputs inputs) async {
 }
 
 void main() {
+  say('main started');
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  say('binding ready');
 
   testWidgets('CoreML gives the processor\'s answers, and how fast', (tester) async {
+    say('test started');
     cacheRoot = Directory('${Directory.systemTemp.path}/coreml-check-${DateTime.now().millisecondsSinceEpoch}');
     final results = <Map<String, Object?>>[];
     final failures = <String>[];
