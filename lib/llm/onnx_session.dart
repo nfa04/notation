@@ -353,6 +353,15 @@ typedef _Attempt = ({List<OrtProvider> providers, Map<OrtProvider, Map<String, S
 /// (a phone has the one chip, and a refusal of QNN on a phone without Qualcomm's must not cost NNAPI): QNN on the NPU, QNN on the Adreno
 /// graphics chip, then NNAPI. Elsewhere all the accelerators are given at once.
 Future<List<_Attempt>> _attempts(List<OrtProvider> providers, String path) async {
+  final all = _allAttempts(providers);
+  if (!all.any((a) => a.providers.first == OrtProvider.QNN)) return all;
+  // (QNN opens a session without a word on a chip it cannot use, and leaves every node to the processor: only what runs a small test
+  // model of its own is asked for, see [_qnnBackends])
+  final works = await _qnnBackends();
+  return [for (final a in all) if (a.providers.first != OrtProvider.QNN || works.contains(a.label)) a];
+}
+
+List<_Attempt> _allAttempts(List<OrtProvider> providers) {
   if (defaultTargetPlatform != TargetPlatform.android) return [(providers: providers, options: null, label: null)];
   final cpu = [OrtProvider.CPU];
   return [
@@ -364,6 +373,70 @@ Future<List<_Attempt>> _attempts(List<OrtProvider> providers, String path) async
       ] else if (p != OrtProvider.CPU)
         (providers: [p, ...cpu], options: null, label: null),
   ];
+}
+
+Future<Set<String>>? _qnnWorking;
+
+/// The labels of the QNN backends that run something on this phone: found once, with the small test model (a Snapdragon 865 has the Adreno
+/// graphics chip for QNN but no NPU it supports; a phone without Qualcomm's chip has neither).
+Future<Set<String>> _qnnBackends() => _qnnWorking ??= () async {
+      final works = <String>{};
+      try {
+        final file = await _checkModelFile();
+        final expected = await _checkAnswer(await OnnxRuntime().createSession(file.path), closeAfter: true);
+        for (final a in _allAttempts([OrtProvider.QNN, OrtProvider.CPU]).where((a) => a.providers.first == OrtProvider.QNN)) {
+          OrtSession? s;
+          try {
+            s = await OnnxRuntime().createSession(file.path, options: _withProviders(null, a.providers, a.options, true)).timeout(onnxCompileLimit);
+            final got = await _checkAnswer(s);
+            final seen = await s.endProfiling();
+            final ranThere = seen != null && seen.keys.any((k) => !k.startsWith('CPU'));
+            final same = _worstDifference(got, expected) < 1e-3;
+            debugPrint('onnx: ${a.label} on the test model: ${ranThere ? 'ran' : 'ran nothing'}, ${same ? 'agrees' : 'differs'}');
+            if (ranThere && same) works.add(a.label!);
+          } catch (e) {
+            debugPrint('onnx: ${a.label} could not run the test model ($e)');
+          } finally {
+            await s?.close();
+          }
+        }
+      } catch (e) {
+        debugPrint('onnx: QNN could not be tried ($e)');
+      }
+      return works;
+    }();
+
+Future<File> _checkModelFile() async {
+  final dir = await getTemporaryDirectory();
+  final file = File(p.join(dir.path, 'accelerator_check.onnx'));
+  await file.writeAsBytes((await rootBundle.load('assets/diagnostics/accelerator_check.onnx')).buffer.asUint8List(), flush: true);
+  return file;
+}
+
+/// The small test model run on [s]: its answer.
+Future<Float32List> _checkAnswer(OrtSession s, {bool closeAfter = false}) async {
+  final input = Float32List.fromList([for (var i = 0; i < 8 * 32 * 32; i++) math.sin(i * 0.37) * 2]);
+  final x = await OrtValue.fromList(input, [1, 8, 32, 32]);
+  try {
+    final out = await s.run({s.inputNames.first: x});
+    final y = out.values.first;
+    final list = Float32List.fromList((await y.asFlattenedList()).map((e) => (e as num).toDouble()).toList());
+    for (final v in out.values) {
+      await v.dispose();
+    }
+    return list;
+  } finally {
+    await x.dispose();
+    if (closeAfter) await s.close();
+  }
+}
+
+double _worstDifference(Float32List a, Float32List b) {
+  var worst = 0.0;
+  for (var i = 0; i < a.length && i < b.length; i++) {
+    worst = math.max(worst, (a[i] - b[i]).abs());
+  }
+  return a.length == b.length ? worst : double.infinity;
 }
 
 /// Where the compiled form of the model at [path] is kept for QNN's [label] (NPU or GPU): next to the model, named by the model's size so
@@ -468,43 +541,19 @@ Future<OrtValue> int64Value(List<int> values, List<int> shape) async {
 /// (a large one may be refused for its own reasons). Asks for the accelerator whatever the setting says.
 Future<List<String>> onnxAcceleratorCheck() async {
   if (kIsWeb) return [tr('Not available in the browser.')];
-  final dir = await getTemporaryDirectory();
-  final file = File(p.join(dir.path, 'accelerator_check.onnx'));
-  await file.writeAsBytes((await rootBundle.load('assets/diagnostics/accelerator_check.onnx')).buffer.asUint8List(), flush: true);
-  final input = Float32List.fromList([for (var i = 0; i < 8 * 32 * 32; i++) math.sin(i * 0.37) * 2]);
-  Future<Float32List> run(OrtSession s) async {
-    final x = await OrtValue.fromList(input, [1, 8, 32, 32]);
-    final out = await s.run({s.inputNames.first: x});
-    final y = out.values.first;
-    final list = Float32List.fromList((await y.asFlattenedList()).map((e) => (e as num).toDouble()).toList());
-    await x.dispose();
-    for (final v in out.values) {
-      await v.dispose();
-    }
-    return list;
-  }
-
+  final file = await _checkModelFile();
   final lines = <String>[];
   // (every way of asking for a session on its own, the processor's answer first to compare with)
-  final cpu = await OnnxRuntime().createSession(file.path);
-  final Float32List expected;
-  try {
-    expected = await run(cpu);
-  } finally {
-    await cpu.close();
-  }
+  final expected = await _checkAnswer(await OnnxRuntime().createSession(file.path), closeAfter: true);
   final accelerators = [...await onnxAvailableAccelerators(), OrtProvider.CPU];
-  for (final attempt in await _attempts(accelerators, file.path)) {
+  for (final attempt in _allAttempts(accelerators)) {
     final name = attempt.label ?? attempt.providers.first.name;
     OrtSession? s;
     try {
       s = await OnnxRuntime().createSession(file.path, options: _withProviders(null, attempt.providers, attempt.options, true)).timeout(onnxCompileLimit);
-      final got = await run(s);
+      final got = await _checkAnswer(s);
       final seen = await s.endProfiling();
-      var worst = 0.0;
-      for (var i = 0; i < got.length && i < expected.length; i++) {
-        worst = math.max(worst, (got[i] - expected[i]).abs());
-      }
+      final worst = _worstDifference(got, expected);
       lines.add('$name: ${seen == null || seen.isEmpty ? tr('the runtime could not say what ran on it') : _splitText(seen)}; ${tr('differs from the processor by at most {n}', {'n': worst.toStringAsExponential(1)})}');
     } catch (e) {
       lines.add('$name: ${tr('Failed')}: $e');
