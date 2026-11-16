@@ -19,6 +19,7 @@
 #include <memory>
 #include <set>
 #include <mutex>
+#include <new>
 #include <onnxruntime_cxx_api.h>
 #include <string>
 #include <unordered_map>
@@ -111,6 +112,12 @@ static void flutter_onnxruntime_plugin_class_init(FlutterOnnxruntimePluginClass 
 }
 
 static void flutter_onnxruntime_plugin_init(FlutterOnnxruntimePlugin *self) {
+  // GObject hands out zeroed memory and runs no C++ constructors: a std::set or std::map left like that is not an empty one (inserting
+  // into it crashed the app the first time a low-priority session was made). The plugin lives as long as the process, so there is no
+  // matching destructor call.
+  new (&self->values) std::map<std::string, void *>();
+  new (&self->mutex) std::mutex();
+  new (&self->low_sessions) std::set<std::string>();
   self->session_manager = new SessionManager();
   self->tensor_manager = new TensorManager();
   self->normal_worker = new Worker(false);

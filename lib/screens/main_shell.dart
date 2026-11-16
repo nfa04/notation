@@ -33,6 +33,8 @@ import '../collab/collab_service.dart';
 import '../collab/invite.dart';
 import 'settings_screen.dart';
 import 'search_view.dart';
+import 'note_picker_dialog.dart';
+import 'workspace_tabs.dart';
 import '../speech/read_aloud.dart';
 import 'graph_view.dart';
 import '../graph/graph_service.dart';
@@ -128,6 +130,14 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   void _aiSwitched() {
     if (!mounted) return;
+    if (!_aiOn && _tabs.contains(_graphKey)) {
+      // (the graph goes with the AI: its tab too)
+      _tabs = [..._tabs]..remove(_graphKey);
+      _shown = [..._shown]..remove(_graphKey);
+      if (_focused == _graphKey) _focused = _shown.isEmpty ? null : _shown.last;
+      if (_selectedNavIndex == 8) _selectedNavIndex = _focused == null ? 0 : 3;
+      _focusedPane.value = _focused;
+    }
     if (!_navItems.contains(_selectedNavIndex)) _selectedNavIndex = 0; // (the assistant page goes with the AI)
     setState(() {});
   }
@@ -139,18 +149,30 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     setState(() {});
   }
 
-  /// The note shown beside the open one (a split view; wide windows only), the one the keyboard is for, and the width of the left part.
-  String? _splitNoteId;
-  bool _roomToSplit = false; // the note area is wide enough for two notes
-  bool _splitShown = false; // two notes are on screen (the window is wide enough)
+  /// The work area: the tabs that are open (notes, and the graph under the key [_graphKey]), the ones that are on screen next to
+  /// each other (wide windows hold several), and the one the keyboard is for. The area is shown for the places 3 (notes) and 8 (graph) of the menu.
+  static const _graphKey = 'graph';
+  List<String> _tabs = [];
+  List<String> _shown = [];
+  String? _focused;
+  List<String> _visible = const []; // what the last layout had room for
+  int _maxPanes = 1; // how many fit next to each other
+  final Map<String, double> _weights = {}; // the share of the width of a pane
+  final Map<String, String> _titles = {}; // the titles of the tabs (a note that is open gives its own)
+  final _graphWidgetKey = GlobalKey();
   final ValueNotifier<String?> _focusedPane = ValueNotifier(null);
-  double _splitFraction = 0.5;
 
   /// New notes from templates (needs the note files, which it keeps templates in).
   late final TemplateService? _templates = _app.noteFiles == null ? null : TemplateService(_app.repository, _app.noteFiles!);
 
   int _selectedNavIndex = 0;
-  String? _activeNoteId;
+
+  /// The note the keyboard is for (null when the graph has it, or nothing is open).
+  String? get _activeNoteId => _focused == null || _focused == _graphKey ? null : _focused;
+  bool get _onWorkspace => _selectedNavIndex == 3 || _selectedNavIndex == 8;
+
+  /// The notes that are on screen when the menu is at [index] and the work area shows [shown].
+  Set<String> _liveNotes(int index, List<String> shown) => index == 3 || index == 8 ? {for (final k in shown) if (k != _graphKey) k} : const {};
 
   /// The search of all notes as it was left, and the search a note is opened with (taken by that note once).
   SearchQuery? _searchQuery;
@@ -185,78 +207,196 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     return state is NoteEditorHandle ? state as NoteEditorHandle : null;
   }
 
-  /// Goes to another part of the app and/or another note. Leaving a note
-  /// first runs the automations for closing it, while the editor is still
-  /// there; arriving runs those for opening it once it has loaded.
+  /// Goes to another part of the app and/or another note. A note (or the graph, place 8) opens in the work area: as a tab if it is
+  /// not one yet, and on screen in place of the one that has the keyboard (or as it was, if it is on screen already).
   Future<void> _go({int? index, String? note}) async {
-    if (_navigating) return;
-    final from = _selectedNavIndex, activeId = _activeNoteId;
-    final toIndex = index ?? from;
-    final toNote = note ?? activeId;
-    final wasOpen = from == 3 && activeId != null;
-    final automations = _app.automations;
+    final to = index ?? (note != null ? 3 : _selectedNavIndex);
+    if (to != 3 && to != 8) return _transition(index: to);
+    final key = to == 8 ? _graphKey : (note ?? (_activeNoteId ?? _lastNote));
+    if (key == null) {
+      // the place of the notes with no note to go to: what was on screen comes back, or there is nothing yet
+      final anyNote = _tabs.any((k) => k != _graphKey);
+      return _transition(index: 3, shown: anyNote ? _shown : const [], focus: _focused);
+    }
+    final tabs = _tabs.contains(key) ? _tabs : [..._tabs, key];
+    var shown = _shown;
+    if (!shown.contains(key)) {
+      final at = _onWorkspace ? shown.indexOf(_focused ?? '') : -1;
+      shown = _onWorkspace ? [...shown] : [];
+      if (at >= 0) {
+        shown[at] = key;
+      } else {
+        shown.add(key);
+      }
+    }
+    return _transition(index: 3, tabs: tabs, shown: shown, focus: key);
+  }
 
-    // a note that is only listed here (a temporary browser) has to be fetched first
-    if (toIndex == 3 && toNote != null && !(wasOpen && toNote == activeId)) {
+  String? _lastNote;
+
+  /// The one step of everything that changes what is on screen: the menu place, the tabs, the ones shown, the one with the keyboard.
+  /// A note that leaves the screen runs the automations for closing it (while its editor is still there) and is put away if locked; one
+  /// that comes onto it is fetched and unlocked first, and the automations for opening it run once it has loaded.
+  Future<void> _transition({required int index, List<String>? tabs, List<String>? shown, String? focus}) async {
+    if (_navigating) return;
+    final automations = _app.automations;
+    final newTabs = tabs ?? _tabs;
+    var newShown = shown ?? _shown;
+    final oldLive = _liveNotes(_selectedNavIndex, _shown);
+    final onWorkspace = index == 3 || index == 8;
+    final newLive = _liveNotes(index, newShown);
+    final entering = [for (final n in newLive) if (!oldLive.contains(n)) n];
+    final leaving = [for (final n in oldLive) if (!newLive.contains(n)) n];
+
+    // a note that is only listed here (a temporary browser) has to be fetched first, a locked one opened
+    if (entering.isNotEmpty) {
       _navigating = true;
       try {
-        if (!await _fetched(toNote) || !mounted) return;
+        for (final n in entering) {
+          if (!await _fetched(n) || !mounted) return;
+        }
       } finally {
         _navigating = false;
       }
+      for (final n in entering) {
+        if (!await _unlocked(n) || !mounted) return;
+      }
     }
 
-    // a locked note has to be opened first
-    if (toIndex == 3 && toNote != null && !(wasOpen && toNote == activeId)) {
-      if (!await _unlocked(toNote) || !mounted) return;
-    }
-
-    if (wasOpen && automations != null && (toIndex != 3 || toNote != activeId)) {
+    if (leaving.isNotEmpty && automations != null) {
       _navigating = true;
       try {
-        final handle = _editorOf(activeId);
-        await handle?.saveNow(); // automations that read the note from the database see its latest state
-        final info = await _app.repository.noteInfo(activeId);
-        await automations.bus.emit(AppEvent(AutomationEvent.noteClosed.name,
-            noteId: activeId, title: handle?.noteTitle ?? info?.title ?? '', folderId: info?.folderId, editor: handle));
+        for (final id in leaving) {
+          final handle = _editorOf(id);
+          await handle?.saveNow(); // automations that read the note from the database see its latest state
+          final info = await _app.repository.noteInfo(id);
+          await automations.bus.emit(AppEvent(AutomationEvent.noteClosed.name, noteId: id, title: handle?.noteTitle ?? info?.title ?? '', folderId: info?.folderId, editor: handle));
+        }
       } finally {
         _navigating = false;
       }
     }
     if (!mounted) return;
     // a locked note that is left is put away (an encrypted one is taken out of the database again)
-    if (wasOpen && (toIndex != 3 || toNote != activeId)) await _putAway(activeId);
-    if (toIndex != 3 && _splitNoteId != null) await _putAway(_splitNoteId!);
-    if (!mounted) return;
-    if (toIndex != 3) _openWithFind = null;
-    if (toNote == _splitNoteId) _splitNoteId = null; // it is the open note now
-    setState(() {
-      _selectedNavIndex = toIndex;
-      _activeNoteId = toNote;
-    });
-    if (toIndex == 3 && toNote != null && !(wasOpen && toNote == activeId)) {
-      unawaited(_app.repository.markOpened(toNote)); // for "not opened for a while"
+    for (final id in leaving) {
+      await _putAway(id);
     }
-    if (wasOpen && (toIndex != 3 || toNote != activeId)) {
+    if (!mounted) return;
+    var focused = focus ?? _focused;
+    if (onWorkspace && !newShown.contains(focused)) focused = newShown.isEmpty ? null : newShown.last;
+    if (!newTabs.contains(focused)) focused = null;
+    if (!onWorkspace) _openWithFind = null;
+    final lost = {..._tabs}.difference({...newTabs});
+    setState(() {
+      _tabs = newTabs;
+      _shown = newShown;
+      _focused = focused;
+      _selectedNavIndex = onWorkspace ? (focused == _graphKey ? 8 : 3) : index;
+      for (final k in lost) {
+        _weights.remove(k);
+        _titles.remove(k);
+        _editorKeys.remove(k);
+      }
+      if (focused != null && focused != _graphKey) _lastNote = focused;
+      if (_lastNote != null && !newTabs.contains(_lastNote)) _lastNote = null;
+    });
+    _focusedPane.value = focused;
+    for (final k in newTabs) {
+      if (k != _graphKey && !_titles.containsKey(k)) unawaited(_loadTitle(k));
+    }
+    for (final id in entering) {
+      unawaited(_app.repository.markOpened(id)); // for "not opened for a while"
+    }
+    for (final id in leaving) {
       // the note was left: once the editor has saved it, its shared copies are put up again (if it changed)
       final markers = _app.collab?.cloudShare?.markers;
-      if (markers != null) unawaited(Future<void>.delayed(const Duration(seconds: 2), () => markers.refreshCopy(activeId)));
+      if (markers != null) unawaited(Future<void>.delayed(const Duration(seconds: 2), () => markers.refreshCopy(id)));
       // and a version of it is kept (if it changed since the last one)
       final history = _app.history;
-      if (history != null) unawaited(Future<void>.delayed(const Duration(seconds: 2), () => history.snapshot(activeId, reason: VersionReason.left)).catchError((Object _) => null));
+      if (history != null) unawaited(Future<void>.delayed(const Duration(seconds: 2), () => history.snapshot(id, reason: VersionReason.left)).catchError((Object _) => null));
+      unawaited(_loadTitle(id));
     }
-    if (automations != null && toIndex == 3 && toNote != null && !(wasOpen && toNote == activeId)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final handle = _editorOf(toNote);
-        if (handle == null) return;
-        await handle.ready;
-        final info = await _app.repository.noteInfo(toNote);
-        await automations.bus.emit(AppEvent(AutomationEvent.noteOpened.name,
-            noteId: toNote, title: handle.noteTitle, folderId: info?.folderId, editor: handle));
-        // dates in an imported PDF (in the background; the note is usable meanwhile)
-        unawaited(_scanDates(toNote));
-      });
+    if (automations != null) {
+      for (final id in entering) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          final handle = _editorOf(id);
+          if (handle == null) return;
+          await handle.ready;
+          final info = await _app.repository.noteInfo(id);
+          await automations.bus.emit(AppEvent(AutomationEvent.noteOpened.name, noteId: id, title: handle.noteTitle, folderId: info?.folderId, editor: handle));
+          // dates in an imported PDF (in the background; the note is usable meanwhile)
+          unawaited(_scanDates(id));
+        });
+      }
     }
+  }
+
+  Future<void> _loadTitle(String id) async {
+    final info = await _app.repository.noteInfo(id);
+    if (!mounted || info == null || _titles[id] == info.title) return;
+    setState(() => _titles[id] = info.title);
+  }
+
+  /// A tab was clicked: it comes onto the screen in place of the one that has the keyboard, or, with [beside] (Ctrl or Shift), next to
+  /// the ones that are there (or out of them, if it is there already).
+  Future<void> _selectTab(String key, {required bool beside}) async {
+    if (!beside || _maxPanes < 2) return _go(index: key == _graphKey ? 8 : 3, note: key == _graphKey ? null : key);
+    if (_shown.contains(key)) {
+      if (_shown.length > 1 && _onWorkspace) return _unshow(key);
+      return _go(index: key == _graphKey ? 8 : 3, note: key == _graphKey ? null : key);
+    }
+    return _showBeside(key);
+  }
+
+  /// Puts [key] (a tab, or a note that gets one) next to the ones on screen; when they are too many for the width, the oldest goes.
+  Future<void> _showBeside(String key) async {
+    final tabs = _tabs.contains(key) ? _tabs : [..._tabs, key];
+    final shown = [if (_onWorkspace) ..._shown.where((k) => k != key), key];
+    while (shown.length > _maxPanes && shown.length > 1) {
+      shown.remove(shown.firstWhere((k) => k != key));
+    }
+    return _transition(index: 3, tabs: tabs, shown: shown, focus: key);
+  }
+
+  /// The pane of [key] leaves the screen (its tab stays).
+  Future<void> _unshow(String key) async {
+    if (_shown.length < 2) return;
+    final shown = [..._shown]..remove(key);
+    return _transition(index: 3, shown: shown, focus: _focused == key ? shown.last : _focused);
+  }
+
+  Future<void> _showAlone(String key) => _transition(index: 3, shown: [key], focus: key);
+
+  Future<void> _closeOthers(String key) => _transition(index: 3, tabs: [key], shown: [key], focus: key);
+
+  Future<void> _closeTab(String key) async {
+    final at = _tabs.indexOf(key);
+    final tabs = [..._tabs]..remove(key);
+    if (tabs.isEmpty) return _transition(index: 0, tabs: tabs, shown: const []);
+    var shown = [..._shown]..remove(key);
+    if (shown.isEmpty) shown = [tabs[at.clamp(0, tabs.length - 1)]];
+    return _transition(index: 3, tabs: tabs, shown: shown, focus: _focused == key ? shown.last : _focused);
+  }
+
+  Future<void> _toggleAll() {
+    if (_shown.length > 1) {
+      final keep = _focused ?? _shown.first;
+      return _transition(index: 3, shown: [keep], focus: keep);
+    }
+    final focus = _focused ?? (_tabs.isEmpty ? null : _tabs.first);
+    var all = [..._tabs];
+    while (all.length > _maxPanes && all.length > 1) {
+      all.remove(all.firstWhere((k) => k != focus));
+    }
+    return _transition(index: 3, shown: all, focus: focus);
+  }
+
+  /// "+": a note of the list opens in a tab of its own.
+  Future<void> _newTab() async {
+    final notes = await _app.repository.listNotes();
+    if (!mounted) return;
+    final picked = await showDialog<String>(context: context, builder: (_) => NotePickerDialog(notes: notes, title: 'Open a note in a new tab'));
+    if (picked != null && mounted) await _go(index: 3, note: picked);
   }
 
   /// Makes sure the note is here in full. A temporary browser only lists the notes of the profile (see `DeviceSyncService.lazyNotes`) and asks
@@ -296,45 +436,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     await locks.seal(id);
   }
 
-  /// The second note of the split view goes away.
-  Future<void> _closeSplit() async {
-    final beside = _splitNoteId;
-    if (beside != null) await _putAway(beside);
-    if (!mounted) return;
-    setState(() {
-      _splitNoteId = null;
-      _focusedPane.value = null;
-    });
-  }
-
-  /// The first note of the split view goes away; the one beside it stays, alone.
-  Future<void> _closeFirst() async {
-    final first = _activeNoteId;
-    final beside = _splitNoteId;
-    if (first == null || beside == null) return;
-    await _editorOf(first)?.saveNow();
-    await _putAway(first);
-    if (!mounted) return;
-    setState(() {
-      _activeNoteId = beside;
-      _splitNoteId = null;
-      _focusedPane.value = null;
-    });
-    unawaited(_app.repository.markOpened(beside));
-  }
-
-  /// Shows [other] beside the open note, if it can be opened.
-  Future<void> _openBeside(String other) async {
-    if (!await _fetched(other) || !mounted) return;
-    if (!await _unlocked(other) || !mounted) return;
-    final old = _splitNoteId;
-    if (old != null && old != other) await _putAway(old);
-    if (!mounted) return;
-    setState(() {
-      _splitNoteId = other;
-      _focusedPane.value = other;
-    });
-  }
+  /// Shows [other] next to the open note, if it can be opened.
+  Future<void> _openBeside(String other) => _showBeside(other);
 
   /// Reads the dates of the PDF in note [id] for the automations, and says so
   /// when they made tasks.
@@ -388,7 +491,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text.verbatim(title == null ? tr('An agent changed your notes.') : tr('An agent changed "{title}".', {'title': title})),
-        action: title == null || (_selectedNavIndex == 3 && _activeNoteId == id) ? null : SnackBarAction(label: tr('Open'), onPressed: () => _go(index: 3, note: id)),
+        action: title == null || (_onWorkspace && _shown.contains(id)) ? null : SnackBarAction(label: tr('Open'), onPressed: () => _go(index: 3, note: id)),
         persist: false,
         duration: const Duration(seconds: 4),
       ));
@@ -588,11 +691,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   late final WindowCloser _closer = WindowCloser(
     saveNote: () async {
-      final id = _activeNoteId;
-      if (_selectedNavIndex == 3 && id != null) {
+      for (final id in _liveNotes(_selectedNavIndex, _shown)) {
         await _editorOf(id)?.saveNow();
-        final beside = _splitNoteId;
-        if (beside != null) await _editorOf(beside)?.saveNow();
       }
       await _app.locks?.sealAll(); // (locked notes are put away; nothing of them stays open)
     },
@@ -627,7 +727,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void _lockAway() {
     final locks = _app.locks;
     if (locks != null && locks.repository.locks.unlocked.isNotEmpty && mounted) {
-      if (_selectedNavIndex == 3) {
+      if (_liveNotes(_selectedNavIndex, _shown).isNotEmpty) {
         _go(index: 0);
       } else {
         unawaited(locks.sealAll());
@@ -675,11 +775,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void _reportOpenNotes() {
     final sync = _app.sync;
     if (!mounted || (sync == null && _app.collab?.nativeShares == null)) return;
-    final onScreen = _inFront && _selectedNavIndex == 3;
-    final ids = <String>{
-      if (onScreen && _activeNoteId != null) _activeNoteId!,
-      if (onScreen && _splitShown && _splitNoteId != null) _splitNoteId!,
-    };
+    final ids = <String>{if (_inFront) for (final k in _visible) if (k != _graphKey && _onWorkspace) k};
     if (ids.length == _reportedOpen.length && ids.containsAll(_reportedOpen)) return;
     _reportedOpen = ids;
     sync?.setOpenNotes(ids);
@@ -711,10 +807,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void initState() {
     super.initState();
     // a sync does not replace a note under an editor that has it open
-    _app.sync?.library.busy = () => {
-      if (_selectedNavIndex == 3 && _activeNoteId != null) _activeNoteId!,
-      ?_splitNoteId,
-    };
+    _app.sync?.library.busy = () => _liveNotes(_selectedNavIndex, _shown);
     if (kIsWeb) {
       _app.sync?.addListener(_markSignedIn);
       _markSignedIn();
@@ -773,7 +866,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   Future<void> _fireTrigger(int n) async {
     final automations = _app.automations;
     if (automations == null || !mounted) return;
-    final id = _selectedNavIndex == 3 ? _activeNoteId : null;
+    final id = _onWorkspace ? _activeNoteId : null;
     final handle = id == null ? null : _editorOf(id);
     final info = id == null ? null : await _app.repository.noteInfo(id);
     final rules = automations.all.where((a) => a.enabled && a.event == AutomationEvent.triggerPressed && (a.params['trigger'] ?? '1') == '$n').length;
@@ -1057,7 +1150,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           ),
         );
       case 8:
-        return GraphView(service: _graphs, onOpen: _openAtPage, cards: _app.cards);
+        return _workspace();
       case 6:
         return SearchView(
           repository: _app.repository,
@@ -1071,32 +1164,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       case 2:
         return CalendarView(reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style);
       case 3:
-        final id = _activeNoteId;
-        if (id == null) {
-          return const Center(child: Text('Open a note from the dashboard or create a new one.'));
-        }
-        final beside = _splitNoteId;
-        return LayoutBuilder(builder: (context, box) {
-          // two notes need room; on a narrow window the second waits, and splitting is not offered
-          _roomToSplit = box.maxWidth >= 900;
-          if (beside == null || beside == id) return _editor(id);
-          _splitShown = _roomToSplit;
-          if (!_splitShown) return _editor(id);
-          final left = (box.maxWidth * _splitFraction).clamp(380.0, box.maxWidth - 380);
-          return Row(children: [
-            SizedBox(width: left, child: _pane(id, _editor(id))),
-            MouseRegion(
-              cursor: SystemMouseCursors.resizeColumn,
-              child: GestureDetector(
-                key: const ValueKey('split-divider'),
-                behavior: HitTestBehavior.opaque,
-                onHorizontalDragUpdate: (d) => setState(() => _splitFraction = ((left + d.delta.dx) / box.maxWidth).clamp(0.2, 0.8)),
-                child: Container(width: 10, color: Theme.of(context,).dividerColor.withValues(alpha: 0.3), child: Center(child: Container(width: 3, height: 40, decoration: BoxDecoration(color: Theme.of(context).dividerColor, borderRadius: BorderRadius.circular(2))))),
-              ),
-            ),
-            Expanded(child: _pane(beside, _editor(beside, second: true))),
-          ]);
-        });
+        return _workspace();
       case 4:
         final automations = _app.automations;
         if (automations == null) return const Center(child: Text('Automations are not available here.'));
@@ -1127,13 +1195,90 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     }
   }
 
-  /// One of the notes shown side by side: a click or a touch in it makes the keyboard shortcuts its own, and a bar on top says which.
-  Widget _pane(String id, Widget child) => Listener(
-        onPointerDown: (_) => _focusedPane.value = id,
+  /// The tabs and under them the notes (or the graph) that are on screen, side by side as far as the width allows.
+  Widget _workspace() {
+    final phone = MediaQuery.sizeOf(context).width < 600;
+    final editing = _selectedNavIndex == 3 && _activeNoteId != null;
+    final showStrip = _tabs.isNotEmpty && (!phone || _tabs.length > 1);
+    return Column(children: [
+      if (showStrip)
+        ValueListenableBuilder<String?>(
+          valueListenable: _focusedPane,
+          builder: (context, focused, _) => WorkspaceTabStrip(
+            tabs: [for (final k in _tabs) WorkspaceTab(key: k, graph: k == _graphKey, title: _editorOf(k)?.noteTitle ?? _titles[k] ?? '')],
+            shown: {..._shown},
+            focused: focused,
+            onSelect: _selectTab,
+            onClose: _closeTab,
+            onShowAlone: _showAlone,
+            onCloseOthers: _closeOthers,
+            onNewTab: _newTab,
+            onToggleAll: _toggleAll,
+            allShown: _shown.length > 1,
+            leading: phone && !editing ? 48 : 0,
+          ),
+        ),
+      Expanded(
+        child: LayoutBuilder(builder: (context, box) {
+          // several tabs need room each; on a narrow window one is shown and the others wait
+          _maxPanes = (box.maxWidth / 450).floor().clamp(1, 6);
+          final visible = [..._shown];
+          while (visible.length > _maxPanes) {
+            visible.remove(visible.firstWhere((k) => k != _focused, orElse: () => visible.first));
+          }
+          _visible = visible;
+          if (visible.isEmpty) return const Center(child: Text('Open a note from the dashboard or create a new one.'));
+          const gap = 10.0;
+          final share = box.maxWidth - gap * (visible.length - 1);
+          final weights = [for (final k in visible) _weights[k] ?? 1.0];
+          final total = weights.fold(0.0, (a, b) => a + b);
+          return Row(children: [
+            for (var i = 0; i < visible.length; i++) ...[
+              if (i > 0)
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    key: ValueKey('split-divider${i == 1 ? '' : '-$i'}'),
+                    behavior: HitTestBehavior.opaque,
+                    onHorizontalDragUpdate: (d) {
+                      // the two panes next to the divider trade width; neither gets narrower than a fifth of the average
+                      final left = visible[i - 1], right = visible[i];
+                      final move = d.delta.dx / share * total;
+                      final l = (_weights[left] ?? 1.0) + move, r = (_weights[right] ?? 1.0) - move;
+                      final least = total / visible.length * 0.4;
+                      if (l < least || r < least) return;
+                      setState(() {
+                        for (final k in visible) {
+                          _weights[k] ??= 1.0;
+                        }
+                        _weights[left] = l;
+                        _weights[right] = r;
+                      });
+                    },
+                    child: Container(width: gap, color: Theme.of(context).dividerColor.withValues(alpha: 0.3), child: Center(child: Container(width: 3, height: 40, decoration: BoxDecoration(color: Theme.of(context).dividerColor, borderRadius: BorderRadius.circular(2))))),
+                  ),
+                ),
+              SizedBox(
+                key: ValueKey('pane-${visible[i]}'),
+                width: share * weights[i] / total,
+                child: _pane(visible[i], visible[i] == _graphKey ? _graphView() : _editor(visible[i])),
+              ),
+            ],
+          ]);
+        }),
+      ),
+    ]);
+  }
+
+  Widget _graphView() => GraphView(key: _graphWidgetKey, service: _graphs, onOpen: _openAtPage, cards: _app.cards);
+
+  /// One of the tabs on screen: a click or a touch in it makes the keyboard shortcuts its own, and a bar on top says which.
+  Widget _pane(String key, Widget child) => Listener(
+        onPointerDown: (_) => _focusPane(key),
         child: Column(children: [
           ValueListenableBuilder<String?>(
             valueListenable: _focusedPane,
-            builder: (context, focused, _) => Container(height: 3, color: (focused ?? _activeNoteId) == id ? Theme.of(context).colorScheme.primary : Colors.transparent),
+            builder: (context, focused, _) => Container(height: 3, color: _visible.length > 1 && focused == key ? Theme.of(context).colorScheme.primary : Colors.transparent),
           ),
           // the note lays itself out for the room it has, not for the whole window
           Expanded(
@@ -1144,7 +1289,17 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         ]),
       );
 
-  Widget _editor(String id, {bool second = false}) {
+  /// The keyboard goes to the pane that was touched (the menu follows when that is the graph or a note).
+  void _focusPane(String key) {
+    if (_focused == key) return;
+    _focused = key;
+    _focusedPane.value = key;
+    if (key != _graphKey) _lastNote = key;
+    final index = key == _graphKey ? 8 : 3;
+    if (_selectedNavIndex != index) setState(() => _selectedNavIndex = index);
+  }
+
+  Widget _editor(String id) {
         return FixedPageNoteEditor(
           key: _editorKeys.putIfAbsent(id, () => GlobalKey()), // a different note gets a fresh editor
           noteId: id,
@@ -1163,12 +1318,12 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
                 },
           handwriting: _aiOn && _f(Feature.handwriting) ? _app.handwriting : null,
           math: _aiOn && _f(Feature.mathInk) ? _app.math : null,
-          onOpenNote: (other) => second ? _openBeside(other) : _go(note: other),
-          onOpenBeside: second || !_roomToSplit ? null : _openBeside,
-          onCloseSplit: second ? _closeSplit : (_splitShown && _splitNoteId != null && _splitNoteId != id ? _closeFirst : null),
+          onOpenNote: (other) => _go(note: other),
+          onOpenBeside: _maxPanes < 2 ? null : _openBeside,
+          onCloseSplit: _visible.length > 1 ? () => _unshow(id) : null,
           locks: _app.locks,
-          onLeave: second ? _closeSplit : () => _go(index: 0),
-          paneActive: _splitNoteId == null ? null : () => (_focusedPane.value ?? _activeNoteId) == id,
+          onLeave: _visible.length > 1 ? () => _unshow(id) : () => _go(index: 0),
+          paneActive: _visible.length < 2 ? null : () => _focused == id,
           onPdfImported: () => _scanDates(id),
           ai: _aiOn && _f(Feature.assistant) ? _app.ai : null,
           features: _app.features,
@@ -1186,7 +1341,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           links: _app.links,
           reminders: _app.reminders,
           audio: _app.audio,
-          onOpenNoteAt: second ? null : _openAtPage,
+          onOpenNoteAt: _openAtPage,
           onTrigger: _fireTrigger,
           initialFind: _openWithFind?.note == id ? _openWithFind!.query : null,
           initialPage: _openWithFind?.note == id ? _openWithFind!.page : 0,
