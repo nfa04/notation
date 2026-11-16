@@ -24,7 +24,11 @@ import 'texteller_decoder.dart';
 /// 58.5 % exactly right against 60.2 % for the unquantised encoder.
 enum TellerWeights {
   standard('encoder.onnx', 88),
-  gpu('encoder-gpu.onnx', 172);
+  gpu('encoder-gpu.onnx', 172),
+
+  /// The published encoder as it is, in 32-bit numbers (OleehyO/TexTeller, Apache-2.0; no download of ours). Nothing is quantised or
+  /// shortened, so it reads like the original, and it is the form of the model a phone's accelerator (NNAPI) can take most of.
+  full('encoder-fp32.onnx', 344);
 
   final String file;
   final int megabytes;
@@ -66,11 +70,18 @@ class MathService extends ModelFilesService implements InkRecognizer {
     'decoder.onnx': (url: '$tellerRepo/decoder.onnx', megabytes: 229),
   };
 
+  /// The published encoder, from the revision its checksum is of.
+  static const originalTellerEncoder = 'https://huggingface.co/OleehyO/TexTeller/resolve/7b96df06b9d81cdb129c3bef68b7250bc3e2b0ea/encoder_model.onnx';
+
   /// The files of TexTeller with the encoder [w]. The 16-bit encoder is only on Hugging Face (not in the GitHub release).
   static Map<String, ({String url, int megabytes})> tellerFilesFor(TellerWeights w) => switch (w) {
         TellerWeights.standard => tellerFiles,
         TellerWeights.gpu => {
             'encoder-gpu.onnx': (url: '${tellerRepo == defaultTellerRepo ? hubTellerRepo : tellerRepo}/encoder-gpu.onnx', megabytes: w.megabytes),
+            'decoder.onnx': tellerFiles['decoder.onnx']!,
+          },
+        TellerWeights.full => {
+            'encoder-fp32.onnx': (url: originalTellerEncoder, megabytes: w.megabytes),
             'decoder.onnx': tellerFiles['decoder.onnx']!,
           },
       };
@@ -80,6 +91,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
   static const tellerChecksums = {
     'encoder.onnx': '8ea8a061533b7fd8fbb746b0bd9ddd8d26d324fe07647dcf9059ddd07c2d77c4',
     'decoder.onnx': 'ba01e6781c1acf48781e838433c185e71feccae11f40d84ee2a46ecca7ec5ad9',
+    'encoder-fp32.onnx': '071afc0a0c92b2ee3847612127eb9e82b1c39413725e692f4405e5ea9e265bf0',
     'encoder-gpu.onnx': '6194708cf94bf4b2a34a07bc08fe13279cd382f22772f54bd9082c11a3ff4563',
   };
 

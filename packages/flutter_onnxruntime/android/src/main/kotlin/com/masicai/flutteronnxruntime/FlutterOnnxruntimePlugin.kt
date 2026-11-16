@@ -193,6 +193,181 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
         ortEnvironment = OrtEnvironment.getEnvironment()
     }
 
+    /** [result] with its answers handed to the main thread, which is where a method channel's reply belongs. */
+    private fun postedToMain(result: Result): Result {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        return object : Result {
+            override fun success(value: Any?) { main.post { result.success(value) } }
+
+            override fun error(code: String, message: String?, details: Any?) { main.post { result.error(code, message, details) } }
+
+            override fun notImplemented() { main.post { result.notImplemented() } }
+        }
+    }
+
+    /** The method "createSession", run by [onMethodCall] on a thread of its own. */
+    private fun createSession(call: MethodCall, result: Result) {
+        try {
+            val modelPath = call.argument<String>("modelPath")
+            val sessionOptions = call.argument<Map<String, Any>>("sessionOptions") ?: emptyMap()
+
+            if (modelPath == null) {
+                result.error("INVALID_ARGUMENT", "Model path cannot be null", null)
+                return
+            }
+
+            val ortSessionOptions = OrtSession.SessionOptions()
+
+            // Configure session options based on the provided map
+            if (sessionOptions.containsKey("intraOpNumThreads")) {
+                ortSessionOptions.setIntraOpNumThreads((sessionOptions["intraOpNumThreads"] as Number).toInt())
+            }
+
+            if (sessionOptions.containsKey("interOpNumThreads")) {
+                ortSessionOptions.setInterOpNumThreads((sessionOptions["interOpNumThreads"] as Number).toInt())
+            }
+
+            // the profiler (see endProfiling): which provider ran how much of the model
+            if (sessionOptions["profile"] == true) {
+                ortSessionOptions.enableProfiling(File(System.getProperty("java.io.tmpdir") ?: ".", "ort_profile").path)
+            }
+
+            (sessionOptions["freeDimensions"] as? Map<*, *>)?.forEach { (name, size) ->
+                ortSessionOptions.setSymbolicDimensionValue(name.toString(), (size as Number).toLong())
+            }
+
+            // pass session config entries (e.g. "mlas.disable_kleidiai") through to ONNX Runtime
+            val sessionConfigs = sessionOptions["sessionConfigs"] as? Map<*, *>
+            sessionConfigs?.forEach { (key, value) ->
+                try {
+                    ortSessionOptions.addConfigEntry(key.toString(), value.toString())
+                } catch (e: OrtException) {
+                    result.error(
+                        "SESSION_OPTIONS_ERROR",
+                        "Failed to add session config entry $key: ${e.message}",
+                        null,
+                    )
+                    return
+                }
+            }
+
+            // get list of providers, default is empty list
+            var providers = emptyList<String>()
+            if (sessionOptions.containsKey("providers")) {
+                providers = sessionOptions["providers"] as List<String>
+            }
+            // if providers is empty, add CPU provider
+            if (providers.isEmpty()) {
+                providers = listOf("CPU")
+            }
+            var useArena = true
+            if (sessionOptions.containsKey("useArena")) {
+                useArena = sessionOptions["useArena"] as Boolean
+            }
+            ortSessionOptions.setCPUArenaAllocator(useArena)
+            var deviceId = 0
+            if (sessionOptions.containsKey("deviceId")) {
+                deviceId = sessionOptions["deviceId"] as Int
+            }
+            // loop through the providers and add them to the ortSessionOptions
+            for (provider in providers) {
+                // add providers with default parameters
+                try {
+                    when (provider) {
+                        "ACL" -> {
+                            ortSessionOptions.addACL(true)
+                        }
+                        "ARM_NN" -> {
+                            result.error(
+                                "INVALID_PROVIDER",
+                                "Provider ARM_NN is not supported: the ArmNN execution provider was removed in " +
+                                    "ONNX Runtime 1.25",
+                                null,
+                            )
+                            return
+                        }
+                        "CORE_ML" -> {
+                            ortSessionOptions.addCoreML()
+                        }
+                        "CPU" -> {
+                            ortSessionOptions.addCPU(useArena)
+                        }
+                        "CUDA" -> {
+                            ortSessionOptions.addCUDA(deviceId)
+                        }
+                        "DIRECT_ML" -> {
+                            ortSessionOptions.addDirectML(deviceId)
+                        }
+                        "DNNL" -> {
+                            ortSessionOptions.addDnnl(useArena)
+                        }
+                        "NNAPI" -> {
+                            // fp32 nodes may run in fp16 on the phone's accelerator; without this they stay on the processor
+                            ortSessionOptions.addNnapi(java.util.EnumSet.of(ai.onnxruntime.providers.NNAPIFlags.USE_FP16))
+                        }
+                        "OPEN_VINO" -> {
+                            ortSessionOptions.addOpenVINO(deviceId.toString())
+                        }
+                        "QNN" -> {
+                            // the options come from Dart ({'backend_type': 'htp'} for the NPU, 'gpu' for the Adreno); the NPU without any
+                            val given = (sessionOptions["providerOptions"] as? Map<*, *>)?.get("QNN") as? Map<*, *>
+                            ortSessionOptions.addQnn(given?.entries?.associate { it.key.toString() to it.value.toString() } ?: mapOf("backend_type" to "htp"))
+                        }
+                        "ROCM" -> {
+                            ortSessionOptions.addROCM(deviceId)
+                        }
+                        "TENSOR_RT" -> {
+                            ortSessionOptions.addTensorrt(OrtTensorRTProviderOptions(deviceId))
+                        }
+                        "XNNPACK" -> {
+                            // use an empty map as the parameter
+                            ortSessionOptions.addXnnpack(mapOf())
+                        }
+                        else -> {
+                            result.error("INVALID_PROVIDER", "Provider $provider is not supported", null)
+                            return
+                        }
+                    }
+                } catch (e: OrtException) {
+                    // same code as Linux and Windows, so createSessionFromAsset does not re-extract the model for it
+                    result.error("PROVIDER_ERROR", "Failed to add provider $provider: ${e.message}", null)
+                    return
+                }
+            }
+
+            // Load model from file path
+            val modelFile = File(modelPath)
+            if (!modelFile.exists()) {
+                result.error("FILE_NOT_FOUND", "Model file not found at path: $modelPath", null)
+                return
+            }
+
+            // A low priority session is made on a thread of low priority: the threads ONNX Runtime starts for its
+            // work inherit that, so the session only takes the time the screen leaves over
+            val low = sessionOptions["lowPriority"] == true
+            val session = if (low) atLowPriority { ortEnvironment.createSession(modelPath, ortSessionOptions) } else ortEnvironment.createSession(modelPath, ortSessionOptions)
+            val sessionId = UUID.randomUUID().toString()
+            if (low) lowPrioritySessions.add(sessionId)
+            sessions[sessionId] = session
+
+            // Get input and output names
+            val inputNames = session.inputNames.toList()
+            val outputNames = session.outputNames.toList()
+
+            result.success(
+                mapOf(
+                    "sessionId" to sessionId,
+                    "inputNames" to inputNames,
+                    "outputNames" to outputNames,
+                ),
+            )
+        } catch (e: OrtException) {
+            result.error("ORT_ERROR", e.message, e.stackTraceToString())
+        } catch (e: Exception) {
+            result.error("PLUGIN_ERROR", e.message, e.stackTraceToString())
+        }
+    }
+
     override fun onMethodCall(
         @NonNull call: MethodCall,
         @NonNull result: Result,
@@ -203,158 +378,10 @@ class FlutterOnnxruntimePlugin : FlutterPlugin, MethodCallHandler {
                     result.success("Android ${android.os.Build.VERSION.RELEASE}")
                 }
                 "createSession" -> {
-                    try {
-                        val modelPath = call.argument<String>("modelPath")
-                        val sessionOptions = call.argument<Map<String, Any>>("sessionOptions") ?: emptyMap()
-
-                        if (modelPath == null) {
-                            result.error("INVALID_ARGUMENT", "Model path cannot be null", null)
-                            return
-                        }
-
-                        val ortSessionOptions = OrtSession.SessionOptions()
-
-                        // Configure session options based on the provided map
-                        if (sessionOptions.containsKey("intraOpNumThreads")) {
-                            ortSessionOptions.setIntraOpNumThreads((sessionOptions["intraOpNumThreads"] as Number).toInt())
-                        }
-
-                        if (sessionOptions.containsKey("interOpNumThreads")) {
-                            ortSessionOptions.setInterOpNumThreads((sessionOptions["interOpNumThreads"] as Number).toInt())
-                        }
-
-                        // the profiler (see endProfiling): which provider ran how much of the model
-                        if (sessionOptions["profile"] == true) {
-                            ortSessionOptions.enableProfiling(File(System.getProperty("java.io.tmpdir") ?: ".", "ort_profile").path)
-                        }
-
-                        // pass session config entries (e.g. "mlas.disable_kleidiai") through to ONNX Runtime
-                        val sessionConfigs = sessionOptions["sessionConfigs"] as? Map<*, *>
-                        sessionConfigs?.forEach { (key, value) ->
-                            try {
-                                ortSessionOptions.addConfigEntry(key.toString(), value.toString())
-                            } catch (e: OrtException) {
-                                result.error(
-                                    "SESSION_OPTIONS_ERROR",
-                                    "Failed to add session config entry $key: ${e.message}",
-                                    null,
-                                )
-                                return
-                            }
-                        }
-
-                        // get list of providers, default is empty list
-                        var providers = emptyList<String>()
-                        if (sessionOptions.containsKey("providers")) {
-                            providers = sessionOptions["providers"] as List<String>
-                        }
-                        // if providers is empty, add CPU provider
-                        if (providers.isEmpty()) {
-                            providers = listOf("CPU")
-                        }
-                        var useArena = true
-                        if (sessionOptions.containsKey("useArena")) {
-                            useArena = sessionOptions["useArena"] as Boolean
-                        }
-                        ortSessionOptions.setCPUArenaAllocator(useArena)
-                        var deviceId = 0
-                        if (sessionOptions.containsKey("deviceId")) {
-                            deviceId = sessionOptions["deviceId"] as Int
-                        }
-                        // loop through the providers and add them to the ortSessionOptions
-                        for (provider in providers) {
-                            // add providers with default parameters
-                            try {
-                                when (provider) {
-                                    "ACL" -> {
-                                        ortSessionOptions.addACL(true)
-                                    }
-                                    "ARM_NN" -> {
-                                        result.error(
-                                            "INVALID_PROVIDER",
-                                            "Provider ARM_NN is not supported: the ArmNN execution provider was removed in " +
-                                                "ONNX Runtime 1.25",
-                                            null,
-                                        )
-                                        return
-                                    }
-                                    "CORE_ML" -> {
-                                        ortSessionOptions.addCoreML()
-                                    }
-                                    "CPU" -> {
-                                        ortSessionOptions.addCPU(useArena)
-                                    }
-                                    "CUDA" -> {
-                                        ortSessionOptions.addCUDA(deviceId)
-                                    }
-                                    "DIRECT_ML" -> {
-                                        ortSessionOptions.addDirectML(deviceId)
-                                    }
-                                    "DNNL" -> {
-                                        ortSessionOptions.addDnnl(useArena)
-                                    }
-                                    "NNAPI" -> {
-                                        ortSessionOptions.addNnapi()
-                                    }
-                                    "OPEN_VINO" -> {
-                                        ortSessionOptions.addOpenVINO(deviceId.toString())
-                                    }
-                                    "QNN" -> {
-                                        ortSessionOptions.addQnn(mapOf())
-                                    }
-                                    "ROCM" -> {
-                                        ortSessionOptions.addROCM(deviceId)
-                                    }
-                                    "TENSOR_RT" -> {
-                                        ortSessionOptions.addTensorrt(OrtTensorRTProviderOptions(deviceId))
-                                    }
-                                    "XNNPACK" -> {
-                                        // use an empty map as the parameter
-                                        ortSessionOptions.addXnnpack(mapOf())
-                                    }
-                                    else -> {
-                                        result.error("INVALID_PROVIDER", "Provider $provider is not supported", null)
-                                        return
-                                    }
-                                }
-                            } catch (e: OrtException) {
-                                // same code as Linux and Windows, so createSessionFromAsset does not re-extract the model for it
-                                result.error("PROVIDER_ERROR", "Failed to add provider $provider: ${e.message}", null)
-                                return
-                            }
-                        }
-
-                        // Load model from file path
-                        val modelFile = File(modelPath)
-                        if (!modelFile.exists()) {
-                            result.error("FILE_NOT_FOUND", "Model file not found at path: $modelPath", null)
-                            return
-                        }
-
-                        // A low priority session is made on a thread of low priority: the threads ONNX Runtime starts for its
-                        // work inherit that, so the session only takes the time the screen leaves over
-                        val low = sessionOptions["lowPriority"] == true
-                        val session = if (low) atLowPriority { ortEnvironment.createSession(modelPath, ortSessionOptions) } else ortEnvironment.createSession(modelPath, ortSessionOptions)
-                        val sessionId = UUID.randomUUID().toString()
-                        if (low) lowPrioritySessions.add(sessionId)
-                        sessions[sessionId] = session
-
-                        // Get input and output names
-                        val inputNames = session.inputNames.toList()
-                        val outputNames = session.outputNames.toList()
-
-                        result.success(
-                            mapOf(
-                                "sessionId" to sessionId,
-                                "inputNames" to inputNames,
-                                "outputNames" to outputNames,
-                            ),
-                        )
-                    } catch (e: OrtException) {
-                        result.error("ORT_ERROR", e.message, e.stackTraceToString())
-                    } catch (e: Exception) {
-                        result.error("PLUGIN_ERROR", e.message, e.stackTraceToString())
-                    }
+                    // Made on a thread of its own: an accelerator compiles the whole model while the session is made (minutes for a
+                    // large one on a phone), and nothing else of this plugin may wait that long behind the lock
+                    val onMain = postedToMain(result)
+                    Thread({ createSession(call, onMain) }, "ort-create-session").start()
                 }
                 "getAvailableProviders" -> {
                     val providers = OrtEnvironment.getAvailableProviders()
