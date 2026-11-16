@@ -6,6 +6,8 @@ a free dimension override makes every shape fixed. This tries that, one way per 
 
   python probe_glm_vision.py MODEL OUT_DIR reference ROWSxCOLS          # the processor's answer, kept as a .npy
   python probe_glm_vision.py MODEL OUT_DIR coreml ROWSxCOLS UNITS STATIC  # UNITS: ALL, CPUAndGPU, CPUAndNeuralEngine, CPUOnly; STATIC 0/1
+  python probe_glm_vision.py MODEL OUT_DIR lines LINES_DIR WAY             # WAY: cpu or a CoreML UNITS (static): NN.<way> features of
+                                                                          # every picture (tool/coreml_probe/make_lines.py), for read_lines.py
 
 Prints one JSON line per run ("probe-result ..."). The picture is made here: white paper with wavy pen lines, normalised and cut into
 patches like lib/ink/glm_ocr.dart does, so the numbers inside the network have their real range (the fp16 overflow depends on it).
@@ -64,7 +66,43 @@ def positions(rows, cols):
     return np.array(out, dtype=np.int64)
 
 
+def open_session(model, out_dir, way, count, label):
+    so = ort.SessionOptions()
+    so.log_severity_level = 2
+    if way == 'cpu':
+        return ort.InferenceSession(model, so, providers=['CPUExecutionProvider'])
+    so.add_free_dimension_override_by_name('4*m', count)
+    cache = os.path.join(out_dir, f'cache-lines-{way}-{label}')
+    os.makedirs(cache, exist_ok=True)
+    return ort.InferenceSession(model, so, providers=[
+        ('CoreMLExecutionProvider', {'ModelFormat': 'MLProgram', 'MLComputeUnits': way, 'ModelCacheDirectory': cache}), 'CPUExecutionProvider'])
+
+
+def lines(model, out_dir, lines_dir, way):
+    """Features of every picture of [lines_dir] with [way], one session per picture size (as the app would keep one per width)."""
+    from PIL import Image
+    sessions = {}
+    for f in sorted(x for x in os.listdir(lines_dir) if x.endswith('.png')):
+        img = np.asarray(Image.open(os.path.join(lines_dir, f)).convert('L'), dtype=np.float32)
+        rows, cols = img.shape[0] // PATCH, img.shape[1] // PATCH
+        label = f'{rows}x{cols}'
+        feeds = {'pixel_values': patches(img, rows, cols), 'pos_ids': positions(rows, cols)}
+        result = {'mode': 'lines', 'way': way, 'file': f, 'size': label}
+        t = time.time()
+        if label not in sessions:
+            sessions[label] = open_session(model, out_dir, way, feeds['pixel_values'].shape[0], label)
+            result['openS'] = round(time.time() - t, 2)
+        t = time.time()
+        answer = sessions[label].run(None, feeds)[0]
+        result['runS'] = round(time.time() - t, 3)
+        answer.astype(np.float32).tofile(os.path.join(out_dir, f'{f[:-4]}.{way}'))
+        print('probe-result', json.dumps(result), flush=True)
+
+
 def main():
+    if sys.argv[3] == 'lines':
+        lines(sys.argv[1], sys.argv[2], sys.argv[4], sys.argv[5])
+        return
     model, out_dir, way, size = sys.argv[1:5]
     rows, cols = (int(v) for v in size.split('x'))
     feeds = {'pixel_values': patches(picture(rows, cols), rows, cols), 'pos_ids': positions(rows, cols)}
@@ -79,7 +117,8 @@ def main():
         result.update(units=units, static=static)
         if static:
             so.add_free_dimension_override_by_name('4*m', count)
-        cache = os.path.join(out_dir, f'cache-{units}-{int(static)}')
+        # (CoreML keys its cache by the model's path only: every size needs a folder of its own, or it gets another size's model)
+        cache = os.path.join(out_dir, f'cache-{units}-{int(static)}-{size}')
         os.makedirs(cache, exist_ok=True)
         providers = [('CoreMLExecutionProvider', {'ModelFormat': 'MLProgram', 'MLComputeUnits': units, 'ModelCacheDirectory': cache}),
                      'CPUExecutionProvider']

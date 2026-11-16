@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: ONNX Runtime (the version of the app on Apple) and numpy
-        run: pip install onnxruntime==1.28.0 numpy || pip install onnxruntime numpy
+        run: pip install onnxruntime==1.28.0 numpy pillow || pip install onnxruntime numpy pillow
       - name: Models from the Actions cache (made by the CoreML check)
         id: models
         uses: actions/cache/restore@v4
@@ -51,15 +51,19 @@ jobs:
           python -c "import onnxruntime as o; print(o.__version__, o.get_available_providers())"
           model="$RUNNER_TEMP/models/glm/vision-gpu.onnx"; out="$RUNNER_TEMP/probe"; mkdir -p "$out"
           probe() { echo "::group::$*"; perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
-          for size in 10x24 10x96; do
-            probe reference $size
-            probe coreml $size ALL 0                 # (as the app tried: the input size left free; expected to fail with -14)
-            probe coreml $size ALL 1
-            probe coreml $size CPUAndNeuralEngine 1
-            probe coreml $size CPUAndGPU 1
-            probe coreml $size CPUOnly 1
-            probe coreml $size ALL 1                 # (again: the cache)
+          # 1. the long line again (the first probe shared one cache folder between sizes, so it got the short line's model)
+          probe reference 10x96
+          probe coreml 10x96 ALL 1
+          probe coreml 10x96 CPUAndGPU 1
+          probe coreml 10x96 ALL 1                   # (again: the cache)
+          # 2. features of 40 written lines for every way, read with the text model afterwards (tool/coreml_probe/read_lines.py)
+          mkdir -p "$out/feats"
+          for way in cpu ALL CPUAndGPU CPUOnly; do
+            echo "::group::lines $way"
+            perl -e 'alarm shift; exec @ARGV' 1800 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out/feats" lines tool/coreml_probe/lines $way 2>&1 \
+              | tee -a probe.log | grep -E "probe-result|rror" | cut -c1-300; echo "::endgroup::"
           done
+          rm -rf "$out"/feats/cache-*
       - name: Summary
         if: always()
         run: |
@@ -68,4 +72,6 @@ jobs:
         if: always()
         with:
           name: coreml-probe
-          path: probe.log
+          path: |
+            probe.log
+            ${{ runner.temp }}/probe/feats
