@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTesting;
@@ -88,9 +88,9 @@ class WarmSession {
       : _openAccelerated = accelerated,
         _openProcessor = processor;
 
-  WarmSession._plain(Future<OrtSession> Function() open)
-      : _openAccelerated = (() async => WarmEngine.of(await open())),
-        _openProcessor = (() async => WarmEngine.of(await open())),
+  WarmSession._plain(Future<WarmEngine> Function() open)
+      : _openAccelerated = open,
+        _openProcessor = open,
         grace = Duration.zero,
         onPlanned = null,
         oneSize = false,
@@ -340,6 +340,11 @@ class OneSizeAtATime {
 /// Android allows); used for the accelerated sessions of a pinned model, each part with the size fixed.
 Future<WarmSession> openWarmSession(String path,
     {OrtSessionOptions? options, bool accelerate = true, bool oneSize = false, PinnedSize? pin, String? processorPath, List<String>? parts}) async {
+  // (parts without the whole file, as Android downloads the handwriting reader's 16-bit network: the processor runs the parts too)
+  final onlyParts = parts != null && parts.isNotEmpty && !File(path).existsSync();
+  Future<WarmEngine> processor() async => onlyParts
+      ? WarmEngine.parts(parts, (p, _) => openOnnxSession(p, options: options, accelerate: false))
+      : WarmEngine.of(await openOnnxSession(processorPath ?? path, options: options, accelerate: false));
   if (accelerate && pin != null && await onnxPinsSizes(path)) {
     OrtSessionOptions fixed(int size) => OrtSessionOptions(
           intraOpNumThreads: options?.intraOpNumThreads,
@@ -355,7 +360,7 @@ Future<WarmSession> openWarmSession(String path,
             : WarmEngine.of(await openOnnxSession(path, options: fixed(size))));
     return WarmSession._compiling(
       () async => sized.engine,
-      () async => WarmEngine.of(await openOnnxSession(processorPath ?? path, options: options, accelerate: false)),
+      processor,
       null,
       false,
       onnxModelName(path),
@@ -381,5 +386,6 @@ Future<WarmSession> openWarmSession(String path,
       onnxModelName(path),
     );
   }
-  return WarmSession._plain(() => openOnnxSession(path, options: options, accelerate: accelerate));
+  if (onlyParts) return WarmSession._plain(processor);
+  return WarmSession._plain(() async => WarmEngine.of(await openOnnxSession(path, options: options, accelerate: accelerate)));
 }

@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -40,6 +41,11 @@ enum GlmWeights {
   /// The weights sit in a second file next to it.
   String? get dataFile => this == gpu ? 'vision-gpu.onnx.data' : null;
 
+  /// On Android the 16-bit network comes cut into parts (tool/split_glm_vision.py), each with its weights in a file of its own, MB of them:
+  /// QNN compiles and runs one part at a time there (compiling the whole took the app past 3.3 GB on a phone with 6 GB, and Android killed
+  /// it). The first part only works out the rotary tables (no weights). The whole file is not downloaded there.
+  static const gpuParts = [('vision-gpu.part1.onnx', 1), ('vision-gpu.part2.onnx', 213), ('vision-gpu.part3.onnx', 202), ('vision-gpu.part4.onnx', 202), ('vision-gpu.part5.onnx', 253)];
+
   final String file;
   final int megabytes;
   const GlmWeights(this.file, this.megabytes);
@@ -63,19 +69,37 @@ class GlmOcrService extends ModelFilesService {
   /// The vision network's file. A browser gets a variant with 4-bit weights (261 MB, read 2.4 points worse on the benchmark: 13.3 % against
   /// 10.9 %): the browser's graphics card (WebGPU) cannot run the 8-bit one (its MatMulNBits takes 2 and 4 bits only), and the 8-bit one on
   /// the processor of a browser is 12 times slower than the 4-bit on the card (36 s against 3 s a line, one thread, Radeon 780M).
-  static Map<String, ({String url, int megabytes})> filesFor(GlmWeights w) => {
-        w.file: (url: '$repo/${w.file}', megabytes: w.dataFile == null ? w.megabytes : 1),
-        if (w.dataFile != null) w.dataFile!: (url: '$repo/${w.dataFile}', megabytes: w.megabytes - 1),
+  /// [android]: the 16-bit network as parts (see [GlmWeights.gpuParts]); by default where the app runs.
+  static Map<String, ({String url, int megabytes})> filesFor(GlmWeights w, {bool? android}) => {
+        if (w == GlmWeights.gpu && (android ?? (!kIsWeb && Platform.isAndroid)))
+          for (final (file, mb) in GlmWeights.gpuParts) ...{
+            file: (url: '$repo/$file', megabytes: 1),
+            '$file.data': (url: '$repo/$file.data', megabytes: mb),
+          }
+        else ...{
+          w.file: (url: '$repo/${w.file}', megabytes: w.dataFile == null ? w.megabytes : 1),
+          if (w.dataFile != null) w.dataFile!: (url: '$repo/${w.dataFile}', megabytes: w.megabytes - 1),
+        },
         'text.onnx': (url: '$repo/text.onnx', megabytes: 297),
         'embeddings.bin': (url: '$repo/embeddings.bin', megabytes: 88),
       };
 
-  /// SHA-256 of the three files: a download that does not match (cut short, or not the file that was published) is thrown away.
+  /// SHA-256 of the files: a download that does not match (cut short, or not the file that was published) is thrown away.
   static const publishedChecksums = {
     'vision.onnx': 'e4565d57d7714b0b180718d8bb0a58d59fe7a68486028fe2fa774ce994f0f03a',
     'vision-web.onnx': '7d70fa6cf6e9938f475e42c2b7b473ee560b4fd32d34a25b0400bf3f77500c3b',
     'vision-gpu.onnx': '7a4eedee27741d1b5314bfc62de280b080790d62e52c1d51f417f8feb0e562c4',
     'vision-gpu.onnx.data': '966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99',
+    'vision-gpu.part1.onnx': '9b08ed930be8f760ac1140e81936ec687959ffe044b5e6488546b5088610e75d',
+    'vision-gpu.part1.onnx.data': '05b608a43e57419a39930a6b8c90cf95f4e7449db349eefc972262dacf7c0e4c',
+    'vision-gpu.part2.onnx': 'f21b2ba9df9898e22c12614531558366fa32f0824a43e612a1f91f35d3fe2edb',
+    'vision-gpu.part2.onnx.data': '987ba74009007827452d8b2862d03b5b219eeed168bda4663c251658b38aaec1',
+    'vision-gpu.part3.onnx': 'eb1ab642de2ceef09f6ac38e0b265ba83c4a3709d805e0c37ea0f797c0527fc3',
+    'vision-gpu.part3.onnx.data': 'd633aabe1ec5a49b53773f24d921a0b521823e9f7a0d37dabf34ae3d4a716dad',
+    'vision-gpu.part4.onnx': '44bd2b9ce64ad333e4aa05b3b73d59cf1efa0965623daea7faa2de4b474ddd86',
+    'vision-gpu.part4.onnx.data': '751d68b7c2dd8ee1e0520cee4b4475c97b7a68da5f4f77be7dce819270bcd032',
+    'vision-gpu.part5.onnx': 'd242fa01278f4bbc6a3972b90ab7c9e9718e5ade2f281a5a6ccbde960ae84376',
+    'vision-gpu.part5.onnx.data': 'a00251846330e2e4ce47fbae74d436888cbac117d3d419825a5c5ec2ef9d121e',
     'text.onnx': '1c886fa00f1b62c3a58728cadc49718c44fb046dca4e12171c1734cec9f00a41',
     'embeddings.bin': '9f74c48b8b5a645fbc438f2ee3c317a2102948149ff1deb3dfc678675b8094d5',
   };

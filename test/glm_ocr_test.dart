@@ -314,6 +314,25 @@ void main() {
     });
   });
 
+  test('on Android the 16-bit vision network comes as parts, each file with a published checksum; elsewhere as the whole', () {
+    final android = GlmOcrService.filesFor(GlmWeights.gpu, android: true);
+    expect(android.keys, isNot(contains('vision-gpu.onnx')));
+    for (final (file, _) in GlmWeights.gpuParts) {
+      expect(android.keys, containsAll([file, '$file.data']));
+    }
+    expect(android.keys, containsAll(['text.onnx', 'embeddings.bin']));
+    for (final f in android.keys) {
+      expect(GlmOcrService.publishedChecksums[f], isNotNull, reason: f);
+    }
+    final total = android.values.fold<int>(0, (a, f) => a + f.megabytes);
+    expect(total, closeTo(GlmWeights.gpu.megabytes + 297 + 88, 10)); // (the parts are the whole network)
+
+    final desktop = GlmOcrService.filesFor(GlmWeights.gpu, android: false);
+    expect(desktop.keys, containsAll(['vision-gpu.onnx', 'vision-gpu.onnx.data']));
+    expect(desktop.keys.where((f) => f.contains('part')), isEmpty);
+    expect(GlmOcrService.filesFor(GlmWeights.standard, android: true).keys, contains('vision.onnx'));
+  });
+
   test('plans are made only for the widths a line can have', () {
     final sizes = glmSizesToPrepare();
     expect(sizes.first, 4);
