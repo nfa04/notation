@@ -43,7 +43,12 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
           onnxNoteRun(preparing, '$onnxPreparing${list.first.name}', running: true);
           final OrtSession session;
           try {
-            final making = OnnxRuntime().createSession(path, options: _withProviders(options, list, extra, profile));
+            // (QNN: the compiled model is kept in a file of its own: the first session writes it, later ones read it instead of compiling)
+            final cache = attempt.label == 'QNN (NPU)' ? _qnnCache(path, attempt.label!) : null; // (the NPU's compile is the long one; the GPU's is not kept)
+            final cached = cache != null && File(cache).existsSync();
+            if (cached) debugPrint('onnx: $model: the compiled model of ${attempt.label} is read from $cache');
+            final making = OnnxRuntime().createSession(cached ? cache : path,
+                options: _withProviders(options, list, extra, profile, cache == null || cached ? null : {'ep.context_enable': '1', 'ep.context_embed_mode': '1', 'ep.context_file_path': cache}));
             // (a phone's NNAPI compiles the whole model while the session is made: a quarter of an hour was seen for a 344 MB one, and the
             // compile cannot be stopped; so the processor takes over after [onnxCompileLimit], and the session that comes out later is closed)
             session = list.first == OrtProvider.NNAPI || list.first == OrtProvider.QNN
@@ -67,6 +72,13 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
         } catch (e) {
           _report(model, 'CPU (${attempt.label ?? list.first.name} refused: $e)');
           _refused.add(tried);
+          // (a compiled file that did not load, from another build of the runtime perhaps: thrown away, made again at the next start)
+          if (attempt.label == 'QNN (NPU)') {
+            final stale = _qnnCache(path, attempt.label ?? 'QNN');
+            try {
+              if (File(stale).existsSync()) File(stale).deleteSync();
+            } catch (_) {}
+          }
           if (_tooSlow.contains(path)) break;
         }
       }
@@ -324,7 +336,16 @@ Future<List<_Attempt>> _attempts(List<OrtProvider> providers, String path) async
   ];
 }
 
-OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra, bool profile = false]) => OrtSessionOptions(
+/// Where the compiled form of the model at [path] is kept for QNN's [label] (NPU or GPU): next to the model, named by the model's size so
+/// that a changed file is not read from an old one's compile.
+String _qnnCache(String path, String label) {
+  final dir = Directory(p.join(p.dirname(path), 'qnn_cache'));
+  if (!dir.existsSync()) dir.createSync(recursive: true);
+  final size = File(path).existsSync() ? File(path).lengthSync() : 0;
+  return p.join(dir.path, '${p.basename(path)}.$size.${label.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.onnx');
+}
+
+OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra, bool profile = false, Map<String, String>? configs]) => OrtSessionOptions(
   profile: profile,
   freeDimensions: o?.freeDimensions,
   intraOpNumThreads: o?.intraOpNumThreads,
@@ -332,7 +353,7 @@ OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> provide
   providers: providers,
   useArena: o?.useArena,
   deviceId: o?.deviceId,
-  sessionConfigs: o?.sessionConfigs,
+  sessionConfigs: {...?o?.sessionConfigs, ...?configs},
   lowPriority: o?.lowPriority,
   ownThread: o?.ownThread,
   providerOptions: {...?o?.providerOptions, ...?extra},
