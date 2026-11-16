@@ -62,7 +62,7 @@ class OnnxPlaces extends StatelessWidget {
   /// What the profiler saw of a model an accelerator took (see [onnxSplits]): always there for NNAPI, from the first run's end; until then it says so.
   static String _detail(List<OnnxRun> runs, String? split) {
     if (split != null) return ' — $split';
-    return runs.any((r) => r.on == OrtProvider.NNAPI.name) ? ' — ${tr('measuring what ran on it...')}' : '';
+    return runs.any((r) => r.on == OrtProvider.NNAPI.name || r.on == OrtProvider.QNN.name) ? ' — ${tr('measuring what ran on it...')}' : '';
   }
 
   /// The places of one model: those where it runs now, or else the last one.
@@ -123,6 +123,7 @@ final _graphics = {OrtProvider.MIGRAPHX, OrtProvider.ROCM, OrtProvider.CUDA, Ort
 final _accelerators = {OrtProvider.CORE_ML, OrtProvider.NNAPI, OrtProvider.QNN, OrtProvider.OPEN_VINO, OrtProvider.WEB_NN}.map((p) => p.name).toSet();
 
 String _long(String on) {
+  if (on.startsWith(onnxPreparing)) return tr('preparing the model for {name} (can take minutes)', {'name': _names[on.substring(onnxPreparing.length)] ?? on.substring(onnxPreparing.length)});
   if (on == onnxMakingPlan) return tr('the graphics card is making its plan for this picture size (minutes, once); the processor reads meanwhile');
   if (on == OrtProvider.CPU.name) return tr('processor (CPU)');
   if (on == OrtProvider.WEB_ASSEMBLY.name) return tr('processor (in the browser)');
@@ -133,6 +134,7 @@ String _long(String on) {
 }
 
 String _short(String on) {
+  if (on.startsWith(onnxPreparing)) return tr('preparing the model');
   if (on == onnxMakingPlan) return tr('graphics card making a plan');
   if (_graphics.contains(on)) return tr('graphics card');
   if (_accelerators.contains(on)) return tr('accelerator');

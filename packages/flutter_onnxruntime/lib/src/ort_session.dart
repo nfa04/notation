@@ -139,6 +139,9 @@ class OrtSessionOptions {
   final int? logSeverityLevel;
   // collect what each provider ran, for [OrtSession.endProfiling] (Android)
   final bool? profile;
+  // sizes for the model's named free dimensions ({'batch_size': 1, 'height': 448}), fixed when the session is made: accelerators such as
+  // NNAPI only take nodes whose shapes are known (Android)
+  final Map<String, int>? freeDimensions;
 
   OrtSessionOptions({
     this.intraOpNumThreads,
@@ -152,11 +155,13 @@ class OrtSessionOptions {
     this.providerOptions,
     this.logSeverityLevel,
     this.profile,
+    this.freeDimensions,
   });
 
   Map<String, dynamic> toMap() {
     return {
       if (profile == true) 'profile': true,
+      if (freeDimensions != null && freeDimensions!.isNotEmpty) 'freeDimensions': freeDimensions,
       if (intraOpNumThreads != null) 'intraOpNumThreads': intraOpNumThreads,
       if (interOpNumThreads != null) 'interOpNumThreads': interOpNumThreads,
       if (providers != null && providers!.isNotEmpty) 'providers': providers!.map((p) => p.name).toList(),

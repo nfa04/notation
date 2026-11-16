@@ -420,7 +420,7 @@ void main() {
       expect(MathService.hubTellerRepo, 'https://huggingface.co/nfa04/texteller-onnx-8bit/resolve/main');
       expect(MathService.tellerFiles['encoder.onnx']!.url, '${MathService.defaultTellerRepo}/encoder.onnx');
       expect(MathService.tellerFiles['decoder.onnx']!.url, '${MathService.defaultTellerRepo}/decoder.onnx');
-      expect(MathService.tellerChecksums.keys.toSet(), {...MathService.tellerFiles.keys, 'encoder-gpu.onnx'});
+      expect(MathService.tellerChecksums.keys.toSet(), {...MathService.tellerFiles.keys, 'encoder-gpu.onnx', 'encoder-fp32.onnx'});
       expect(MathService.tellerChecksums.values.every((h) => RegExp(r'^[0-9a-f]{64}$').hasMatch(h)), isTrue);
     });
 

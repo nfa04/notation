@@ -847,6 +847,7 @@ class _MathSettings extends StatelessWidget {
                       label: Text(switch (w) {
                         TellerWeights.standard => tr('Small ({mb} MB)', {'mb': w.megabytes}),
                         TellerWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
+                        TellerWeights.full => tr('Full ({mb} MB)', {'mb': w.megabytes}),
                       }),
                       selected: service.weights == w,
                       onSelected: busy ? null : (_) => service.setWeights(w),
@@ -855,7 +856,7 @@ class _MathSettings extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                tr('Graphics card is the encoder in 16 bits, for a graphics card runtime (AMD\'s cannot run the 8-bit one): twice the size, much quicker there, reads about as well. Changing it downloads the encoder.'),
+                tr('Graphics card is the encoder in 16 bits, for a graphics card runtime (AMD\'s cannot run the 8-bit one): twice the size, much quicker there, reads about as well. Changing it downloads the encoder. Full is the published encoder unchanged, in 32 bits: the largest, reads like the original, and the form a phone\'s accelerator can take most of.'),
                 style: muted,
               ),
               if (service.weights == TellerWeights.gpu && service.installed) _TellerPlan(service: service),

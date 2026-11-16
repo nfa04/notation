@@ -34,6 +34,13 @@ configure<ApplicationExtension> {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // the Qualcomm build of ONNX Runtime (QNN) exists for 64-bit ARM only
+        ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    packaging {
+        // QNN's Hexagon libraries are loaded by the phone's DSP from a file on disk: the libraries must be unpacked at install
+        jniLibs { useLegacyPackaging = true }
     }
 
     signingConfigs {

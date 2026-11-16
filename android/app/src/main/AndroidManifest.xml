@@ -24,6 +24,10 @@
         android:label="Notation"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Qualcomm's QNN (the NPU and GPU of Snapdragon phones) loads these vendor libraries; from Android 12 an app must say so, and phones
+             without them are no problem (required=false) -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false"/>
+        <uses-native-library android:name="libOpenCL.so" android:required="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -25,21 +25,50 @@ import '../web/web_files.dart';
 ///
 /// [force] asks for the accelerator whatever the setting says (timing it, making its plans): for this session only.
 Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, bool accelerate = true, bool force = false}) async {
-  final providers = accelerate ? await _usableAccelerators(force: force) : const <OrtProvider>[];
+  var providers = accelerate ? await _usableAccelerators(force: force) : const <OrtProvider>[];
   final model = path.split('/').last;
+  if (_tooSlow.contains(path)) providers = const <OrtProvider>[]; // (it did not get ready in time before: not tried again until the app is started again)
   if (!kIsWeb) {
     if (providers.isNotEmpty) {
-      try {
-        final extra = providers.contains(OrtProvider.CORE_ML) ? {OrtProvider.CORE_ML: await coreMlOptions(path)} : null;
-        // (NNAPI takes what it supports and leaves the rest to the processor without a word: the profiler says how much)
-        final profile = providers.first == OrtProvider.NNAPI;
-        final session = await OnnxRuntime().createSession(path, options: _withProviders(options, providers, extra, profile));
-        _report(model, providers.first.name);
-        final placed = _place(session, path, providers.first.name);
-        if (profile) _toProfile.add(placed);
-        return placed;
-      } catch (e) {
-        _report(model, 'CPU (${providers.first.name} refused: $e)');
+      // (Android: one accelerator after the other, each with the processor behind it; elsewhere all at once)
+      for (final attempt in await _attempts(providers, path)) {
+        final list = attempt.providers;
+        final tried = '$path|${attempt.label ?? list.first.name}';
+        if (_refused.contains(tried)) continue;
+        try {
+          final extra = list.contains(OrtProvider.CORE_ML) ? {OrtProvider.CORE_ML: await coreMlOptions(path)} : attempt.options;
+          // (an accelerator takes what it supports and leaves the rest to the processor without a word: the profiler says how much)
+          final profile = list.first == OrtProvider.NNAPI || list.first == OrtProvider.QNN;
+          final preparing = onnxModelName(path);
+          onnxNoteRun(preparing, '$onnxPreparing${list.first.name}', running: true);
+          final OrtSession session;
+          try {
+            final making = OnnxRuntime().createSession(path, options: _withProviders(options, list, extra, profile));
+            // (a phone's NNAPI compiles the whole model while the session is made: a quarter of an hour was seen for a 344 MB one, and the
+            // compile cannot be stopped; so the processor takes over after [onnxCompileLimit], and the session that comes out later is closed)
+            session = list.first == OrtProvider.NNAPI || list.first == OrtProvider.QNN
+                ? await making.timeout(onnxCompileLimit, onTimeout: () {
+                    _tooSlow.add(path);
+                    unawaited(making.then((late) => late.close(), onError: (_) {}));
+                    throw TimeoutException('${list.first.name} did not get the model ready in ${onnxCompileLimit.inSeconds} s');
+                  })
+                : await making;
+          } finally {
+            onnxNoteRun(preparing, '$onnxPreparing${list.first.name}', running: false);
+          }
+          final label = attempt.label ?? list.first.name;
+          _report(model, label);
+          final placed = _place(session, path, list.first.name);
+          if (profile) {
+            _toProfile.add(placed);
+            onnxCompiledForChip.add(path);
+          }
+          return placed;
+        } catch (e) {
+          _report(model, 'CPU (${attempt.label ?? list.first.name} refused: $e)');
+          _refused.add(tried);
+          if (_tooSlow.contains(path)) break;
+        }
       }
     } else {
       _report(model, 'CPU (${accelerate ? (onnxAccelerationEnabled ? 'no accelerator here' : 'switched off') : 'decoder'})');
@@ -86,6 +115,24 @@ class OnnxRun {
   Timer? _settle;
   OnnxRun(this.model, this.on, this.at);
 }
+
+/// How long a session with NNAPI first may take to be made (it compiles the model for the chip then) before the processor is used.
+const onnxCompileLimit = Duration(seconds: 90);
+
+/// Models (by path) whose session was made with NNAPI first. NNAPI compiles the model again for every session and ONNX Runtime has no
+/// cache for that, so a reader keeps such a session open longer than the others.
+final onnxCompiledForChip = <String>{};
+
+/// The ways of asking for a session ('path|name') that the runtime refused: not asked again until the app is started again (a phone
+/// without Qualcomm's chip would otherwise fail QNN again for every model it opens).
+final _refused = <String>{};
+
+/// Models whose session with an accelerator did not get ready in time (see [onnxCompileLimit]).
+final _tooSlow = <String>{};
+
+/// What the runtime does while it makes a session with an accelerator first: the model is compiled for the chip then (on a phone's NNAPI
+/// that can take minutes), as [OnnxRun.on] '$onnxPreparing' and the provider's name.
+const onnxPreparing = 'prepare:';
 
 /// What the accelerator does while it works out a plan for a new input size (see [WarmSession]): in [OnnxRun.on].
 const onnxMakingPlan = 'plan';
@@ -249,7 +296,7 @@ List<OrtProvider> onnxPlatformAccelerators() {
     case TargetPlatform.macOS:
       return const [OrtProvider.CORE_ML, OrtProvider.CPU]; // Neural Engine / GPU
     case TargetPlatform.android:
-      return const [OrtProvider.NNAPI, OrtProvider.CPU]; // NPU / DSP / GPU where the phone has a driver
+      return const [OrtProvider.QNN, OrtProvider.NNAPI, OrtProvider.CPU]; // Snapdragon NPU and GPU (QNN) / whatever the phone's driver offers (NNAPI)
     case TargetPlatform.linux:
       return const [OrtProvider.CUDA, OrtProvider.MIGRAPHX, OrtProvider.OPEN_VINO, OrtProvider.CPU]; // only those the runtime pack in use has
     default:
@@ -257,8 +304,29 @@ List<OrtProvider> onnxPlatformAccelerators() {
   }
 }
 
+/// One way of asking for a session: the providers in order, their options, and a name for the report.
+typedef _Attempt = ({List<OrtProvider> providers, Map<OrtProvider, Map<String, String>>? options, String? label});
+
+/// The ways to ask for a session on this device, best first. On Android each accelerator is tried alone with the processor behind it
+/// (a phone has the one chip, and a refusal of QNN on a phone without Qualcomm's must not cost NNAPI): QNN on the NPU, QNN on the Adreno
+/// graphics chip, then NNAPI. Elsewhere all the accelerators are given at once.
+Future<List<_Attempt>> _attempts(List<OrtProvider> providers, String path) async {
+  if (defaultTargetPlatform != TargetPlatform.android) return [(providers: providers, options: null, label: null)];
+  final cpu = [OrtProvider.CPU];
+  return [
+    for (final p in providers)
+      if (p == OrtProvider.QNN) ...[
+        // (the NPU; fp16 is what the models in 16 bits need there)
+        (providers: [p, ...cpu], options: {p: {'backend_type': 'htp', 'enable_htp_fp16_precision': '1'}}, label: 'QNN (NPU)'),
+        (providers: [p, ...cpu], options: {p: {'backend_type': 'gpu'}}, label: 'QNN (GPU)'),
+      ] else if (p != OrtProvider.CPU)
+        (providers: [p, ...cpu], options: null, label: null),
+  ];
+}
+
 OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra, bool profile = false]) => OrtSessionOptions(
   profile: profile,
+  freeDimensions: o?.freeDimensions,
   intraOpNumThreads: o?.intraOpNumThreads,
   interOpNumThreads: o?.interOpNumThreads,
   providers: providers,

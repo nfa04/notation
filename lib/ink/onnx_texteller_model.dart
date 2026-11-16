@@ -69,6 +69,7 @@ class OnnxTexTeller implements ScoredTexTeller {
 
   Future<TexTellerReading> _read(Float32List pixels, int maxTokens) async {
     _idle?.cancel();
+    _decoderLetGo = false;
     // (the setting of where models run changed since the sessions were opened: opened again)
     if (_openedAt != onnxAccelerationChanges) await close();
     _openedAt = onnxAccelerationChanges;
@@ -93,6 +94,7 @@ class OnnxTexTeller implements ScoredTexTeller {
   }
 
   Future<WarmSession> _encoderSession() async {
+    // (shapes are not fixed: with them NNAPI took so much of the 32-bit encoder that its compile ran past ten minutes on a Pixel 8 Pro)
     final made = _encoder ?? await _timed<WarmSession>('open', () async => openWarmSession(_encoderPath, options: _options, oneSize: true, accelerate: _encoderPath.endsWith('encoder-gpu.onnx') || !await onnxNeedsFixedShapes()));
     _encoder = made;
     return made;
@@ -121,6 +123,7 @@ class OnnxTexTeller implements ScoredTexTeller {
   /// no reading has to wait for it. The encoder has one picture size only, so this is the one plan.
   Future<void> precompile() async {
     _idle?.cancel();
+    _decoderLetGo = false;
     try {
       final hidden = await _encode(Float32List(texTellerImageSize * texTellerImageSize));
       await hidden.dispose();
@@ -205,9 +208,21 @@ class OnnxTexTeller implements ScoredTexTeller {
   }
 
   // (not while the accelerator is making a plan: that would throw the minutes away and start it again)
+  /// How long the encoder stays open: NNAPI compiles it again for every new session (seconds to minutes, and no cache), so while it
+  /// runs there it is kept longer than the decoder (which the processor opens in a moment).
+  static const _chipKeep = Duration(minutes: 2);
+  bool _decoderLetGo = false;
+
   void _idleClose() {
     if (_encoder?.compiling != null) {
       _idle = Timer(keepOpen, _idleClose);
+    } else if (_encoder != null && !_decoderLetGo && onnxCompiledForChip.contains(_encoderPath) && _chipKeep > keepOpen) {
+      // (the decoder goes now, the encoder later)
+      _decoderLetGo = true;
+      final decoder = _decoder;
+      _decoder = null;
+      unawaited(decoder?.close());
+      _idle = Timer(_chipKeep - keepOpen, _idleClose);
     } else {
       unawaited(close());
     }
@@ -217,6 +232,7 @@ class OnnxTexTeller implements ScoredTexTeller {
   Future<void> close() async {
     _idle?.cancel();
     _idle = null;
+    _decoderLetGo = false;
     final encoder = _encoder, decoder = _decoder;
     _encoder = null;
     _decoder = null;
