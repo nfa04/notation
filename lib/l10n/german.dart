@@ -3369,7 +3369,7 @@ const germanTexts = <String, String>{
   'Not available in the browser.': 'Im Browser nicht verfügbar.',
   'Opened on': 'Geöffnet auf',
   'Failed': 'Fehlgeschlagen',
-  'The answer differs from the processor\'s by at most {n}': 'Die Antwort weicht höchstens um {n} von der des Prozessors ab',
+  'differs from the processor by at most {n}': 'weicht höchstens um {n} von dem des Prozessors ab',
   'preparing the model for {name} (can take minutes)': 'das Modell wird für {name} vorbereitet (kann Minuten dauern)',
   'preparing the model': 'Modell wird vorbereitet',
   'Graphics card is the encoder in 16 bits, for a graphics card runtime (AMD\'s cannot run the 8-bit one): twice the size, much quicker there, reads about as well. Changing it downloads the encoder. Full is the published encoder unchanged, in 32 bits: the largest, reads like the original, and the form a phone\'s accelerator can take most of.': 'Grafikkarte ist der Encoder in 16 Bit, für eine Grafikkarten-Laufzeit (die von AMD kann den 8-Bit-Encoder nicht ausführen): doppelt so gross, dort viel schneller, liest etwa gleich gut. Beim Wechsel wird der Encoder heruntergeladen. Voll ist der veröffentlichte Encoder unverändert in 32 Bit: der grösste, liest wie das Original und die Form, von der der Beschleuniger eines Handys am meisten übernehmen kann.',

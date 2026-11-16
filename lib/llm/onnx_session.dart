@@ -202,6 +202,21 @@ final _toProfile = <OrtSession>{};
 /// An accelerator's session says only that it was accepted: the part of the model it took may be small or nothing.
 final onnxSplits = ValueNotifier<Map<String, String>>(const {});
 
+/// What the profiler saw as text: "NNAPI 12 % of the time (7 parts), processor 88 % (1900 kernels)".
+String _splitText(Map<String, ({double ms, int kernels})> seen) {
+  final total = seen.values.fold<double>(0, (a, v) => a + v.ms);
+  final parts = <String>[];
+  for (final e in seen.entries.toList()..sort((a, b) => b.value.ms.compareTo(a.value.ms))) {
+    final name = e.key.replaceAll('ExecutionProvider', '');
+    final share = total <= 0 ? 0 : (100 * e.value.ms / total).round();
+    parts.add(name == 'CPU'
+        ? tr('processor {share} % ({kernels} kernels)', {'share': '$share', 'kernels': '${e.value.kernels}'})
+        : tr('{name} {share} % of the time ({kernels} parts)', {'name': name.toUpperCase(), 'share': '$share', 'kernels': '${e.value.kernels}'}));
+  }
+  if (!seen.keys.any((k) => !k.startsWith('CPU'))) parts.insert(0, tr('nothing ran on the accelerator'));
+  return parts.join(', ');
+}
+
 Future<void> _writeSplit(OrtSession session, String model) async {
   try {
     final seen = await session.endProfiling();
@@ -209,17 +224,7 @@ Future<void> _writeSplit(OrtSession session, String model) async {
       onnxSplits.value = {...onnxSplits.value, model: tr('the runtime could not say what ran on it')};
       return;
     }
-    final total = seen.values.fold<double>(0, (a, v) => a + v.ms);
-    final parts = <String>[];
-    for (final e in seen.entries.toList()..sort((a, b) => b.value.ms.compareTo(a.value.ms))) {
-      final name = e.key.replaceAll('ExecutionProvider', '');
-      final share = total <= 0 ? 0 : (100 * e.value.ms / total).round();
-      parts.add(name == 'CPU'
-          ? tr('processor {share} % ({kernels} kernels)', {'share': '$share', 'kernels': '${e.value.kernels}'})
-          : tr('{name} {share} % of the time ({kernels} parts)', {'name': name.toUpperCase(), 'share': '$share', 'kernels': '${e.value.kernels}'}));
-    }
-    if (!seen.keys.any((k) => !k.startsWith('CPU'))) parts.insert(0, tr('nothing ran on the accelerator'));
-    final text = parts.join(', ');
+    final text = _splitText(seen);
     debugPrint('onnx: $model ran as: $text');
     onnxSplits.value = {...onnxSplits.value, model: text};
   } catch (e) {
@@ -458,15 +463,14 @@ Future<OrtValue> int64Value(List<int> values, List<int> shape) async {
 }
 
 
-/// Runs a small model of two convolutions on the accelerator (whichever is first here) and on the processor, and says in a line or two what
-/// opened it, what ran where, and whether the two answers agree. It shows that an accelerator works at all, with a model it surely takes
+/// Runs a small model of two convolutions with each way of asking for an accelerator here, one after the other, and says in a line for each
+/// what ran where and whether the answer agrees with the processor's. It shows that an accelerator works at all, with a model it surely takes
 /// (a large one may be refused for its own reasons). Asks for the accelerator whatever the setting says.
 Future<List<String>> onnxAcceleratorCheck() async {
   if (kIsWeb) return [tr('Not available in the browser.')];
   final dir = await getTemporaryDirectory();
   final file = File(p.join(dir.path, 'accelerator_check.onnx'));
   await file.writeAsBytes((await rootBundle.load('assets/diagnostics/accelerator_check.onnx')).buffer.asUint8List(), flush: true);
-  final model = onnxModelName(file.path);
   final input = Float32List.fromList([for (var i = 0; i < 8 * 32 * 32; i++) math.sin(i * 0.37) * 2]);
   Future<Float32List> run(OrtSession s) async {
     final x = await OrtValue.fromList(input, [1, 8, 32, 32]);
@@ -480,31 +484,33 @@ Future<List<String>> onnxAcceleratorCheck() async {
     return list;
   }
 
-  _refused.removeWhere((e) => e.startsWith('${file.path}|'));
   final lines = <String>[];
-  OrtSession? chip, cpu;
+  // (every way of asking for a session on its own, the processor's answer first to compare with)
+  final cpu = await OnnxRuntime().createSession(file.path);
+  final Float32List expected;
   try {
-    chip = await openOnnxSession(file.path, force: true);
-    final a = await run(chip);
-    // (the profile is read when the first run ends)
-    for (var i = 0; i < 20 && !onnxSplits.value.containsKey(model); i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-    }
-    lines.add('${tr('Opened on')}: ${onnxSessionReport[model] ?? '?'}');
-    final split = onnxSplits.value[model];
-    if (split != null) lines.add(split);
-    cpu = await openOnnxSession(file.path, accelerate: false);
-    final b = await run(cpu);
-    var worst = 0.0;
-    for (var i = 0; i < a.length && i < b.length; i++) {
-      worst = math.max(worst, (a[i] - b[i]).abs());
-    }
-    lines.add(tr('The answer differs from the processor\'s by at most {n}', {'n': worst.toStringAsExponential(1)}));
-  } catch (e) {
-    lines.add('${tr('Failed')}: $e');
+    expected = await run(cpu);
   } finally {
-    await chip?.close();
-    await cpu?.close();
+    await cpu.close();
+  }
+  final accelerators = [...await onnxAvailableAccelerators(), OrtProvider.CPU];
+  for (final attempt in await _attempts(accelerators, file.path)) {
+    final name = attempt.label ?? attempt.providers.first.name;
+    OrtSession? s;
+    try {
+      s = await OnnxRuntime().createSession(file.path, options: _withProviders(null, attempt.providers, attempt.options, true)).timeout(onnxCompileLimit);
+      final got = await run(s);
+      final seen = await s.endProfiling();
+      var worst = 0.0;
+      for (var i = 0; i < got.length && i < expected.length; i++) {
+        worst = math.max(worst, (got[i] - expected[i]).abs());
+      }
+      lines.add('$name: ${seen == null || seen.isEmpty ? tr('the runtime could not say what ran on it') : _splitText(seen)}; ${tr('differs from the processor by at most {n}', {'n': worst.toStringAsExponential(1)})}');
+    } catch (e) {
+      lines.add('$name: ${tr('Failed')}: $e');
+    } finally {
+      await s?.close();
+    }
   }
   return lines;
 }
