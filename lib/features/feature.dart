@@ -146,8 +146,9 @@ enum UseArea {
 
 /// Ready-made sets of tools.
 class FeaturePresets {
-  /// What everybody gets, whatever they use the app for.
-  static const basics = {Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud, Feature.spelling, Feature.highlighter, Feature.roller, Feature.lasso, Feature.images, Feature.pdf, Feature.history, Feature.noteFiles, Feature.calendar};
+  /// What everybody gets, whatever they use the app for. Working together is among them: a device without it takes no part in the live
+  /// sessions of the person's own devices (its editor does not register), whatever the others do.
+  static const basics = {Feature.live, Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud, Feature.spelling, Feature.highlighter, Feature.roller, Feature.lasso, Feature.images, Feature.pdf, Feature.history, Feature.noteFiles, Feature.calendar};
 
   /// Only what a notebook with a pen needs.
   static const minimal = <Feature>{Feature.pdf};

@@ -32,7 +32,10 @@ void main() {
       expect(FeaturePresets.forAreas(const []), FeaturePresets.basics);
       final maths = FeaturePresets.forAreas({UseArea.maths});
       expect(maths, containsAll([...FeaturePresets.basics, Feature.solve, Feature.plots, Feature.mathInk]));
-      expect(FeaturePresets.forAreas({UseArea.maths, UseArea.together}), containsAll([...maths, Feature.live]));
+      expect(FeaturePresets.forAreas({UseArea.maths, UseArea.together}), containsAll(maths));
+      // (working together is everybody's: a device without it takes no part in the live sessions of the person's own devices)
+      expect(maths, contains(Feature.live));
+      expect(FeaturePresets.basics, contains(Feature.live));
     });
 
     test('someone who studies philosophy never gets the maths tools; a mathematician keeps no language tools they did not ask for', () {
