@@ -28,8 +28,8 @@ class GlmOnnxReader with WidgetsBindingObserver {
 
   GlmOnnxReader({this.keepOpen = const Duration(seconds: 15)});
 
-  /// Where the time went, in microseconds, by step (the vision network, the prompt, and for each token: the run of the language model, its
-  /// scores brought over, the choice of the token, the pause for the screen, the word's row of the table): for measuring. Cleared by the
+  /// Where the time went, in microseconds, by step (the vision network, the prompt, and for each token: the run of the language model, the
+  /// making of its inputs, the choice of the token (see [TokenPicker]), the word's row of the table): for measuring. Cleared by the
   /// caller.
   final Map<String, int> spent = {};
 
@@ -213,8 +213,6 @@ Future<GlmReading> _write(OrtSession session, TokenPicker picker, GlmPicture pic
     }
   }
 
-  Future<void> breathe() => timed('step.breathe', () => Future<void>.delayed(const Duration(milliseconds: 8)));
-
   final prompt = glmPrompt(picture.gridHeight, picture.gridWidth);
   final positions = glmPromptPositions(picture.gridHeight, picture.gridWidth);
   final empty = await OrtValue.fromList(Float32List(glmKvHeads * glmHeadDim), [1, glmKvHeads, 1, glmHeadDim]);
@@ -226,9 +224,9 @@ Future<GlmReading> _write(OrtSession session, TokenPicker picker, GlmPicture pic
   final mask = <int>[0];
 
   Future<OrtValue> step(Float32List embeddings, List<int> where, int count) async {
-    final input = await OrtValue.fromList(embeddings, [1, count, glmHidden]);
-    final position = await int64Value(where, [3, 1, count]);
-    final attention = await int64Value(mask, [1, mask.length]);
+    // (made together: each is a call to the plugin, and they need not wait for one another)
+    final made = await timed('step.inputs', () => Future.wait([OrtValue.fromList(embeddings, [1, count, glmHidden]), int64Value(where, [3, 1, count]), int64Value(mask, [1, mask.length])]));
+    final input = made[0], position = made[1], attention = made[2];
     final out = await timed(count == 1 ? 'step.run' : 'prompt.run', () => session.run({'inputs_embeds': input, 'position_ids': position, 'attention_mask': attention, ...cache}));
     mask.addAll(List.filled(count, 1));
     for (final v in [input, position, attention, ...held]) {
@@ -262,7 +260,6 @@ Future<GlmReading> _write(OrtSession session, TokenPicker picker, GlmPicture pic
       logProbs.add(picked.logProb);
       result.add(best);
       spent['tokens'] = (spent['tokens'] ?? 0) + 1;
-      await breathe();
       logits = await step(await timed('step.embed', () => table.row(best)), [next, next, next], 1);
       next++;
     }

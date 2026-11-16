@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../llm/onnx_session.dart';
+import '../llm/token_picker.dart';
 import '../llm/warm_session.dart';
 import '../web/browser_threads.dart';
 import 'dart:io';
@@ -29,6 +30,7 @@ class OnnxTexTeller implements ScoredTexTeller {
   WarmSession? _encoder;
   int _openedAt = onnxAccelerationChanges;
   OrtSession? _decoder;
+  TokenPicker? _picker;
   Timer? _idle;
 
   /// Where the time went, in microseconds, by step (opening the sessions, the picture to the encoder, the encoder, the token to
@@ -176,10 +178,13 @@ class OnnxTexTeller implements ScoredTexTeller {
           await token.dispose();
         }
         final scores = out['logits']!;
-        final flat = await _timed('step.scores', () => scores.asFlattenedList());
+        // (picked where the scores are: two numbers come over instead of all of them, see [TokenPicker])
+        final picker = _picker ?? await _timed<TokenPicker>('open', TokenPicker.open);
+        _picker = picker;
+        final picked = await _timed('step.scores', () => picker.pick(scores));
         release(scores);
-        final next = lastArgMax(flat, scores.shape.last);
-        logProb += lastLogProb(flat, scores.shape.last, next);
+        final next = picked.token;
+        logProb += picked.logProb;
 
         await _timed('step.cache', () async {
           for (final n in names) {
@@ -239,10 +244,12 @@ class OnnxTexTeller implements ScoredTexTeller {
     _idle?.cancel();
     _idle = null;
     _decoderLetGo = false;
-    final encoder = _encoder, decoder = _decoder;
+    final encoder = _encoder, decoder = _decoder, picker = _picker;
     _encoder = null;
     _decoder = null;
+    _picker = null;
     await encoder?.close();
     await decoder?.close();
+    await picker?.close();
   }
 }
