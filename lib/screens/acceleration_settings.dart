@@ -43,6 +43,8 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
   int _prepared = 0, _prepareTotal = 0;
   String? _prepareError;
   List<String> _plans = const [];
+  bool _checking = false;
+  List<String>? _checked;
   bool _timing = false;
   List<String>? _timed;
   String? _timeError;
@@ -131,6 +133,21 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
       if (mounted) setState(() => _plans = lines);
     } catch (_) {
       // (nothing to show)
+    }
+  }
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _checked = null;
+    });
+    try {
+      final lines = await onnxAcceleratorCheck();
+      if (mounted) setState(() => _checked = lines);
+    } catch (e) {
+      if (mounted) setState(() => _checked = ['$e']);
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -320,6 +337,11 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
         ),
         if (_prepareError != null) Text.verbatim(_prepareError!, key: const ValueKey('precompile-error'), style: muted.copyWith(color: Theme.of(context).colorScheme.error)),
         for (final l in _plans) Text.verbatim(l, key: ValueKey('plan-status-$l'), style: muted),
+      ],
+      if (has) ...[
+        const SizedBox(height: 8),
+        OutlinedButton(key: const ValueKey('acceleration-check'), onPressed: _checking ? null : _check, child: Text(_checking ? tr('Checking…') : tr('Check the accelerator with a small test model'))),
+        for (final l in _checked ?? const <String>[]) Text.verbatim(l, style: muted),
       ],
       if (has && widget.benchmark != null) ...[
         const SizedBox(height: 8),

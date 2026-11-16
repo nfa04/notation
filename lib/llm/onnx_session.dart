@@ -5,6 +5,8 @@ import 'dart:io' show Directory, File, FileSystemEntityType;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
+
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 // ignore: implementation_imports
 import 'package:flutter_onnxruntime/src/flutter_onnxruntime_platform_interface.dart' show FlutterOnnxruntimePlatform;
@@ -453,4 +455,56 @@ Future<int> coreMlDropConvertedWeights(String cache) async {
 Future<OrtValue> int64Value(List<int> values, List<int> shape) async {
   if (kIsWeb) return OrtValue.fromMap(await FlutterOnnxruntimePlatform.instance.createOrtValue('int64', values, shape));
   return OrtValue.fromList(Int64List.fromList(values), shape);
+}
+
+
+/// Runs a small model of two convolutions on the accelerator (whichever is first here) and on the processor, and says in a line or two what
+/// opened it, what ran where, and whether the two answers agree. It shows that an accelerator works at all, with a model it surely takes
+/// (a large one may be refused for its own reasons). Asks for the accelerator whatever the setting says.
+Future<List<String>> onnxAcceleratorCheck() async {
+  if (kIsWeb) return [tr('Not available in the browser.')];
+  final dir = await getTemporaryDirectory();
+  final file = File(p.join(dir.path, 'accelerator_check.onnx'));
+  await file.writeAsBytes((await rootBundle.load('assets/diagnostics/accelerator_check.onnx')).buffer.asUint8List(), flush: true);
+  final model = onnxModelName(file.path);
+  final input = Float32List.fromList([for (var i = 0; i < 8 * 32 * 32; i++) math.sin(i * 0.37) * 2]);
+  Future<Float32List> run(OrtSession s) async {
+    final x = await OrtValue.fromList(input, [1, 8, 32, 32]);
+    final out = await s.run({s.inputNames.first: x});
+    final y = out.values.first;
+    final list = Float32List.fromList((await y.asFlattenedList()).map((e) => (e as num).toDouble()).toList());
+    await x.dispose();
+    for (final v in out.values) {
+      await v.dispose();
+    }
+    return list;
+  }
+
+  _refused.removeWhere((e) => e.startsWith('${file.path}|'));
+  final lines = <String>[];
+  OrtSession? chip, cpu;
+  try {
+    chip = await openOnnxSession(file.path, force: true);
+    final a = await run(chip);
+    // (the profile is read when the first run ends)
+    for (var i = 0; i < 20 && !onnxSplits.value.containsKey(model); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+    lines.add('${tr('Opened on')}: ${onnxSessionReport[model] ?? '?'}');
+    final split = onnxSplits.value[model];
+    if (split != null) lines.add(split);
+    cpu = await openOnnxSession(file.path, accelerate: false);
+    final b = await run(cpu);
+    var worst = 0.0;
+    for (var i = 0; i < a.length && i < b.length; i++) {
+      worst = math.max(worst, (a[i] - b[i]).abs());
+    }
+    lines.add(tr('The answer differs from the processor\'s by at most {n}', {'n': worst.toStringAsExponential(1)}));
+  } catch (e) {
+    lines.add('${tr('Failed')}: $e');
+  } finally {
+    await chip?.close();
+    await cpu?.close();
+  }
+  return lines;
 }
