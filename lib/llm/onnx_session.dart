@@ -36,7 +36,7 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
         final tried = '$path|${attempt.label ?? list.first.name}';
         if (_refused.contains(tried)) continue;
         try {
-          final extra = list.contains(OrtProvider.CORE_ML) ? {OrtProvider.CORE_ML: await coreMlOptions(path)} : attempt.options;
+          final extra = list.contains(OrtProvider.CORE_ML) && onnxCheckedForFp16(path) ? {OrtProvider.CORE_ML: await coreMlOptions(path)} : attempt.options;
           // (an accelerator takes what it supports and leaves the rest to the processor without a word: the profiler says how much)
           final profile = list.first == OrtProvider.NNAPI || list.first == OrtProvider.QNN;
           final preparing = onnxModelName(path);
@@ -269,6 +269,23 @@ bool padToFixedSizes = true;
 /// for the next time). CUDA, OpenVINO and the processor take any size.
 Future<bool> onnxNeedsFixedShapes() async => onnxAccelerationEnabled && (await onnxAvailableAccelerators()).firstOrNull == OrtProvider.MIGRAPHX;
 
+/// The model files whose 16-bit form was checked against the processor (the statistics of their norms are kept in 32 bits, see
+/// tool/texteller_fix_ln_fp16.py): only these may run where an accelerator computes in 16 bits throughout. Measured on a Mac's CoreML
+/// (MLProgram, .github/workflows/coreml-check.yml): the fixed formula encoder 0.8 % from the processor; the 8-bit one 15 % (the same
+/// overflow as on AMD's card) and the 8-bit vision network could not be built at all.
+const onnxFp16Files = {'encoder-gpu.onnx', 'vision-gpu.onnx'};
+
+bool onnxCheckedForFp16(String path) => onnxFp16Files.contains(path.split('/').last);
+
+/// True when the accelerator in use should only get the files of [onnxFp16Files], the others staying on the processor: MIGraphX (cannot
+/// run quantised operators, compiles for exact sizes) and CoreML (computes in 16 bits: a quantised or 32-bit file gives wrong answers, or
+/// is slower than the processor).
+Future<bool> onnxTakesOnlyFp16Files() async {
+  if (!onnxAccelerationEnabled) return false;
+  final first = (await onnxAvailableAccelerators()).firstOrNull;
+  return first == OrtProvider.MIGRAPHX || first == OrtProvider.CORE_ML;
+}
+
 /// Whether the picture of a line of writing is padded now: the setting, or the provider needs it.
 Future<bool> padPicturesNow() async => padToFixedSizes || await onnxNeedsFixedShapes();
 
@@ -360,7 +377,7 @@ OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> provide
   logSeverityLevel: o?.logSeverityLevel,
 );
 
-/// CoreML's options for the model at [path] (iOS, macOS). Without options ONNX Runtime uses the older NeuralNetwork format, which takes
+/// CoreML's options for the model at [path] (iOS, macOS), given to the files of [onnxFp16Files] only. Without options ONNX Runtime uses the older NeuralNetwork format, which takes
 /// fewer operators, and converts the model again at every session (seconds to minutes for the vision network). So: the MLProgram
 /// format, every compute unit, and a folder that keeps the converted model. CoreML does not notice when the file behind a cached model
 /// changes (its key is the path), so the folder is named by the file's size and time, and the folders of older versions are removed.
