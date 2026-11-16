@@ -56,6 +56,12 @@ abstract class NoteEditorHandle {
   Future<List<String>> pdfTextLines();
 }
 
+/// An editor that was kept out of sight and is shown again: it takes what came to the note meanwhile (from the cloud, from another
+/// device) unless the person changed it here.
+abstract class StoreRefreshable {
+  Future<void> refreshFromStore();
+}
+
 /// An editor that can be given a title from outside (the note it shows has no title yet). A note that is open must be named through its
 /// editor, which writes its own title back when it saves.
 abstract class TitleSetter {

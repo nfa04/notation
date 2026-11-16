@@ -350,6 +350,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       await _putAway(id);
     }
     if (!mounted) return;
+    final back = [for (final id in entering) if (_kept.containsKey(id)) id]; // (editors that were kept out of sight)
     final before = _visible.contains(_focused) ? _focused : null;
     var focused = focus ?? _focused;
     if (!newShown.contains(focused)) focused = newShown.isEmpty ? null : newShown.last;
@@ -382,6 +383,14 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         _recent.insert(0, focused);
       }
       if (_isNote(focused)) _lastNote = focused;
+      if (back.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (final id in back) {
+            final editor = _editorOf(id);
+            if (editor is StoreRefreshable) unawaited((editor as StoreRefreshable).refreshFromStore());
+          }
+        });
+      }
       if (_kept.length > _keptMax) WidgetsBinding.instance.addPostFrameCallback((_) => _expireKept());
       if (focused != null && focused != before && _alive.contains(focused) && const {0, 1, 2}.contains(_pageOf(focused))) WidgetsBinding.instance.addPostFrameCallback((_) => _pageRefresh.ring());
       if (focused != null && _isGraph(focused)) _lastGraph = focused;

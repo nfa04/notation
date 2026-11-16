@@ -271,6 +271,8 @@ void main() {
     }
     expect(find.byType(FixedPageNoteEditor), findsNothing, reason: 'out of sight');
     expect(find.byType(FixedPageNoteEditor, skipOffstage: false), findsOneWidget, reason: 'but kept');
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.runAsync(() => repo.renameNote(a, 'Renamed elsewhere')); // (another device wrote it meanwhile)
     await tester.tap(find.byKey(ValueKey('tab-$a')).first);
     for (var i = 0; i < 4; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
@@ -278,6 +280,11 @@ void main() {
     }
     expect(find.byType(FixedPageNoteEditor), findsOneWidget);
     expect(identical(tester.state(find.byType(FixedPageNoteEditor)), editor), isTrue, reason: 'the same editor, not a new one');
+    for (var i = 0; i < 6; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.widgetWithText(TextField, 'Renamed elsewhere'), findsOneWidget, reason: 'what came meanwhile is taken');
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
   });

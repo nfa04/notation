@@ -61,7 +61,7 @@ import '../algebra/equation_solver.dart';
 import '../algebra/mistake_card.dart';
 import '../algebra/plot.dart';
 import '../algebra/text_equation.dart';
-import '../automations/automation_service.dart' show ImageExporter, InkPreparer, NoteEditorHandle, TitleSetter;
+import '../automations/automation_service.dart' show ImageExporter, InkPreparer, NoteEditorHandle, StoreRefreshable, TitleSetter;
 import '../mcp/agent_editable.dart';
 import '../collab/collab_service.dart';
 import '../collab/invite.dart';
@@ -595,7 +595,7 @@ class FixedPageNoteEditor extends StatefulWidget {
   State<FixedPageNoteEditor> createState() => _FixedPageNoteEditorState();
 }
 
-class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsBindingObserver implements NoteEditorHandle, InkPreparer, TitleSetter, ImageExporter, AgentEditable {
+class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsBindingObserver implements NoteEditorHandle, StoreRefreshable, InkPreparer, TitleSetter, ImageExporter, AgentEditable {
   /// Reads the writing of the note in the background: ahead of time, line by line for the maths check, and for the search (see
   /// `editor_ink_prefetch.dart`).
   late final NoteInkReader _reader = NoteInkReader(
@@ -1547,6 +1547,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   Future<void> _saveChain = Future.value();
   int? _lastSavedSignature;
 
+  /// When the database's copy was last edited, as far as this editor knows (what it loaded or wrote).
+  DateTime? _dbStamp;
+
   /// How many saves failed one after the other (0: the last one went through).
   int _saveFailures = 0;
   CollabSession? _live;
@@ -1738,6 +1741,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   Future<void> _load({bool reload = false}) async {
     try {
+      final stamp = (await widget.repository.noteTimes(widget.noteId))?.edited;
       final note = await widget.repository.loadNote(widget.noteId);
       if (note == null) {
         throw StateError('note ${widget.noteId} no longer exists');
@@ -1804,6 +1808,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         _loaded = true;
         if (!_ready.isCompleted) _ready.complete();
         _lastSavedSignature = _signature();
+        _dbStamp = stamp;
         _metaBase = _captureMeta();
         _readCitationStyle();
         widget.locks?.modeOf(widget.noteId).then((m) {
@@ -1839,6 +1844,24 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
       if (!_ready.isCompleted) _ready.complete();
       if (!_looked.isCompleted) _looked.complete();
     }
+  }
+
+  /// The tab of this note is shown again after it was out of sight: what came to the note meanwhile is taken (a newer copy from the
+  /// cloud or a share, or what another device wrote into the database), unless there is something here that is not saved, or a live
+  /// session is on.
+  @override
+  Future<void> refreshFromStore() async {
+    if (!mounted || !_loaded || _sealedAway || _live != null) return;
+    if (_signature() != _lastSavedSignature) {
+      await _saveNow(); // (what is here wins)
+      return;
+    }
+    await _lookForNewerCopy();
+    if (!mounted || _live != null || _signature() != _lastSavedSignature) return;
+    final t = await widget.repository.noteTimes(widget.noteId);
+    if (!mounted || t == null || _dbStamp == null || !t.edited.isAfter(_dbStamp!)) return;
+    await _load(reload: true);
+    if (mounted) ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(tr('Updated: a newer copy of this note came from the cloud'))));
   }
 
   /// The note is on the screen as it is here; a look whether the cloud folder has a newer copy, which replaces it if the person has not
@@ -1971,7 +1994,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     // one save at a time, in order
     return _saveChain = _saveChain
         .then((_) => widget.repository.saveNote(note))
-        .then((_) => _savedNow())
+        .then((_) async {
+          _savedNow();
+          _dbStamp = (await widget.repository.noteTimes(widget.noteId))?.edited;
+        })
         .catchError((Object e) {
           _lastSavedSignature = null; // try again on the next change
           debugPrint('saving note failed: $e');
