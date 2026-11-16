@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:convert' show jsonDecode, jsonEncode, utf8;
 import 'package:flutter/material.dart' hide Text;
+import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/rendering.dart' show RenderBox, RenderParagraph, RenderRepaintBoundary, ScrollCacheExtent;
 import '../pdf/pdf_content_editor.dart';
 import '../pdf/page_cache.dart';
@@ -999,8 +1000,21 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   final ValueNotifier<(int, int)> _sheetsNear = ValueNotifier((0, 8));
   late final Listenable _readSheets = Listenable.merge([_readPieces, _sheetsNear]);
 
+  bool _lookingSoon = false;
+
   void _lookForSheets() {
     if (!_pageScroll.hasClients) return;
+    // (told while the tree is being built or laid out, the sheets' builder cannot be marked: look once the frame is done)
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      if (_lookingSoon) return;
+      _lookingSoon = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _lookingSoon = false;
+        if (mounted) _lookForSheets();
+      });
+      return;
+    }
     final step = (basePageHeight + _sheetGap) * _pageScale;
     if (step <= 0) return;
     final first = (_pageScroll.offset / step).floor();
