@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart' show WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
@@ -68,7 +70,13 @@ class GlmOnnxReader with WidgetsBindingObserver {
       // (a quantised network cannot run on an accelerator that compiles for exact sizes: it is cut into pieces, each compiled, and the
       // quantised ones run on the processor anyway, so it would only make the first reading take for ever; CoreML cannot build the 8-bit
       // one as an MLProgram, and its older format ran it 3 to 10 times slower than the processor on a Mac)
-      final vision = _vision ??= await openWarmSession(visionPath, options: _options(), accelerate: onnxCheckedForFp16(visionPath) || !await onnxTakesOnlyFp16Files());
+      // (on CoreML the 16-bit file runs one picture width at a time, the number of patches fixed; while a width is first built, the
+      // processor reads, with the 8-bit file if it is still there: quicker on the processor than the 16-bit one)
+      final vision = _vision ??= await openWarmSession(visionPath,
+          options: _options(),
+          accelerate: onnxCheckedForFp16(visionPath) || !await onnxTakesOnlyFp16Files(),
+          pin: glmVisionPin,
+          processorPath: _quickerOnProcessor(visionPath));
       final features = await _seeAll(vision, pictures);
       final table = _table ??= await GlmEmbeddings.open(embeddingsPath);
       final language = _language ??= await openOnnxSession(textPath, options: _options(), accelerate: false);
@@ -262,3 +270,14 @@ Future<GlmReading> _write(OrtSession session, GlmPicture picture, Float32List fe
 /// What was read of one picture: its tokens, how sure the model was of them all together (see [GlmOnnxReader.readScored]), and the
 /// log probability the model gave each token it chose (as many as the tokens).
 typedef GlmReading = ({List<int> tokens, double confidence, List<double> logProbs});
+
+/// The vision network's free input size: the number of patches (pixel_values is [patches, 1176]). CoreML can only build the network
+/// with it fixed (it fails on the free one, error -14), so it runs one picture width at a time (see [PinnedSize]).
+const PinnedSize glmVisionPin = (name: '4*m', input: 'pixel_values', axis: 0);
+
+/// The 8-bit vision file next to the 16-bit one, if it is there: the processor reads quicker with it (the answers have the same shape).
+String? _quickerOnProcessor(String visionPath) {
+  if (kIsWeb || !visionPath.endsWith('/vision-gpu.onnx')) return null;
+  final standard = '${visionPath.substring(0, visionPath.length - 'vision-gpu.onnx'.length)}vision.onnx';
+  return File(standard).existsSync() ? standard : null;
+}

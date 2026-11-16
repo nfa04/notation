@@ -51,14 +51,18 @@ jobs:
           python -c "import onnxruntime as o; print(o.__version__, o.get_available_providers())"
           model="$RUNNER_TEMP/models/glm/vision-gpu.onnx"; out="$RUNNER_TEMP/probe"; mkdir -p "$out"
           probe() { echo "::group::$*"; perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
-          # the CoreML cache: how big one size's converted model is on disk, and what a later session (a new process) costs with it
-          for size in 10x48 10x64; do
-            probe reference $size
-            probe coreml $size ALL 1
-            probe coreml $size ALL 1                 # (again, a new process: from the cache)
-          done
-          echo "::group::cache sizes"; du -sh "$out"/cache-* | tee -a probe.log; du -sh "$RUNNER_TEMP/models/glm"/vision-gpu.onnx.data | tee -a probe.log; echo "::endgroup::"
-          find "$out" -maxdepth 4 -type d | head -40 | tee -a probe.log
+          # the CoreML cache holds the converted model (with its weights) AND the compiled one (with them again): about 1.6 GB per size.
+          # On a cache hit ONNX Runtime only checks the converted model's folder and loads compiled_model.mlmodelc: so the converted
+          # weights (model/Data) should be deletable after the first build. Checked here: build, delete, open again in a new process.
+          probe reference 10x48
+          probe coreml 10x48 ALL 1
+          c="$out/cache-vision-gpu.onnx-ALL-1-10x48"
+          echo "::group::before"; du -sh "$c" | tee -a probe.log; echo "::endgroup::"
+          find "$c" -type d -path '*/model/Data' -prune -exec rm -rf {} +
+          echo "::group::after deleting the converted weights"; du -sh "$c" | tee -a probe.log; find "$c" -maxdepth 3 | head -12; echo "::endgroup::"
+          probe coreml 10x48 ALL 1                   # (a new process: must say "already cached", answer the same, write nothing new)
+          du -sh "$c" | tee -a probe.log
+          grep -c "already cached" probe.log | tee -a probe.log
       - name: Summary
         if: always()
         run: |

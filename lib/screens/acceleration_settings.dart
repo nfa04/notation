@@ -36,6 +36,7 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
   bool _cpuOnly = false;
   bool _pad = true;
   bool _needsFixed = false; // the accelerator compiles for exact sizes: padding cannot be turned off
+  bool _coreMl = false; // CoreML: the handwriting reader's 16-bit file runs one picture width at a time, so it pads anyway
   List<String>? _found; // null: still asking
   bool _preparing = false;
   bool _stopPreparing = false;
@@ -158,12 +159,14 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
       final cpu = await widget.repository.settings.get(onnxAccelerationSetting) == 'cpu';
       final pad = await widget.repository.settings.get(onnxPadSetting) != 'off';
       final fixed = await onnxNeedsFixedShapes();
+      final coreMl = await onnxUsesCoreMl();
       final found = [for (final p in await onnxAvailableAccelerators()) _label(p.name)];
       if (mounted) {
         setState(() {
           _cpuOnly = cpu;
           _pad = pad;
           _needsFixed = fixed;
+          _coreMl = coreMl;
           _found = found;
         });
       }
@@ -185,7 +188,13 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
     await widget.repository.settings.set(onnxAccelerationSetting, cpuOnly ? 'cpu' : 'auto');
     await applyOnnxAcceleration(widget.repository.settings.get);
     final fixed = await onnxNeedsFixedShapes();
-    if (mounted) setState(() => _needsFixed = fixed);
+    final coreMl = await onnxUsesCoreMl();
+    if (mounted) {
+      setState(() {
+        _needsFixed = fixed;
+        _coreMl = coreMl;
+      });
+    }
   }
 
   Future<void> _choosePad(bool on) async {
@@ -288,11 +297,13 @@ class _AccelerationSettingsState extends State<AccelerationSettings> {
         subtitle: Text(
           _needsFixed
               ? tr('Needed with this accelerator: it works out a plan for every picture size it sees, which takes minutes. Pictures of handwriting are made one of a few widths (about a fifth more work) so each plan is made once.')
-              : tr('Makes pictures of handwriting one of a few widths, so an accelerator that works out a plan for each size (AMD) does it a few times, not for every line. Costs about a fifth more work; switch it off where the accelerator takes any size.'),
+              : _coreMl
+                  ? tr('Always on with CoreML for the "Graphics card" size of the handwriting model: CoreML prepares it once for each picture width (seconds, kept for the next start), so pictures are made one of a few widths.')
+                  : tr('Makes pictures of handwriting one of a few widths, so an accelerator that works out a plan for each size (AMD) does it a few times, not for every line. Costs about a fifth more work; switch it off where the accelerator takes any size.'),
           style: muted,
         ),
-        value: _pad || _needsFixed,
-        onChanged: _needsFixed ? null : _choosePad,
+        value: _pad || _needsFixed || _coreMl,
+        onChanged: _needsFixed || _coreMl ? null : _choosePad,
       ),
       if (has && _needsFixed && widget.precompile != null) ...[
         const SizedBox(height: 8),

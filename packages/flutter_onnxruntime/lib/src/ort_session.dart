@@ -140,7 +140,7 @@ class OrtSessionOptions {
   // collect what each provider ran, for [OrtSession.endProfiling] (Android)
   final bool? profile;
   // sizes for the model's named free dimensions ({'batch_size': 1, 'height': 448}), fixed when the session is made: accelerators such as
-  // NNAPI only take nodes whose shapes are known (Android)
+  // NNAPI only take nodes whose shapes are known (Android); CoreML cannot build some models whose input size is free (iOS, macOS)
   final Map<String, int>? freeDimensions;
 
   OrtSessionOptions({
