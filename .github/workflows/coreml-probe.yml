@@ -51,17 +51,20 @@ jobs:
           python -c "import onnxruntime as o; print(o.__version__, o.get_available_providers())"
           model="$RUNNER_TEMP/models/glm/vision-gpu.onnx"; out="$RUNNER_TEMP/probe"; mkdir -p "$out"
           probe() { echo "::group::$*"; perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
-          # where CoreML's answer moves away from the processor's: every block's inner tensors as outputs (tool/coreml_probe/add_outputs.py),
-          # the copy saved next to the weights file it reads
-          python -I tool/coreml_probe/add_outputs.py "$model" "$RUNNER_TEMP/models/glm/vision-gpu-probe.onnx" > "$out/map.tsv"
-          probe_model="$RUNNER_TEMP/models/glm/vision-gpu-probe.onnx"
-          for run in "10x24 ALL" "10x24 CPUAndGPU" "10x96 ALL"; do
-            set -- $run
-            echo "::group::bisect $1 $2"
-            perl -e 'alarm shift; exec @ARGV' 1500 python -I tool/coreml_probe/probe_glm_vision.py "$probe_model" "$out" bisect $1 "$out/map.tsv" $2 2>&1 \
-              | tee -a probe.log | grep -E "probe-result|rror" | cut -c1-300; echo "::endgroup::"
+          # 32-bit islands in blocks 13-17, where the bisection found the answer moving away (tool/coreml_probe/fp32_islands.py): the
+          # feed-forward parts, the attention, or both; each copy saved next to the weights file it reads
+          glm="$RUNNER_TEMP/models/glm"
+          for p in mlp attn both; do python -I tool/coreml_probe/fp32_islands.py "$model" "$glm/vision-isl-$p.onnx" 13 17 $p; done
+          probe_m() { m="$1"; shift; echo "::group::$(basename $m) $*"; perl -e 'alarm shift; exec @ARGV' 1200 python -I tool/coreml_probe/probe_glm_vision.py "$m" "$out" "$@" 2>&1 \
+            | tee -a probe.log | grep -E "probe-result|number of partitions|rror" | cut -c1-400; echo "::endgroup::"; }
+          for size in 10x96 10x24; do
+            probe_m "$model" reference $size
+            for m in "$model" "$glm/vision-isl-mlp.onnx" "$glm/vision-isl-attn.onnx" "$glm/vision-isl-both.onnx"; do
+              probe_m "$m" coreml $size ALL 1
+            done
           done
-          rm -f "$probe_model"
+          probe_m "$glm/vision-isl-both.onnx" coreml 10x96 CPUAndGPU 1
+          rm -f "$glm"/vision-isl-*.onnx
       - name: Summary
         if: always()
         run: |
