@@ -69,10 +69,12 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
   final SecretStore _secret;
   final OpenAiTransport _send;
   final Future<void> Function(Duration) _sleep;
+  final Future<String> Function(Uri url, Map<String, String> headers) _get;
 
   /// [sleep] waits (it is told to wait and nothing else; tests pass one that does not take the time).
-  OpenAiProvider({SettingsRepository? settings, required SecretStore secret, OpenAiTransport? transport, Future<void> Function(Duration)? sleep})
-      : _settings = settings,
+  OpenAiProvider({SettingsRepository? settings, required SecretStore secret, OpenAiTransport? transport, Future<void> Function(Duration)? sleep, Future<String> Function(Uri url, Map<String, String> headers)? get})
+      : _get = get ?? _dioGet,
+        _settings = settings,
         _secret = secret,
         _send = transport ?? _dioTransport,
         _sleep = sleep ?? Future.delayed;
@@ -140,6 +142,51 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
       await _secret.delete();
     } else {
       await _secret.write(_key);
+    }
+  }
+
+  List<String>? _models;
+  String? _modelsFor; // the address and key the list was read with
+
+  /// Every model the service offers (`GET <address>/models`), the last list kept until the address or key changes
+  /// ([refresh]: ask again). Throws with what went wrong.
+  Future<List<String>> listModels({bool refresh = false}) async {
+    final stamp = '${_config.baseUrl.trim()}|$_key';
+    if (!refresh && _models != null && _modelsFor == stamp) return _models!;
+    var base = _config.baseUrl.trim();
+    while (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    if (base.endsWith('/chat/completions')) base = base.substring(0, base.length - '/chat/completions'.length);
+    final body = await _get(Uri.parse('$base/models'), {
+      'Accept': 'application/json',
+      if (_key.isNotEmpty) 'Authorization': 'Bearer $_key',
+    });
+    final json = jsonDecode(body);
+    final list = json is Map ? (json['data'] ?? json['models']) : json;
+    final ids = <String>{
+      for (final m in (list as List? ?? const []))
+        if (m is Map && (m['id'] ?? m['name']) is String) ((m['id'] ?? m['name']) as String).replaceFirst(RegExp(r'^models/'), '') else if (m is String) m,
+    }.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    _models = ids;
+    _modelsFor = stamp;
+    return ids;
+  }
+
+  /// Switches to [model] and keeps everything else as it is.
+  Future<void> selectModel(String model) =>
+      save(OpenAiConfig(baseUrl: _config.baseUrl, model: model, pauseSeconds: _config.pauseSeconds), _key);
+
+  static Future<String> _dioGet(Uri url, Map<String, String> headers) async {
+    try {
+      final r = await Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 30)))
+          .getUri<String>(url, options: Options(headers: headers, responseType: ResponseType.plain, validateStatus: (_) => true));
+      final status = r.statusCode ?? 0;
+      if (status < 200 || status >= 300) throw StateError(_explain(status, r.data ?? ''));
+      return r.data ?? '';
+    } on DioException catch (e) {
+      throw StateError(tr('Could not reach {host}: {error}', {'host': url.host, 'error': e.message ?? e.error ?? e.type.name}));
     }
   }
 

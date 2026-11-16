@@ -9,6 +9,7 @@ import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
 import '../llm/onnx_qwen.dart' show onnxThreads;
 import '../llm/onnx_session.dart';
+import '../llm/token_picker.dart';
 import '../llm/warm_session.dart';
 import 'glm_ocr.dart';
 import 'paddle_vl.dart' show withoutLoop;
@@ -27,8 +28,14 @@ class GlmOnnxReader with WidgetsBindingObserver {
 
   GlmOnnxReader({this.keepOpen = const Duration(seconds: 15)});
 
+  /// Where the time went, in microseconds, by step (the vision network, the prompt, and for each token: the run of the language model, its
+  /// scores brought over, the choice of the token, the pause for the screen, the word's row of the table): for measuring. Cleared by the
+  /// caller.
+  final Map<String, int> spent = {};
+
   WarmSession? _vision;
   OrtSession? _language;
+  TokenPicker? _picker;
   GlmEmbeddings? _table;
 
   int _openedAt = 0; // ([onnxAccelerationChanges] when the sessions were opened)
@@ -77,12 +84,15 @@ class GlmOnnxReader with WidgetsBindingObserver {
           accelerate: onnxCheckedForFp16(visionPath) || !await onnxTakesOnlyFp16Files(),
           pin: glmVisionPin,
           processorPath: _quickerOnProcessor(visionPath));
+      final seeing = Stopwatch()..start();
       final features = await _seeAll(vision, pictures);
+      spent['vision'] = (spent['vision'] ?? 0) + seeing.elapsedMicroseconds;
       final table = _table ??= await GlmEmbeddings.open(embeddingsPath);
       final language = _language ??= await openOnnxSession(textPath, options: _options(), accelerate: false);
+      final picker = _picker ??= await TokenPicker.open();
       return [
         for (var i = 0; i < pictures.length; i++)
-          await _write(language, pictures[i], features[i], table, maxTokens).then((r) {
+          await _write(language, picker, pictures[i], features[i], table, maxTokens, spent).then((r) {
             final tokens = withoutLoop(r.tokens);
             return (tokens: tokens, confidence: r.confidence, logProbs: r.logProbs.sublist(0, tokens.length));
           }),
@@ -126,13 +136,15 @@ class GlmOnnxReader with WidgetsBindingObserver {
       WidgetsBinding.instance.removeObserver(this);
       _observing = false;
     }
-    final vision = _vision, language = _language, table = _table;
+    final vision = _vision, language = _language, table = _table, picker = _picker;
     _vision = null;
     _language = null;
+    _picker = null;
     _table = null;
     await vision?.close();
     await language?.close();
     await table?.close();
+    await picker?.close();
   }
 
   @override
@@ -191,8 +203,17 @@ Future<Float32List> _see(WarmSession vision, GlmPicture p) async {
 /// The language model's turn: the cache stays on the native side; its first position is one of zeros that the mask hides (the graph
 /// wants a cache with something in it), and the model is given the position of every token itself (the picture's tokens have
 /// three: time, row and column).
-Future<GlmReading> _write(OrtSession session, GlmPicture picture, Float32List features, GlmEmbeddings table, int maxTokens) async {
-  Future<void> breathe() => Future<void>.delayed(const Duration(milliseconds: 8));
+Future<GlmReading> _write(OrtSession session, TokenPicker picker, GlmPicture picture, Float32List features, GlmEmbeddings table, int maxTokens, Map<String, int> spent) async {
+  Future<T> timed<T>(String what, Future<T> Function() f) async {
+    final watch = Stopwatch()..start();
+    try {
+      return await f();
+    } finally {
+      spent[what] = (spent[what] ?? 0) + watch.elapsedMicroseconds;
+    }
+  }
+
+  Future<void> breathe() => timed('step.breathe', () => Future<void>.delayed(const Duration(milliseconds: 8)));
 
   final prompt = glmPrompt(picture.gridHeight, picture.gridWidth);
   final positions = glmPromptPositions(picture.gridHeight, picture.gridWidth);
@@ -208,7 +229,7 @@ Future<GlmReading> _write(OrtSession session, GlmPicture picture, Float32List fe
     final input = await OrtValue.fromList(embeddings, [1, count, glmHidden]);
     final position = await int64Value(where, [3, 1, count]);
     final attention = await int64Value(mask, [1, mask.length]);
-    final out = await session.run({'inputs_embeds': input, 'position_ids': position, 'attention_mask': attention, ...cache});
+    final out = await timed(count == 1 ? 'step.run' : 'prompt.run', () => session.run({'inputs_embeds': input, 'position_ids': position, 'attention_mask': attention, ...cache}));
     mask.addAll(List.filled(count, 1));
     for (final v in [input, position, attention, ...held]) {
       letGo.add(v.dispose());
@@ -231,29 +252,18 @@ Future<GlmReading> _write(OrtSession session, GlmPicture picture, Float32List fe
     var next = positions.reduce((a, b) => a > b ? a : b) + 1;
     OrtValue? logits = await step(first, positions, prompt.length);
     for (var i = 0; i < maxTokens; i++) {
-      final scores = await logits!.asFlattenedList();
-      await logits.dispose();
+      // (picked where the scores are: two numbers come over, see [TokenPicker])
+      final picked = await timed('step.pick', () => picker.pick(logits!));
+      await logits!.dispose();
       logits = null;
-      var best = 0;
-      var bestScore = double.negativeInfinity;
-      for (var k = 0; k < scores.length; k++) {
-        final s = (scores[k] as num).toDouble();
-        if (s > bestScore) {
-          bestScore = s;
-          best = k;
-        }
-      }
+      final best = picked.token;
       if (glmEndTokens.contains(best)) break;
-      // (how likely the chosen token was: its score against all of them, log-sum-exp taken from the best for the sake of the floats)
-      var sum = 0.0;
-      for (var k = 0; k < scores.length; k++) {
-        sum += math.exp((scores[k] as num).toDouble() - bestScore);
-      }
-      logProbability -= math.log(sum);
-      logProbs.add(-math.log(sum));
+      logProbability += picked.logProb;
+      logProbs.add(picked.logProb);
       result.add(best);
+      spent['tokens'] = (spent['tokens'] ?? 0) + 1;
       await breathe();
-      logits = await step(await table.row(best), [next, next, next], 1);
+      logits = await step(await timed('step.embed', () => table.row(best)), [next, next, next], 1);
       next++;
     }
     await logits?.dispose();
