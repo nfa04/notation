@@ -87,7 +87,12 @@ void main() {
     // makes the profiles with these names, the last one in use
     Future<void> makeProfiles(WidgetTester tester, List<String> names) async {
       for (final name in names) {
-        await tester.ensureVisible(find.byKey(const ValueKey('customize-toolbar'))); // (it scrolls sideways on a narrow screen)
+        final customize = find.byKey(const ValueKey('customize-toolbar'));
+        // (on a narrow screen the buttons are a line that scrolls sideways and builds only what is near it: scrolled to, as a person does)
+        if (customize.evaluate().isEmpty) {
+          await tester.scrollUntilVisible(customize, 200, scrollable: find.descendant(of: find.byKey(const ValueKey('top-strip')), matching: find.byType(Scrollable)).first);
+        }
+        await tester.ensureVisible(customize);
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('customize-toolbar')));
         await tester.pumpAndSettle();

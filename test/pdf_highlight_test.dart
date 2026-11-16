@@ -144,6 +144,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       // the button in the top bar (in a narrow window it is scrolled out of sight first)
       final comment = find.text('Comment').first;
+      if (find.text('Comment').evaluate().isEmpty) {
+        // (on a phone the buttons are a line that scrolls sideways and builds only what is near: scrolled to, as a person does)
+        await tester.scrollUntilVisible(find.text('Comment'), 200, scrollable: find.descendant(of: find.byKey(const ValueKey('top-strip')), matching: find.byType(Scrollable)).first);
+      }
       await tester.ensureVisible(comment);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(comment);
