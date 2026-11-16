@@ -16,9 +16,19 @@ fi
 exe="$(cd "$(dirname "$exe")" && pwd)/$(basename "$exe")"
 dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$dir" "${XDG_CONFIG_HOME:-$HOME/.config}"
-sed "s|@EXEC@|$exe|" "$root/linux/notation.desktop.in" > "$dir/notation.desktop"
-echo "Icon=$root/linux/icons/256.png" >> "$dir/notation.desktop"
+# The file is named after the application id (my_application.cc sets it as the program name): on Wayland GNOME
+# finds a window's icon and name only through the desktop entry of that name, so any other name shows a gear.
+id=io.github.nfa04.notation
+icons="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+mkdir -p "$icons/256x256/apps" "$icons/scalable/apps"
+cp "$root/linux/icons/256.png" "$icons/256x256/apps/$id.png"
+cp "$root/linux/icons/$id.svg" "$icons/scalable/apps/$id.svg"
+gtk-update-icon-cache -q -t "$icons" 2>/dev/null || true
+rm -f "$dir/notation.desktop"
+sed "s|@EXEC@|$exe|" "$root/linux/notation.desktop.in" > "$dir/$id.desktop"
+echo "Icon=$id" >> "$dir/$id.desktop"
+echo "StartupWMClass=$id" >> "$dir/$id.desktop"
 update-desktop-database "$dir" 2>/dev/null || true
-xdg-mime default notation.desktop x-scheme-handler/notation
-echo "Registered $dir/notation.desktop -> $exe"
+xdg-mime default "$id.desktop" x-scheme-handler/notation
+echo "Registered $dir/$id.desktop -> $exe"
 echo "Try: xdg-open 'notation://join?s=wss://example.org#AAAA'"

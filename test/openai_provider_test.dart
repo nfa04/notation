@@ -390,4 +390,25 @@ void main() {
       expect(OpenAiProvider.retryAfterOf(null, 'nothing'), isNull);
     });
   });
+
+  group('model list', () {
+    test('lists every model of the service, sorted, and switching keeps the rest', () async {
+      Uri? asked;
+      final provider = OpenAiProvider(
+        secret: _Secret()..value = 'k',
+        get: (url, headers) async {
+          asked = url;
+          expect(headers['Authorization'], 'Bearer k');
+          return jsonEncode({'data': [{'id': 'b-model'}, {'id': 'models/A-model'}, {'id': 'b-model'}]});
+        },
+      );
+      await provider.save(const OpenAiConfig(baseUrl: 'http://localhost:11434/v1/', model: 'x', pauseSeconds: 3), 'k');
+      expect(await provider.listModels(), ['A-model', 'b-model']);
+      expect(asked.toString(), 'http://localhost:11434/v1/models');
+      await provider.selectModel('b-model');
+      expect(provider.config.model, 'b-model');
+      expect(provider.config.pauseSeconds, 3);
+      expect(provider.hasKey, isTrue);
+    });
+  });
 }
