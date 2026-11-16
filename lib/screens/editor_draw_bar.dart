@@ -846,7 +846,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
       decoration: BoxDecoration(color: toolBarColor(context), border: toolBarEdge(context, left: true)),
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
       // (as wide as the tools, which the larger touch targets make wider)
-      child: ToolColumns(children: tools),
+      child: SteadyBar(child: ToolColumns(children: tools)),
     );
   }
 }

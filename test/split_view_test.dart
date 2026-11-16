@@ -236,7 +236,7 @@ void main() {
     late TaskRepository tasks;
     late CalDavService caldav;
     late DeviceCalendarService device;
-    late String a, b;
+    late String a;
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       await db.delete('settings', where: "key = 'rail_hidden'");
@@ -245,7 +245,7 @@ void main() {
       caldav = CalDavService(SettingsRepository(db), tasks);
       device = DeviceCalendarService.forPlatform(SettingsRepository(db));
       a = await repo.createNote(title: 'Alpha split');
-      b = await repo.createNote(title: 'Beta split');
+      await repo.createNote(title: 'Beta split');
     });
     await tester.pumpWidget(NotationApp(services: AppServices(
       repository: repo,

@@ -52,6 +52,11 @@
     <display_length compare="ge">360</display_length>
   </requires>
   <releases>
+    <release version="0.0.3" date="2026-11-16" type="development">
+      <description>
+        <p>Notes, the graph and every other place of the menu open as tabs, several side by side, and a note you left stays ready for ten minutes. Handwriting reading can use the graphics chip or neural engine (Settings has a check), the reader picks its next word faster, and pictures are decoded no larger than shown. Text boxes now sync, deleting is all or nothing, and an older app no longer opens a newer database. Also: native encryption, a text layer per PDF page, and a layout for phones.</p>
+      </description>
+    </release>
     <release version="0.0.2" date="2026-11-12" type="development">
       <description>
         <p>Handwriting reading runs on low-priority background threads, doubtful words are underlined in yellow, formulas are re-read with other pen widths, a graph library with earlier pictures and compare, new importers (Obsidian, Notion, GoodNotes), SVG export, more creative tools, and two-finger scroll and zoom in every mode.</p>
