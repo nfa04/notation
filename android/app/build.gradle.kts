@@ -34,8 +34,6 @@ configure<ApplicationExtension> {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // the Qualcomm build of ONNX Runtime (QNN) exists for 64-bit ARM only
-        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     packaging {
