@@ -9,6 +9,8 @@ import 'package:pdf/widgets.dart' as pw_widgets;
 import 'package:pdfrx/pdfrx.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'pdf_words.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -60,10 +62,9 @@ void main() {
     // the page is 800 across on this screen of one pixel per unit: its picture is 1024 (a step of 256), not the 1654 of 200 dpi
     expect((picture.evaluate().first.widget as RawImage).image!.width, 1024);
 
-    // (the text layer has a piece of text for each word: the line's words with the space after them)
-    final words = find.byWidgetPredicate((w) => w is Text && (w.data ?? '').trim() == 'number');
-    await until(tester, () => words.evaluate().isNotEmpty);
-    expect(words, findsOneWidget, reason: 'the words of the page come to its text layer');
+    // (the text layer is one render object that knows where each word is)
+    await until(tester, () => pdfWords(tester, 'number').isNotEmpty);
+    expect(pdfWords(tester, 'number'), hasLength(1), reason: 'the words of the page come to its text layer');
   });
 
   testWidgets('dragging the scrollbar previews small pictures, and only of the page it is at', skip: !pdfium.existsSync(), (tester) async {

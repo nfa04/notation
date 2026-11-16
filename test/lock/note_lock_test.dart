@@ -182,6 +182,45 @@ void main() {
     });
   });
 
+  group('guessing', () {
+    test('after three wrong secrets each next try waits longer, a right secret clears it, and the device is not held back', () async {
+      var now = DateTime(2026, 1, 1);
+      final slow = NoteLockService(repo, files, deviceAuth: device, vault: vault, iterations: 1000, clock: () => now);
+      final (a, _) = await secretNote();
+      await slow.lockEncrypted(a, 'pw', allowDevice: true);
+      for (var i = 0; i < 3; i++) {
+        expect(await slow.unlock(a, 'no$i'), isFalse);
+        expect(slow.waitFor(a), Duration.zero, reason: 'three tries are free');
+      }
+      expect(await slow.unlock(a, 'no3'), isFalse);
+      expect(slow.waitFor(a), const Duration(seconds: 2));
+      // during the wait even the right secret is turned away, and counts for nothing
+      expect(await slow.unlock(a, 'pw'), isFalse);
+      expect(slow.isOpen(a), isFalse);
+      now = now.add(const Duration(seconds: 3));
+      expect(await slow.unlock(a, 'no4'), isFalse);
+      expect(slow.waitFor(a), const Duration(seconds: 4));
+      // the fingerprint opens it at once: it is not a guess
+      expect(await slow.unlockWithDevice(a, 'open'), isTrue);
+      expect(slow.waitFor(a), Duration.zero);
+      await slow.seal(a);
+      expect(await slow.unlock(a, 'pw'), isTrue);
+    });
+
+    test('the wait stops growing at a quarter of an hour, however many tries there were', () async {
+      var now = DateTime(2026, 1, 1);
+      final slow = NoteLockService(repo, files, deviceAuth: device, vault: vault, iterations: 1000, clock: () => now);
+      final (a, _) = await secretNote();
+      await slow.lockWithPasscode(a, '1234');
+      await slow.seal(a);
+      for (var i = 0; i < 80; i++) {
+        now = now.add(const Duration(hours: 1));
+        await slow.unlock(a, 'wrong$i');
+      }
+      expect(slow.waitFor(a), const Duration(seconds: 900));
+    });
+  });
+
   group('the device', () {
     test('opens a note when that was allowed, and not when the device says no or it was not allowed', () async {
       final (a, _) = await secretNote();

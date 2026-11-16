@@ -11,6 +11,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'pdf_words.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -57,7 +59,7 @@ void main() {
     }
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    await settle(() => find.text('Document').evaluate().isNotEmpty && find.text('alpha').evaluate().isNotEmpty);
+    await settle(() => find.text('Document').evaluate().isNotEmpty && pdfWords(tester, 'alpha').isNotEmpty);
     await tester.tap(find.text('Document'));
     await settle(() => layer() != null && (layer()!.painter as dynamic).objects.isNotEmpty);
     final objects = (layer()!.painter as dynamic).objects as List<PdfEditObject>;
@@ -163,7 +165,7 @@ void main() {
     }
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    await settle(() => find.text('Document').evaluate().isNotEmpty && find.text('alpha').evaluate().isNotEmpty);
+    await settle(() => find.text('Document').evaluate().isNotEmpty && pdfWords(tester, 'alpha').isNotEmpty);
     await tester.tap(find.text('Document'));
     await settle(() => layer() != null && (layer()!.painter as dynamic).objects.isNotEmpty);
     final line = ((layer()!.painter as dynamic).objects as List<PdfEditObject>).single;

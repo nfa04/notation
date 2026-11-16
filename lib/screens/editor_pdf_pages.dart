@@ -118,7 +118,7 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
             height: m.size.height,
             child: Image.file(File(m.path), fit: BoxFit.fill, errorBuilder: (_, _, _) => const SizedBox.shrink()),
           ),
-        Positioned.fill(child: CustomPaint(painter: HighlightsPainter(highlights: _highlightsPerPage[index] ?? const []))),
+        Positioned.fill(child: CustomPaint(painter: HighlightsPainter(highlights: _highlightsPerPage[index] ?? const [], behindText: true))),
         Positioned.fill(child: RepaintBoundary(child: CustomPaint(painter: InkLayerPainter(strokes: _strokesPerPage[index] ?? const [], layers: _layers, pressureSensitivity: widget.stylus?.effectiveSensitivity ?? 0.6, pixelScale: _inkPixelScale), isComplex: true))),
         for (final box in _textBoxesPerPage[index] ?? const <TextBoxWidgetModel>[])
           Positioned(
@@ -571,94 +571,19 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
     return at;
   }
 
-  /// The text layout inside a [Text] (a few wrapper render objects sit above it).
-  RenderParagraph? _paragraphIn(BuildContext? context) {
-    RenderParagraph? found;
-    void visit(Element e) {
-      if (found != null) return;
-      final r = e.renderObject;
-      if (r is RenderParagraph) {
-        found = r;
-        return;
-      }
-      e.visitChildren(visit);
-    }
-
-    if (context is Element) visit(context);
-    return found;
+  /// The render object of the text layer of page [pageIndex], while it is shown with its words.
+  RenderPdfTextLayer? _layerOf(int pageIndex) {
+    final box = _layerKeys[pageIndex]?.currentContext?.findRenderObject();
+    return box is RenderPdfTextLayer && box.attached ? box : null;
   }
 
-  Widget _selectableWord(int pageIndex, PdfPageWords page, int li, int wi, double pageHeight) {
-    final scale = basePageWidth / page.pageWidth;
-    final line = page.lines[li];
-    final word = line.words[wi];
-    final last = wi + 1 == line.words.length;
-    // the piece runs up to the next word, so the pieces of a line add up to its text
-    final from = wi == 0 ? 0 : word.startIndex;
-    final to = last ? line.text.length : line.words[wi + 1].startIndex;
-    final right = last ? word.xMax : line.words[wi + 1].xMin;
-    final height = (line.yMax - line.yMin) * scale;
-    return Positioned(
-      left: word.xMin * scale,
-      top: line.yMin * scale,
-      width: ((right - word.xMin) * scale).clamp(1.0, basePageWidth),
-      height: height.clamp(1.0, pageHeight),
-      child: FittedBox(
-        fit: BoxFit.fill,
-        child: Text.verbatim(
-          line.text.substring(from, to),
-          key: _wordKey(pageIndex, li, wi),
-          style: TextStyle(fontSize: (height * 0.82).clamp(8.0, 42.0), color: Colors.transparent, height: 1.0),
-          softWrap: false,
-        ),
-      ),
-    );
-  }
-
-  /// How much the text under a selection handle of page [pageIndex] is made larger on the screen, along each axis: the zoom, and
-  /// the stretch that fits the word to its place on the page (see [_selectableWord]), which is not the same along both axes.
-  /// The handle sits in that word, so it is stretched with it, unless it is made for it. [type] null: the mean of both handles.
+  /// How much the text under a selection handle of page [pageIndex] is made larger on the screen, along each axis (the layer is in
+  /// page units, so that is the zoom). [type] says which handle; the same for both.
   Offset _handleStretch(int pageIndex, TextSelectionHandleType? type) {
     final uniform = Offset(_pageScale, _pageScale);
     try {
-      if (type == null) {
-        final a = _handleStretch(pageIndex, TextSelectionHandleType.left), b = _handleStretch(pageIndex, TextSelectionHandleType.right);
-        return Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
-      }
-      final data = _wordsNotifier(pageIndex).value;
-      final region = _areaKeys[pageIndex]?.currentState?.selectableRegion;
-      if (data == null || region == null) return uniform;
-      final ends = region.selectionEndpoints;
-      if (ends.isEmpty) return uniform;
-      final end = switch (type) {
-        TextSelectionHandleType.left => ends.first,
-        TextSelectionHandleType.right => ends.last,
-        TextSelectionHandleType.collapsed => ends.first,
-      };
-      // (the point is where the caret ends: at the bottom of its line, so a little above is inside it)
-      final at = Offset(end.point.dx, end.point.dy - 2);
-      final scale = basePageWidth / data.pageWidth;
-      (int, int)? best;
-      var bestGap = double.infinity;
-      for (var i = 0; i < data.lines.length; i++) {
-        final line = data.lines[i];
-        final top = line.yMin * scale, bottom = line.yMax * scale;
-        final dy = at.dy < top ? top - at.dy : (at.dy > bottom ? at.dy - bottom : 0.0);
-        if (dy >= bestGap) continue;
-        for (var j = 0; j < line.words.length; j++) {
-          final left = line.words[j].xMin * scale;
-          final right = (j + 1 == line.words.length ? line.words[j].xMax : line.words[j + 1].xMin) * scale;
-          final dx = at.dx < left ? left - at.dx : (at.dx > right ? at.dx - right : 0.0);
-          if (dx + dy < bestGap) {
-            bestGap = dx + dy;
-            best = (i, j);
-          }
-        }
-      }
-      if (best == null) return uniform;
-      final box = _paragraphIn(_wordKeys[(pageIndex, best.$1, best.$2)]?.currentContext);
-      if (box == null || !box.attached) return uniform;
-      // (a unit along the text, as long as it is on the screen, along each axis)
+      final box = _layerOf(pageIndex);
+      if (box == null) return uniform;
       final m = box.getTransformTo(null);
       final zero = MatrixUtils.transformPoint(m, Offset.zero);
       final sx = (MatrixUtils.transformPoint(m, const Offset(1, 0)) - zero).distance;
@@ -670,78 +595,13 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
     }
   }
 
-  /// Identifies the text of one word of a page, to ask where a point falls in it.
-  GlobalKey _wordKey(int page, int line, int word) => _wordKeys.putIfAbsent((page, line, word), () => GlobalKey());
-
-  /// The characters of each line that the user has selected on [pageIndex],
-  /// found from where the selection starts and ends on the page, not from its
-  /// text (which cannot tell two occurrences of a word apart). Null when the
-  /// geometry is unavailable or does not agree with the selected [text].
+  /// The characters of each line that the user has selected on [pageIndex], found from where the selection starts and ends on the
+  /// page, not from its text (which cannot tell two occurrences of a word apart). Null when there is no selection or it does not agree
+  /// with the selected [text].
   List<(PdfTextLine, int, int)>? _selectedSpans(int pageIndex, PdfPageWords data, String text) {
     try {
-      final region = _areaKeys[pageIndex]?.currentState?.selectableRegion;
-      final regionBox = _areaKeys[pageIndex]?.currentContext?.findRenderObject() as RenderBox?;
-      if (region == null || regionBox == null) return null;
-      final ends = region.selectionEndpoints;
-      if (ends.length != 2) return null;
-
-      // (line, character in the line's text) under a point of the selection area
-      (int, int)? locate(Offset local) {
-        final global = regionBox.localToGlobal(local);
-        (int, int)? best;
-        var bestGap = double.infinity;
-        RenderParagraph? bestParagraph;
-        for (var i = 0; i < data.lines.length; i++) {
-          for (var j = 0; j < data.lines[i].words.length; j++) {
-            final box = _paragraphIn(_wordKeys[(pageIndex, i, j)]?.currentContext);
-            if (box == null || !box.attached) continue;
-            final p = box.globalToLocal(global);
-            // the point is where the caret ends: at the bottom of its line
-            final gap = (p.dy - box.size.height / 2 - 2).abs();
-            if (p.dx < -3 || p.dx > box.size.width + 3 || gap > box.size.height) continue;
-            // when between two words, the nearer one
-            final across = p.dx < 0 ? -p.dx : (p.dx > box.size.width ? p.dx - box.size.width : 0.0);
-            if (gap + across < bestGap) {
-              bestGap = gap + across;
-              best = (i, j);
-              bestParagraph = box;
-            }
-          }
-        }
-        if (best == null || bestParagraph == null) return null;
-        final p = bestParagraph.globalToLocal(global);
-        final inside = Offset(p.dx.clamp(0.0, bestParagraph.size.width), p.dy.clamp(0.0, bestParagraph.size.height - 1));
-        final line = data.lines[best.$1];
-        final inWord = bestParagraph.getPositionForOffset(inside).offset;
-        return (best.$1, (line.words[best.$2].startIndex + inWord).clamp(0, line.text.length));
-      }
-
-      var start = locate(ends[0].point), end = locate(ends[1].point);
-      if (start == null || end == null) return null;
-
-      // lines in reading order (top to bottom, then left to right)
-      final order = List.generate(data.lines.length, (i) => i)
-        ..sort((a, b) {
-          final la = data.lines[a], lb = data.lines[b];
-          final byTop = ((la.yMin + la.yMax) / 2).compareTo((lb.yMin + lb.yMax) / 2);
-          return (byTop.abs() > 0.5 * (la.yMax - la.yMin)) ? byTop : la.xMin.compareTo(lb.xMin);
-        });
-      var from = order.indexOf(start.$1), to = order.indexOf(end.$1);
-      if (from > to || (from == to && start.$2 > end.$2)) {
-        final t = start;
-        start = end;
-        end = t;
-        final u = from;
-        from = to;
-        to = u;
-      }
-      final spans = <(PdfTextLine, int, int)>[];
-      for (var k = from; k <= to; k++) {
-        final line = data.lines[order[k]];
-        final a = k == from ? start.$2 : 0;
-        final b = k == to ? end.$2 : line.text.length;
-        if (b > a) spans.add((line, a.clamp(0, line.text.length), b.clamp(0, line.text.length)));
-      }
+      final spans = _layerOf(pageIndex)?.selectedSpans;
+      if (spans == null || spans.isEmpty) return null;
       String squash(String t) => t.replaceAll(RegExp(r'\s+'), '');
       if (squash(spans.map((e) => e.$1.text.substring(e.$2, e.$3)).join()) != squash(text)) return null;
       return spans;

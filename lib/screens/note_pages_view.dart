@@ -231,7 +231,7 @@ class _NotePagesViewState extends State<NotePagesView> {
               height: m.size.height,
               child: faded('image:${m.id}', Image.memory(picture.bytes, fit: BoxFit.fill, errorBuilder: (_, _, _) => const SizedBox.shrink())),
             ),
-        Positioned.fill(child: CustomPaint(painter: HighlightsPainter(highlights: _note.highlights[index] ?? const []))),
+        Positioned.fill(child: CustomPaint(painter: HighlightsPainter(highlights: _note.highlights[index] ?? const [], behindText: _isPdf))),
         Positioned.fill(
           child: CustomPaint(
             key: widget.blame != null

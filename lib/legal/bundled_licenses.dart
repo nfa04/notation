@@ -12,6 +12,7 @@ const bundledLicenses = <({String package, String asset})>[
   (package: 'ONNX Runtime', asset: 'assets/licenses/onnxruntime-third-party.txt'),
   (package: 'WebRTC', asset: 'assets/licenses/webrtc.txt'),
   (package: 'flutter_webrtc', asset: 'assets/licenses/flutter_webrtc-NOTICE.txt'), // (its NOTICE file: Flutter only collects LICENSE files)
+  (package: 'libsodium', asset: 'assets/licenses/libsodium.txt'),
   (package: 'QuickJS', asset: 'assets/licenses/quickjs.txt'),
   (package: 'GLM-OCR (its vocabulary, and the model the app downloads)', asset: 'assets/licenses/glm-ocr.txt'),
   (package: 'TexTeller (its vocabulary, and the model the app downloads)', asset: 'assets/licenses/texteller.txt'),

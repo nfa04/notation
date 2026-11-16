@@ -90,7 +90,7 @@ void main() {
     expect(find.textContaining('Added the task'), findsOneWidget); // told on screen
 
     // away and back: nothing new, and the automation says why
-    await tester.tap(find.text('Dashboard'));
+    await tester.tap(find.descendant(of: find.byType(NavigationRail), matching: find.text('Dashboard')));
     await wait(() => find.byType(FixedPageNoteEditor).evaluate().isEmpty && find.text('Syllabus').evaluate().isNotEmpty);
     await tester.tap(find.text('Syllabus').first);
     await wait(() => (service.all.single.lastResult ?? '').contains('handled before'));

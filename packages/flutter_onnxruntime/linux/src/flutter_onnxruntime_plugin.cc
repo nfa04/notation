@@ -137,7 +137,11 @@ static void flutter_onnxruntime_plugin_class_init(FlutterOnnxruntimePluginClass 
 }
 
 static void flutter_onnxruntime_plugin_init(FlutterOnnxruntimePlugin *self) {
-  // (the memory of a GObject is zeroed, not constructed: an empty std::set is not all zeros, and inserting into the zeroed one crashes)
+  // GObject hands out zeroed memory and runs no C++ constructors: a std::set or std::map left like that is not an empty one (inserting
+  // into it crashed the app the first time a low-priority session was made). The plugin lives as long as the process, so there is no
+  // matching destructor call.
+  new (&self->values) std::map<std::string, void *>();
+  new (&self->mutex) std::mutex();
   new (&self->low_sessions) std::set<std::string>();
   new (&self->own_workers) std::map<std::string, Worker *>();
   new (&self->retired) std::vector<Worker *>();

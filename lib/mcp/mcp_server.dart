@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'mcp_protocol.dart';
 
@@ -95,14 +96,14 @@ class McpHttpServer {
     if (request.method != 'POST') return _send(request.response, HttpStatus.methodNotAllowed, null, {'Allow': 'POST'});
     if (request.contentLength > maxBytes) return _send(request.response, HttpStatus.requestEntityTooLarge, _failure(-32600, 'The request is too large'));
 
-    final bytes = <int>[];
+    final bytes = BytesBuilder(copy: false);
     await for (final chunk in request) {
-      bytes.addAll(chunk);
+      bytes.add(chunk);
       if (bytes.length > maxBytes) return _send(request.response, HttpStatus.requestEntityTooLarge, _failure(-32600, 'The request is too large'));
     }
     Object? message;
     try {
-      message = jsonDecode(utf8.decode(bytes));
+      message = jsonDecode(utf8.decode(bytes.takeBytes()));
     } on FormatException {
       return _send(request.response, HttpStatus.badRequest, _failure(-32700, 'Parse error'));
     }

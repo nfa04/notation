@@ -1,3 +1,4 @@
+import 'dart:typed_data' show BytesBuilder;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -428,13 +429,15 @@ class ExtensionService extends ChangeNotifier {
     } on StateError catch (e) {
       throw ExtensionError(e.message);
     }
-    final response = await Dio(BaseOptions(connectTimeout: const Duration(seconds: 10))).request<List<int>>(
+    final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 10)));
+    try {
+    final response = await dio.request<ResponseBody>(
       url.toString(),
       data: body,
       options: Options(
         method: method,
         headers: headers,
-        responseType: ResponseType.bytes,
+        responseType: ResponseType.stream,
         followRedirects: false,
         validateStatus: (_) => true,
         sendTimeout: const Duration(seconds: 10),
@@ -442,13 +445,21 @@ class ExtensionService extends ChangeNotifier {
         maxRedirects: 0,
       ),
     );
-    final bytes = response.data ?? const <int>[];
-    if (bytes.length > 1024 * 1024) throw ExtensionError('The answer is too big.');
+    // (read as it arrives and given up on at the limit: a big answer is never held whole)
+    final collected = BytesBuilder(copy: false);
+    await for (final chunk in response.data!.stream) {
+      collected.add(chunk);
+      if (collected.length > 1024 * 1024) throw ExtensionError('The answer is too big.');
+    }
+    final bytes = collected.takeBytes();
     return {
       'status': response.statusCode,
       'headers': {for (final e in response.headers.map.entries) e.key: e.value.join(', ')},
       'body': utf8.decode(bytes, allowMalformed: true),
     };
+    } finally {
+      dio.close(force: true);
+    }
   }
 }
 

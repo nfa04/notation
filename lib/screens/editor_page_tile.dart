@@ -343,7 +343,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
             IgnorePointer(
               ignoring: _isDocumentPage(pageIndex),
               child: CustomPaint(
-                painter: HighlightsPainter(highlights: pageHighlights),
+                painter: HighlightsPainter(highlights: pageHighlights, behindText: _pdfDocument != null),
                 size: Size(_paperWidth, pageHeight),
               ),
             ),
@@ -446,17 +446,14 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     ),
                   );
                 },
-                // one piece of text per word, stretched over the word's place on the page: where the finger lands is then the word it
-                // lands on. The words come after the picture (they are read apart, after the pictures on screen).
+                // one render object for the words of the page (see PdfTextLayer): where the finger lands is the word it lands on. The words come after the picture (they are read apart, after the pictures on screen).
                 child: page == null
                     ? const Stack()
                     : ValueListenableBuilder<PdfPageWords?>(
                         valueListenable: _wordsNotifier(_requestWords(pageIndex)),
-                        builder: (_, words, _) => Stack(children: [
-                          if (words != null)
-                            for (var li = 0; li < words.lines.length; li++)
-                              for (var wi = 0; wi < words.lines[li].words.length; wi++) _selectableWord(pageIndex, words, li, wi, pageHeight),
-                        ]),
+                        builder: (_, words, _) => words == null
+                            ? const SizedBox.expand()
+                            : PdfTextLayer(key: _layerKeys.putIfAbsent(pageIndex, () => GlobalKey()), page: words, width: _paperWidth, height: pageHeight),
                       ),
               ),
               ),

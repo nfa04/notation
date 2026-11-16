@@ -75,6 +75,26 @@ class LockRepository {
     for (final r in await _db.query('images', columns: ['path'], where: 'note_id = ?', whereArgs: [id])) {
       files.add(r['path'] as String);
     }
+    // (the rows are overwritten with zeros as they are deleted, for this purge only: the setting costs every other delete, and
+    // is per connection)
+    await _db.rawQuery('PRAGMA secure_delete = ON');
+    try {
+      await _purge(id);
+    } finally {
+      try {
+        await _db.rawQuery('PRAGMA secure_delete = OFF');
+      } catch (_) {}
+    }
+    try {
+      // the write-ahead log still holds the pages that were changed: fold it into the file and cut it short
+      await _db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (_) {
+      // (not every platform has a log; the rows are zeroed in the file all the same)
+    }
+    return files;
+  }
+
+  Future<void> _purge(String id) async {
     await _db.transaction((txn) async {
       for (final t in ['strokes', 'text_boxes', 'highlights', 'images', 'pdf_text', 'ink_text', 'ink_reads', 'note_embeddings', 'note_chunks', 'note_chunk_state', 'note_ai', 'facts', 'fact_state']) {
         await txn.delete(t, where: 'note_id = ?', whereArgs: [id]);
@@ -96,7 +116,6 @@ class LockRepository {
         whereArgs: [id],
       );
     });
-    return files;
   }
 }
 

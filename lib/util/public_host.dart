@@ -13,12 +13,19 @@ bool isPrivateAddress(InternetAddress a) {
     final mapped = r.sublist(0, 10).every((b) => b == 0) && r[10] == 0xff && r[11] == 0xff;
     if (mapped) return isPrivateAddress(InternetAddress.fromRawAddress(Uint8List.fromList(r.sublist(12))));
     if (r.every((b) => b == 0) || (r.sublist(0, 15).every((b) => b == 0) && r[15] == 1)) return true; // :: and ::1
-    return (r[0] & 0xfe) == 0xfc || (r[0] == 0xfe && (r[1] & 0xc0) == 0x80); // fc00::/7, fe80::/10
+    // NAT64 (64:ff9b::/96) carries an IPv4 address in its last four bytes
+    if (r[0] == 0x00 && r[1] == 0x64 && r[2] == 0xff && r[3] == 0x9b && r.sublist(4, 12).every((b) => b == 0)) {
+      return isPrivateAddress(InternetAddress.fromRawAddress(Uint8List.fromList(r.sublist(12))));
+    }
+    return r[0] == 0xff || (r[0] & 0xfe) == 0xfc || (r[0] == 0xfe && (r[1] & 0xc0) == 0x80); // ff00::/8, fc00::/7, fe80::/10
   }
   return r[0] == 0 ||
       r[0] == 10 ||
       r[0] == 127 ||
       (r[0] == 100 && r[1] >= 64 && r[1] < 128) ||
+      r[0] >= 224 || // multicast, reserved, broadcast
+      (r[0] == 198 && (r[1] == 18 || r[1] == 19)) || // benchmarking
+      (r[0] == 192 && r[1] == 0 && r[2] == 0) ||
       (r[0] == 169 && r[1] == 254) ||
       (r[0] == 172 && r[1] >= 16 && r[1] < 32) ||
       (r[0] == 192 && r[1] == 168);

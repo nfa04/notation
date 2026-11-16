@@ -81,6 +81,11 @@ class Reassembler {
 
   final Map<int, List<Uint8List?>> _partial = {}; // (in the order they were begun)
   final Map<int, int> _got = {};
+  final Map<int, int> _bytes = {}; // (what has really arrived of each message: the declared count says nothing)
+
+  /// How many messages are waiting for pieces, and how many bytes of them are held.
+  int get pendingMessages => _partial.length;
+  int get pendingBytes => _bytes.values.fold(0, (a, b) => a + b);
 
   /// The message that [frame] completes, or null while there are pieces missing. A frame that is not
   /// one (too short, nonsense numbers) is ignored.
@@ -98,15 +103,24 @@ class Reassembler {
         final oldest = _partial.keys.first;
         _partial.remove(oldest);
         _got.remove(oldest);
+        _bytes.remove(oldest);
       }
       parts = _partial[id] = List<Uint8List?>.filled(count, null);
     }
     if (parts.length != count || parts[index] != null) return null;
+    final total = _bytes[id] = (_bytes[id] ?? 0) + frame.length - Framer.headerBytes;
+    if (total > maxMessageBytes) {
+      _partial.remove(id);
+      _got.remove(id);
+      _bytes.remove(id);
+      return null;
+    }
     parts[index] = Uint8List.sublistView(frame, Framer.headerBytes);
     final got = _got[id] = (_got[id] ?? 0) + 1;
     if (got < count) return null;
     _partial.remove(id);
     _got.remove(id);
+    _bytes.remove(id);
     final out = BytesBuilder(copy: false);
     for (final p in parts) {
       out.add(p!);

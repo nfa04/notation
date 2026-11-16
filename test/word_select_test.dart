@@ -11,6 +11,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'pdf_words.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -41,13 +43,12 @@ void main() {
     });
     addTearDown(() => dir.delete(recursive: true));
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo)));
-    for (var i = 0; i < 60 && find.text('beta ').evaluate().isEmpty; i++) {
+    for (var i = 0; i < 60 && pdfWords(tester, 'beta').isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 100));
     }
-    final beta = find.text('beta ');
-    expect(beta, findsOneWidget);
-    final at = tester.getCenter(beta);
+    expect(pdfWords(tester, 'beta'), hasLength(1));
+    final at = pdfWords(tester, 'beta').single.center;
 
     // two quick clicks of the mouse in the middle of the word
     for (var i = 0; i < 2; i++) {
@@ -65,7 +66,7 @@ void main() {
     final paint = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is HighlightsPainter);
     final marks = [for (final p in paint.evaluate()) ...((p.widget as CustomPaint).painter as HighlightsPainter).highlights.map((h) => h.rect)];
     expect(marks.length, 1);
-    final word = tester.getRect(beta);
+    final word = pdfWords(tester, 'beta').single;
     final origin = tester.getTopLeft(find.byKey(const ValueKey('page-0')));
     final mark = marks.single.shift(origin);
     expect(mark.center.dx, closeTo(word.center.dx, word.width)); // on the word "beta", not its neighbours
