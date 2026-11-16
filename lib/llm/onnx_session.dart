@@ -45,12 +45,25 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
           onnxNoteRun(preparing, '$onnxPreparing${list.first.name}', running: true);
           final OrtSession session;
           try {
-            // (QNN: the compiled model is kept in a file of its own: the first session writes it, later ones read it instead of compiling)
-            final cache = attempt.label == 'QNN (NPU)' ? _qnnCache(path, attempt.label!) : null; // (the NPU's compile is the long one; the GPU's is not kept)
-            final cached = cache != null && File(cache).existsSync();
-            if (cached) debugPrint('onnx: $model: the compiled model of ${attempt.label} is read from $cache');
-            final making = OnnxRuntime().createSession(cached ? cache : path,
-                options: _withProviders(options, list, extra, profile, cache == null || cached ? null : {'ep.context_enable': '1', 'ep.context_embed_mode': '1', 'ep.context_file_path': cache}));
+            // (QNN: the compiled model is kept in a file of its own: the first session writes it, later ones read it instead of compiling.
+            // A backend that cannot keep it, or a file that does not load, costs nothing but the compile: it is made again without)
+            final cache = list.first == OrtProvider.QNN ? _qnnCache(path, attempt.label!) : null;
+            Future<OrtSession> open(bool useCache) {
+              final cached = useCache && File(cache!).existsSync();
+              if (cached) debugPrint('onnx: $model: the compiled model of ${attempt.label} is read from $cache');
+              return OnnxRuntime().createSession(cached ? cache : path,
+                  options: _withProviders(options, list, extra, profile, useCache && !cached ? {'ep.context_enable': '1', 'ep.context_embed_mode': '1', 'ep.context_file_path': cache!} : null));
+            }
+
+            final making = cache == null
+                ? open(false)
+                : open(true).catchError((Object e) {
+                    debugPrint('onnx: $model: ${attempt.label} with its compiled file failed ($e): made again without');
+                    try {
+                      if (File(cache).existsSync()) File(cache).deleteSync();
+                    } catch (_) {}
+                    return open(false);
+                  });
             // (a phone's NNAPI compiles the whole model while the session is made: a quarter of an hour was seen for a 344 MB one, and the
             // compile cannot be stopped; so the processor takes over after [onnxCompileLimit], and the session that comes out later is closed)
             session = list.first == OrtProvider.NNAPI || list.first == OrtProvider.QNN
@@ -77,7 +90,7 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
           _report(model, 'CPU (${attempt.label ?? list.first.name} refused: $e)');
           _refused.add(tried);
           // (a compiled file that did not load, from another build of the runtime perhaps: thrown away, made again at the next start)
-          if (attempt.label == 'QNN (NPU)') {
+          if (list.first == OrtProvider.QNN) {
             final stale = _qnnCache(path, attempt.label ?? 'QNN');
             try {
               if (File(stale).existsSync()) File(stale).deleteSync();
