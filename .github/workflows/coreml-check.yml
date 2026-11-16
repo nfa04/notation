@@ -65,9 +65,15 @@ jobs:
       - run: flutter pub get
       - name: Let the test read the models (the sandbox of the debug app only reaches its own container)
         run: /usr/libexec/PlistBuddy -c "Set :com.apple.security.app-sandbox false" macos/Runner/DebugProfile.entitlements
+      - name: Control (a test that passes on these machines)
+        run: flutter test integration_test/session_priority_test.dart -d macos
       - name: Test
+        timeout-minutes: 40
         run: |
           set -o pipefail
+          # (what every thread of the app is doing, 8 and 20 minutes in: if the test hangs, this says where)
+          ( for at in 480 720; do sleep $at; pid=$(pgrep -n -f 'Notation.app/Contents/MacOS' || true)
+              [ -n "$pid" ] && sample "$pid" 5 -file "$RUNNER_TEMP/sample-$at.txt" >/dev/null 2>&1; done ) &
           flutter test integration_test/coreml_check_test.dart -d macos \
             --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json 2>&1 | tee coreml.log
       - name: Summary
@@ -76,6 +82,8 @@ jobs:
           {
             echo '```'
             grep -E "coreml-check|CoreML|partitions" coreml.log | grep -v '^coreml-check | {' || true
+            echo '--- progress file'
+            cat "$RUNNER_TEMP/coreml.json.progress" 2>/dev/null || echo '(none: the test never started)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
@@ -84,4 +92,5 @@ jobs:
           name: coreml-check
           path: |
             coreml.log
-            ${{ runner.temp }}/coreml.json
+            ${{ runner.temp }}/coreml.json*
+            ${{ runner.temp }}/sample-*.txt
