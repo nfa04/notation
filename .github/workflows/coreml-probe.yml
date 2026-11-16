@@ -1,0 +1,71 @@
+name: CoreML probe
+
+# Quick experiments with CoreML on a Mac in Python (minutes, against an hour for the app's own check): tool/coreml_probe/.
+# Now: can the handwriting vision network (vision-gpu.onnx) be built when its input size is fixed (a free dimension override)?
+# A GitHub Mac is a virtual Apple M1: the answers count, the times only roughly.
+on:
+  workflow_dispatch:
+  push:
+    branches: [coreml-check]
+    paths:
+      - tool/coreml_probe/**
+      - .github/workflows/coreml-probe.yml
+
+concurrency:
+  group: coreml-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: ONNX Runtime (the version of the app on Apple) and numpy
+        run: pip install onnxruntime==1.28.0 numpy || pip install onnxruntime numpy
+      - name: Models from the Actions cache (made by the CoreML check)
+        id: models
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/models
+          key: coreml-models-8ea8a061-6194708c-e4565d57-7f5cffc1-966e02f2
+      - name: Download the vision network if the cache had none
+        if: steps.models.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/models/glm"
+          for f in vision-gpu.onnx vision-gpu.onnx.data; do
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/models/glm/$f" "https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/$f"
+          done
+      - name: Check it
+        working-directory: ${{ runner.temp }}/models/glm
+        run: |
+          shasum -a 256 -c <<'EOF'
+          7f5cffc1f3589d9c8c4322fd904903ddc5759c9df96880516533ca6ab17ccc0e  vision-gpu.onnx
+          966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99  vision-gpu.onnx.data
+          EOF
+      - name: Probe
+        run: |
+          python -c "import onnxruntime as o; print(o.__version__, o.get_available_providers())"
+          model="$RUNNER_TEMP/models/glm/vision-gpu.onnx"; out="$RUNNER_TEMP/probe"; mkdir -p "$out"
+          probe() { echo "::group::$*"; timeout 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
+          for size in 10x24 10x96; do
+            probe reference $size
+            probe coreml $size ALL 0                 # (as the app tried: the input size left free; expected to fail with -14)
+            probe coreml $size ALL 1
+            probe coreml $size CPUAndNeuralEngine 1
+            probe coreml $size CPUAndGPU 1
+            probe coreml $size CPUOnly 1
+            probe coreml $size ALL 1                 # (again: the cache)
+          done
+      - name: Summary
+        if: always()
+        run: |
+          { echo '```'; grep -h "probe-result" probe.log || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coreml-probe
+          path: probe.log
