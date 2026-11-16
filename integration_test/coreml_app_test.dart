@@ -3,7 +3,8 @@
 // encoder through openOnnxSession.
 //   flutter test integration_test/coreml_app_test.dart -d macos --dart-define=MODEL_DIR=/path --dart-define=OUT=/path/app.json
 // MODEL_DIR holds glm/vision-gpu.onnx (+ .data), glm/vision.onnx (the processor's file) and teller/encoder-gpu.onnx.
-// Fails when CoreML does not take a model, answers far from the processor, or builds a width again that it had built (the cache).
+// Fails when CoreML does not take a model, answers far from the processor, or builds a width again that it had built (the cache); also
+// runs the token picker and both readers end to end (MODEL_DIR also holds glm/text.onnx, glm/embeddings.bin and teller/decoder.onnx).
 // While a test runs the app's log does not reach the job: every step is also written to OUT.progress.
 import 'dart:convert';
 import 'dart:io';
@@ -15,15 +16,21 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:notes/ink/glm_ocr.dart';
 import 'package:notes/ink/ink_image.dart';
-import 'package:notes/ink/onnx_glm_ocr.dart' show glmVisionPin;
+import 'package:notes/ink/onnx_glm_ocr.dart';
+import 'package:notes/ink/onnx_texteller_model.dart';
+import 'package:notes/ink/texteller_decoder.dart';
 import 'package:notes/llm/onnx_session.dart';
+import 'package:notes/llm/token_picker.dart';
 import 'package:notes/llm/warm_session.dart';
 import 'package:notes/models/canvas_models.dart';
 
 const modelDir = String.fromEnvironment('MODEL_DIR');
 const outFile = String.fromEnvironment('OUT');
+// (the repository: the app of a macOS test does not start in it)
+const repo = String.fromEnvironment('REPO', defaultValue: '.');
 
 final _clock = Stopwatch()..start();
 
@@ -182,6 +189,76 @@ void main() {
       say('formula encoder on $where, opened in $openMs ms, ${(err * 100).toStringAsFixed(2)} % from the processor');
       if (where != 'CORE_ML') failures.add('formula encoder not on CoreML: $where');
       if (!(err < 0.05)) failures.add('formula encoder: ${(err * 100).toStringAsFixed(1)} % from the processor');
+    }
+
+    // 4. the token picker (assets/onnx/pick_token.onnx) on this platform: the same choice as the Dart loop it replaced, on scores with
+    // equal best ones and on several positions
+    final picker = await TokenPicker.open();
+    final random = math.Random(7);
+    for (final (positions, vocabulary) in [(1, 59392), (3, 15000)]) {
+      final scores = Float32List.fromList([for (var i = 0; i < positions * vocabulary; i++) random.nextDouble() * 6 - 3]);
+      scores[scores.length - vocabulary + 4321] = 9;
+      scores[scores.length - vocabulary + 9000] = 9; // (equal: the first is taken)
+      final value = await OrtValue.fromList(scores, [1, positions, vocabulary]);
+      final picked = await picker.pick(value);
+      await value.dispose();
+      final token = lastArgMax(scores, vocabulary), logProb = lastLogProb(scores, vocabulary, token);
+      say('picker [1, $positions, $vocabulary]: ${picked.token} (${picked.logProb.toStringAsFixed(5)}), Dart $token (${logProb.toStringAsFixed(5)})');
+      if (picked.token != token || (picked.logProb - logProb).abs() > 1e-3) failures.add('picker [1, $positions, $vocabulary]: ${picked.token} where Dart chose $token');
+    }
+    await picker.close();
+
+    // 5. the handwriting reader as the app reads, picture network on CoreML and the text part with the picker: font-drawn lines of the
+    // three widths (tool/coreml_probe/lines-coreml), against what was written
+    final text = '$modelDir/glm/text.onnx', table = '$modelDir/glm/embeddings.bin';
+    if (File(text).existsSync() && File(table).existsSync()) {
+      const linesDir = '$repo/tool/coreml_probe/lines-coreml';
+      final truth = {
+        for (final l in File('$linesDir/truth.tsv').readAsLinesSync().where((l) => l.contains('\t'))) l.split('\t')[0]: l.split('\t')[1],
+      };
+      final byWidth = <int, List<String>>{};
+      final lines = <String, GlmPicture>{};
+      for (final name in truth.keys.toList()..sort()) {
+        final image = img.decodePng(File('$linesDir/$name').readAsBytesSync())!.convert(numChannels: 4);
+        final picture = GlmPicture(glmPatches(image.getBytes(order: img.ChannelOrder.rgba), image.width, image.height), image.height ~/ glmPatch, image.width ~/ glmPatch);
+        final same = byWidth.putIfAbsent(picture.gridWidth, () => []);
+        if (same.length < 2) {
+          same.add(name);
+          lines[name] = picture;
+        }
+      }
+      final vocabulary = GlmVocabulary.parse(File('$repo/assets/glm_ocr/vocab.txt').readAsStringSync());
+      final reader = GlmOnnxReader(keepOpen: const Duration(minutes: 5));
+      final reading = Stopwatch()..start();
+      final read = await reader.readScored(gpu, text, table, lines.values.toList());
+      await reader.close();
+      var right = 0;
+      final names = lines.keys.toList();
+      for (var i = 0; i < names.length; i++) {
+        final got = vocabulary.decode(read[i].tokens);
+        final written = truth[names[i]];
+        if (got == written) right++;
+        say('line ${names[i]} (${lines[names[i]]!.gridWidth ~/ 2} columns): "$got" (confidence ${read[i].confidence.toStringAsFixed(3)})${got == written ? '' : ' - written: "$written"'}');
+        if (!(read[i].confidence > 0 && read[i].confidence <= 1)) failures.add('line ${names[i]}: confidence ${read[i].confidence}');
+      }
+      results['handwriting reader'] = {'lines': names.length, 'right': right, 'ms': reading.elapsedMilliseconds, 'vision': onnxSessionReport['vision-gpu.onnx']};
+      say('handwriting reader: $right of ${names.length} lines as written, ${reading.elapsedMilliseconds} ms, picture network on ${onnxSessionReport['vision-gpu.onnx']}');
+      if (right < names.length - 1) failures.add('handwriting reader: only $right of ${names.length} lines as written');
+    }
+
+    // 6. the formula reader end to end (encoder on CoreML, decoder with the picker): a drawn x + 1 is read to something that ends
+    final decoderFile = '$modelDir/teller/decoder.onnx';
+    if (File(teller).existsSync() && File(decoderFile).existsSync()) {
+      final formula = await OnnxTexTeller.open(teller, decoderFile, keepOpen: Duration.zero);
+      final pixels = await renderInkForTexTeller([
+        pen([const Offset(0, 0), const Offset(30, 40)]), pen([const Offset(30, 0), const Offset(0, 40)]),
+        pen([const Offset(50, 20), const Offset(80, 20)]), pen([const Offset(65, 5), const Offset(65, 35)]),
+        pen([const Offset(100, 5), const Offset(105, 0), const Offset(105, 40)]),
+      ]);
+      final r = await formula.readScored(pixels);
+      say('formula reader: tokens ${r.ids}, log probability ${r.logProb.toStringAsFixed(3)}');
+      results['formula reader'] = {'tokens': r.ids, 'logProb': r.logProb};
+      if (r.ids.length < 3 || r.ids.last != texTellerEosToken || !r.logProb.isFinite) failures.add('formula reader: ${r.ids} (${r.logProb})');
     }
     save();
     say(failures.isEmpty ? 'all good' : 'failures: $failures');

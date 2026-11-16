@@ -40,7 +40,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/models
           # (the checksums the app pins: a new file is a new key)
-          key: coreml-models-8ea8a061-6194708c-e4565d57-7a4eedee-966e02f2
+          key: coreml-models-8ea8a061-6194708c-e4565d57-7a4eedee-966e02f2-1c886fa0-9f74c48b-ba01e678
       - name: Download the models
         if: steps.models.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}
@@ -52,6 +52,9 @@ jobs:
           get glm/vision.onnx https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/vision.onnx
           get glm/vision-gpu.onnx https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/vision-gpu.onnx
           get glm/vision-gpu.onnx.data https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/vision-gpu.onnx.data
+          get glm/text.onnx https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/text.onnx
+          get glm/embeddings.bin https://huggingface.co/nfa04/glm-ocr-onnx/resolve/main/embeddings.bin
+          get teller/decoder.onnx https://huggingface.co/nfa04/texteller-onnx-8bit/resolve/main/decoder.onnx
       - name: Check the models
         working-directory: ${{ runner.temp }}/models
         run: |
@@ -61,6 +64,9 @@ jobs:
           e4565d57d7714b0b180718d8bb0a58d59fe7a68486028fe2fa774ce994f0f03a  glm/vision.onnx
           7a4eedee27741d1b5314bfc62de280b080790d62e52c1d51f417f8feb0e562c4  glm/vision-gpu.onnx
           966e02f241403b5cc83f5f2de76bb006a3137b96874df458418e50b64c00ee99  glm/vision-gpu.onnx.data
+          1c886fa00f1b62c3a58728cadc49718c44fb046dca4e12171c1734cec9f00a41  glm/text.onnx
+          9f74c48b8b5a645fbc438f2ee3c317a2102948149ff1deb3dfc678675b8094d5  glm/embeddings.bin
+          ba01e6781c1acf48781e838433c185e71feccae11f40d84ee2a46ecca7ec5ad9  teller/decoder.onnx
           EOF
       - run: flutter pub get
       - name: Let the test read the models (the sandbox of the debug app only reaches its own container)
@@ -78,7 +84,7 @@ jobs:
           ( for at in 900 1200; do sleep $at; pid=$(pgrep -n -f 'Notation.app/Contents/MacOS' || true)
               [ -n "$pid" ] && sample "$pid" 5 -file "$RUNNER_TEMP/sample-$at.txt" >/dev/null 2>&1; done ) &
           flutter test integration_test/coreml_app_test.dart -d macos \
-            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json 2>&1 | tee coreml.log
+            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json --dart-define=REPO=${{ github.workspace }} 2>&1 | tee coreml.log
       - name: Summary
         if: always()
         run: |
