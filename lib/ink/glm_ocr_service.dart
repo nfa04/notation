@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../export/pdf_ink_text.dart' show plainI;
 import '../llm/model_files.dart';
-import '../llm/onnx_session.dart' show onnxAccelerationEnabled, onnxAccelerationVersion, padPicturesNow;
+import '../llm/onnx_session.dart' show onnxAccelerationEnabled, onnxAccelerationVersion, onnxCheckedForFp16, onnxUsesCoreMl, padPicturesNow;
 import '../models/canvas_models.dart';
 import 'glm_ocr.dart';
 import 'ink_grouping.dart';
@@ -163,7 +163,8 @@ class GlmOcrService extends ModelFilesService {
   /// [readLines], with the words of each that the model was unsure of (see [unsureBelow]).
   Future<List<({String text, List<String> unsure})>> readLinesScored(List<List<DrawingStroke>> lines, {GlmQuality quality = GlmQuality.standard}) async {
     if (!installed) throw StateError('The handwriting model is not installed.');
-    final pad = await padPicturesNow();
+    // (CoreML runs the 16-bit vision file one picture width at a time: few widths, few conversions)
+    final pad = await padPicturesNow() || (onnxCheckedForFp16(visionFile) && await onnxUsesCoreMl());
     final pictures = [for (final line in lines) await renderInkForGlmOcr(line, rows: quality.rows, pad: pad)];
     final tokens = await _read(
       (await file(visionFile)).path,

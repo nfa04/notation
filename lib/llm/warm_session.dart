@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
 import 'accelerator_plans.dart';
@@ -220,11 +220,76 @@ class WarmSession {
   }
 }
 
+/// A model's free input size, which CoreML needs fixed: the dimension's [name] in the model, and where an input carries it ([input],
+/// [axis]). The handwriting reader's vision network: ('4*m', pixel_values, 0), the number of patches.
+typedef PinnedSize = ({String name, String input, int axis});
+
+/// CoreML with a model whose input size is free (see [PinnedSize]): one session for the size of the inputs, opened with that size fixed
+/// (CoreML builds it once per size and keeps it in a folder of its own, see [coreMlOptions]); another size closes it and opens that
+/// size's. One at a time: each holds the whole model.
+@visibleForTesting
+class OneSizeAtATime {
+  final PinnedSize pin;
+  final Future<WarmEngine> Function(int size) open;
+  WarmEngine? _engine;
+  int? _size;
+  OneSizeAtATime(this.pin, this.open);
+
+  /// The size of the session that is open, or null.
+  int? get size => _size;
+
+  Future<Map<String, OrtValue>> run(Map<String, OrtValue> inputs) async {
+    final given = inputs[pin.input];
+    if (given == null) throw StateError('the model has no input ${pin.input}');
+    final size = given.shape[pin.axis];
+    if (_size != size) {
+      final old = _engine;
+      _engine = null;
+      _size = null;
+      await old?.close();
+      _engine = await open(size);
+      _size = size;
+    }
+    return _engine!.run(inputs);
+  }
+
+  Future<void> close() async {
+    final e = _engine;
+    _engine = null;
+    _size = null;
+    await e?.close();
+  }
+
+  WarmEngine get engine => WarmEngine(run, close);
+}
+
 /// Opens [path] for [WarmSession]: with an accelerator that compiles for exact sizes (see [onnxNeedsFixedShapes]) as two sessions (the
 /// accelerated one on a thread of its own, and a processor one made when first needed); otherwise as the one [openOnnxSession] gives.
+/// With CoreML and a model whose input size is free ([pin]) the accelerated one is a session per size (see [OneSizeAtATime]): a size it
+/// has not built yet is read on the processor meanwhile.
 ///
 /// The sizes whose plan is made are noted in [AcceleratorPlans] (for the settings); [oneSize]: the model takes one input size only.
-Future<WarmSession> openWarmSession(String path, {OrtSessionOptions? options, bool accelerate = true, bool oneSize = false}) async {
+/// [processorPath]: another file of the same model for the processor (the handwriting reader's 8-bit vision file is quicker there than
+/// the 16-bit one CoreML takes).
+Future<WarmSession> openWarmSession(String path,
+    {OrtSessionOptions? options, bool accelerate = true, bool oneSize = false, PinnedSize? pin, String? processorPath}) async {
+  if (accelerate && pin != null && await onnxUsesCoreMl()) {
+    OrtSessionOptions fixed(int size) => OrtSessionOptions(
+          intraOpNumThreads: options?.intraOpNumThreads,
+          interOpNumThreads: options?.interOpNumThreads,
+          useArena: options?.useArena,
+          sessionConfigs: options?.sessionConfigs,
+          freeDimensions: {...?options?.freeDimensions, pin.name: size},
+        );
+    final sized = OneSizeAtATime(pin, (size) async => WarmEngine.of(await openOnnxSession(path, options: fixed(size))));
+    return WarmSession._compiling(
+      () async => sized.engine,
+      () async => WarmEngine.of(await openOnnxSession(processorPath ?? path, options: options, accelerate: false)),
+      null,
+      false,
+      onnxModelName(path),
+    );
+  }
   if (accelerate && await onnxNeedsFixedShapes()) {
     OrtSessionOptions own() => OrtSessionOptions(
           intraOpNumThreads: options?.intraOpNumThreads,

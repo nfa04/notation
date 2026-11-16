@@ -234,4 +234,65 @@ void main() {
     await s.close().timeout(const Duration(seconds: 1));
     expect(log, contains('processor closed'));
   });
+
+  group('one session per size (CoreML with the input size fixed)', () {
+    OrtValue patches(int n) => _Sized([n, 1176]);
+    late List<String> events;
+    late OneSizeAtATime sized;
+    setUp(() {
+      events = [];
+      sized = OneSizeAtATime((name: '4*m', input: 'pixel_values', axis: 0), (size) async {
+        events.add('open $size');
+        return WarmEngine((inputs) async {
+          events.add('run $size');
+          return <String, OrtValue>{'features': _Shape('$size')};
+        }, () async => events.add('close $size'));
+      });
+    });
+
+    test('a session is opened for the size of the input, and kept while the size stays', () async {
+      await sized.run({'pixel_values': patches(240)});
+      await sized.run({'pixel_values': patches(240)});
+      expect(events, ['open 240', 'run 240', 'run 240']);
+      expect(sized.size, 240);
+    });
+
+    test('another size closes the open session first (each holds the whole model), then opens its own', () async {
+      await sized.run({'pixel_values': patches(240)});
+      await sized.run({'pixel_values': patches(960)});
+      await sized.run({'pixel_values': patches(240)});
+      expect(events, ['open 240', 'run 240', 'close 240', 'open 960', 'run 960', 'close 960', 'open 240', 'run 240']);
+      await sized.close();
+      expect(events.last, 'close 240');
+      expect(sized.size, isNull);
+    });
+
+    test('a session that cannot be opened leaves none open, and the next run tries again', () async {
+      var fail = true;
+      final flaky = OneSizeAtATime((name: '4*m', input: 'pixel_values', axis: 0), (size) async {
+        if (fail) throw StateError('CoreML refused');
+        return WarmEngine((_) async => <String, OrtValue>{}, () async {});
+      });
+      await expectLater(flaky.run({'pixel_values': patches(240)}), throwsStateError);
+      expect(flaky.size, isNull);
+      fail = false;
+      await flaky.run({'pixel_values': patches(240)});
+      expect(flaky.size, 240);
+    });
+
+    test('an input the pin does not name is an error', () async {
+      await expectLater(sized.run({'other': patches(240)}), throwsStateError);
+    });
+  });
+}
+
+/// An input of a given shape (only the shape is looked at).
+class _Sized implements OrtValue {
+  @override
+  final List<int> shape;
+  _Sized(this.shape);
+  @override
+  Future<void> dispose() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

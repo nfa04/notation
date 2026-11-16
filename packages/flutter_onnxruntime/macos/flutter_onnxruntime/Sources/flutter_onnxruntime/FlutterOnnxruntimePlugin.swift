@@ -14,7 +14,7 @@ import Foundation
   import onnxruntime_objc  // CocoaPods
 #endif
 #if canImport(flutter_onnxruntime_objc)
-  // SPM builds the ObjC++ helpers (Float16Helper, MessengerHelper) as a separate module;
+  // SPM builds the ObjC++ helpers (Float16Helper, MessengerHelper, SessionOptionsHelper) as a separate module;
   // under CocoaPods they live in the same module as this file.
   import flutter_onnxruntime_objc
 #endif
@@ -196,6 +196,20 @@ public class FlutterOnnxruntimePlugin: NSObject, FlutterPlugin {
         // the session's own log level (1 = info: the CoreML provider then says how many of the nodes it took, in how many pieces)
         if let level = options["logSeverityLevel"] as? Int, let logging = [ORTLoggingLevel.verbose, .info, .warning, .error, .fatal][safe: level] {
           try? sessionOptions.setLogSeverityLevel(logging)
+        }
+
+        // free input sizes given fixed values (a model whose input size is free cannot be built by CoreML otherwise)
+        if let dims = options["freeDimensions"] as? [String: Any] {
+          for (name, raw) in dims {
+            guard let value = (raw as? NSNumber)?.int64Value else { continue }
+            do {
+              try SessionOptionsHelper.addFreeDimensionOverride(sessionOptions, name: name, value: value)
+            } catch {
+              result(FlutterError(code: "SESSION_OPTIONS_ERROR",
+                message: "Failed to fix the free dimension \(name): \(error.localizedDescription)", details: nil))
+              return
+            }
+          }
         }
 
         // Note: 14/04/25 interOpNumThreads is not supported in onnxruntime-objc

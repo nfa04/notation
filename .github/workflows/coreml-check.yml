@@ -1,10 +1,10 @@
 name: CoreML check
 
-# Runs integration_test/coreml_check_test.dart on a Mac: the formula encoder and the handwriting vision network, opened with several
-# CoreML settings and with the plain processor, compared answer by answer and timed. A GitHub Mac is a virtual machine on Apple
-# Silicon: expect no Neural Engine and little or no graphics card, so the times here say little about a real Mac; what counts is
-# whether CoreML takes the models, whether its answers match the processor's, and whether the cache works.
-# Started by hand (Actions > CoreML check > Run workflow); it downloads about 1.6 GB of models, kept in the Actions cache.
+# Runs the app's own CoreML path on a Mac (integration_test/coreml_app_test.dart): the handwriting reader's 16-bit vision network one
+# picture width at a time (its input size pinned), built once per width and loaded from the cache at the next start, and the formula
+# encoder; both compared with the processor. A GitHub Mac is a virtual machine on Apple Silicon (no Neural Engine): the answers and the
+# cache count, the times only roughly. integration_test/coreml_check_test.dart (raw sessions, every CoreML setting) is kept for by hand.
+# Models (about 1.6 GB) are kept in the Actions cache.
 on:
   workflow_dispatch:
   # (a hand-started workflow must be on the default branch first; until then, a push to this branch runs it)
@@ -17,12 +17,6 @@ concurrency:
 
 env:
   FLUTTER_VERSION: 3.47.7
-  # (what is checked: empty = every model and way; the full set takes over an hour on these machines. Measured already, 2026-11-16:
-  # the formula encoders and the 8-bit vision network)
-  MODELS: glm/vision-gpu.onnx
-  WAYS: processor,mlprogram-all,mlprogram-all-again,mlprogram-gpu
-  RUNS: 1
-  STEP_MINUTES: 25
 
 jobs:
   coreml:
@@ -80,15 +74,14 @@ jobs:
           # (what every thread of the app is doing, 15 and 35 minutes in: if the test hangs, this says where)
           ( for at in 900 1200; do sleep $at; pid=$(pgrep -n -f 'Notation.app/Contents/MacOS' || true)
               [ -n "$pid" ] && sample "$pid" 5 -file "$RUNNER_TEMP/sample-$at.txt" >/dev/null 2>&1; done ) &
-          flutter test integration_test/coreml_check_test.dart -d macos \
-            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json \
-            --dart-define=MODELS="$MODELS" --dart-define=WAYS="$WAYS" --dart-define=RUNS=$RUNS --dart-define=STEP_MINUTES=$STEP_MINUTES 2>&1 | tee coreml.log
+          flutter test integration_test/coreml_app_test.dart -d macos \
+            --dart-define=MODEL_DIR=${{ runner.temp }}/models --dart-define=OUT=${{ runner.temp }}/coreml.json 2>&1 | tee coreml.log
       - name: Summary
         if: always()
         run: |
           {
             echo '```'
-            grep -E "coreml-check|CoreML|partitions" coreml.log | grep -v '^coreml-check | {' || true
+            grep -E "coreml-app|All tests|Some tests" coreml.log || true
             echo '--- progress file'
             cat "$RUNNER_TEMP/coreml.json.progress" 2>/dev/null || echo '(none: the test never started)'
             echo '```'

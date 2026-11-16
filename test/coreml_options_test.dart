@@ -52,4 +52,21 @@ void main() {
       expect(onnxCheckedForFp16(other), isFalse, reason: other);
     }
   });
+
+  test('every fixed size gets a folder of its own inside the file\'s; a new version of the file takes all its sizes with it', () async {
+    final models = Directory('${tmp.path}/models/glm_ocr')..createSync(recursive: true);
+    final gpu = File('${models.path}/vision-gpu.onnx')..writeAsBytesSync([1]);
+    final root = Directory('${tmp.path}/cache');
+    final small = (await coreMlOptions(gpu.path, fixed: {'4*m': 240}, root: root))['ModelCacheDirectory']!;
+    final large = (await coreMlOptions(gpu.path, fixed: {'4*m': 960}, root: root))['ModelCacheDirectory']!;
+    expect(small, isNot(large), reason: 'CoreML keys its cache by the path only: one folder for two sizes gives one the other\'s model');
+    expect(small.split('/').last, '4_m-240');
+    expect(Directory(small).parent.path, Directory(large).parent.path);
+    expect((await coreMlOptions(gpu.path, fixed: {'4*m': 240}, root: root))['ModelCacheDirectory'], small, reason: 'built once, found again');
+
+    gpu.writeAsBytesSync([1, 2]); // (a new version of the model)
+    await coreMlOptions(gpu.path, fixed: {'4*m': 240}, root: root);
+    expect(Directory(small).existsSync(), isFalse);
+    expect(Directory(large).existsSync(), isFalse);
+  });
 }

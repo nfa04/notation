@@ -36,7 +36,7 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
         final tried = '$path|${attempt.label ?? list.first.name}';
         if (_refused.contains(tried)) continue;
         try {
-          final extra = list.contains(OrtProvider.CORE_ML) && onnxCheckedForFp16(path) ? {OrtProvider.CORE_ML: await coreMlOptions(path)} : attempt.options;
+          final extra = list.contains(OrtProvider.CORE_ML) && onnxCheckedForFp16(path) ? {OrtProvider.CORE_ML: await coreMlOptions(path, fixed: options?.freeDimensions)} : attempt.options;
           // (an accelerator takes what it supports and leaves the rest to the processor without a word: the profiler says how much)
           final profile = list.first == OrtProvider.NNAPI || list.first == OrtProvider.QNN;
           final preparing = onnxModelName(path);
@@ -286,6 +286,10 @@ Future<bool> onnxTakesOnlyFp16Files() async {
   return first == OrtProvider.MIGRAPHX || first == OrtProvider.CORE_ML;
 }
 
+/// True when CoreML is the accelerator in use (iOS, macOS): models whose input size is free run there one size at a time (see
+/// [openWarmSession]), so pictures of handwriting are padded to a few widths.
+Future<bool> onnxUsesCoreMl() async => onnxAccelerationEnabled && (await onnxAvailableAccelerators()).firstOrNull == OrtProvider.CORE_ML;
+
 /// Whether the picture of a line of writing is padded now: the setting, or the provider needs it.
 Future<bool> padPicturesNow() async => padToFixedSizes || await onnxNeedsFixedShapes();
 
@@ -381,14 +385,15 @@ OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> provide
 /// fewer operators, and converts the model again at every session (seconds to minutes for the vision network). So: the MLProgram
 /// format, every compute unit, and a folder that keeps the converted model. CoreML does not notice when the file behind a cached model
 /// changes (its key is the path), so the folder is named by the file's size and time, and the folders of older versions are removed.
-/// [root] is for tests (else the app's cache folder).
-Future<Map<String, String>> coreMlOptions(String path, {String computeUnits = 'ALL', Directory? root}) async {
-  final cache = await coreMlCacheFolder(path, root: root);
+/// [fixed]: the free input sizes the session fixes (see [OrtSessionOptions.freeDimensions]): each gets a folder of its own, since CoreML
+/// would otherwise load the model converted for another size. [root] is for tests (else the app's cache folder).
+Future<Map<String, String>> coreMlOptions(String path, {String computeUnits = 'ALL', Map<String, int>? fixed, Directory? root}) async {
+  final cache = await coreMlCacheFolder(path, fixed: fixed, root: root);
   return {'ModelFormat': 'MLProgram', 'MLComputeUnits': computeUnits, 'ModelCacheDirectory': ?cache};
 }
 
 /// The folder for CoreML's converted copy of the model at [path] (see [coreMlOptions]), made if needed; null if it cannot be.
-Future<String?> coreMlCacheFolder(String path, {Directory? root}) async {
+Future<String?> coreMlCacheFolder(String path, {Map<String, int>? fixed, Directory? root}) async {
   try {
     final file = File(path);
     final stat = await file.stat();
@@ -407,7 +412,9 @@ Future<String?> coreMlCacheFolder(String path, {Directory? root}) async {
         }
       }
     }
-    final dir = Directory(p.join(base.path, key));
+    // (one folder per fixed size, inside the file's: an old version of the file goes with all its sizes)
+    final sizes = [for (final e in (fixed ?? const <String, int>{}).entries) '${e.key.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_')}-${e.value}']..sort();
+    final dir = Directory(sizes.isEmpty ? p.join(base.path, key) : p.join(base.path, key, sizes.join('_')));
     await dir.create(recursive: true);
     return dir.path;
   } catch (e) {
