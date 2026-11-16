@@ -1,5 +1,7 @@
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart' hide Text;
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart' show OrtProvider;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData, FilteringTextInputFormatter;
 import '../speech/speech_to_text.dart';
 import '../mcp/mcp_service.dart';
@@ -656,8 +658,13 @@ class _HandwritingSettings extends StatelessWidget {
                 FutureBuilder<List<Object>>(
                   future: onnxAvailableAccelerators(),
                   builder: (context, snap) => Wrap(spacing: 8, runSpacing: 8, children: [
-                    // (the 16-bit network is for a graphics card: offered where the runtime found one, and when it is the one in use)
-                    for (final w in GlmWeights.values.where((w) => w != GlmWeights.gpu || service.weights == w || ((snap.data?.isNotEmpty ?? false))))
+                    // (the 16-bit network is for a graphics card: offered where the runtime found one, and when it is the one in use; on
+                    // Android only with QNN (Snapdragon), which runs it in parts: NNAPI cannot run it, and the processor reads quicker with
+                    // the standard file)
+                    for (final w in GlmWeights.values.where((w) =>
+                        w != GlmWeights.gpu ||
+                        service.weights == w ||
+                        (defaultTargetPlatform == TargetPlatform.android ? (snap.data?.contains(OrtProvider.QNN) ?? false) : (snap.data?.isNotEmpty ?? false))))
                       ChoiceChip(
                         key: ValueKey('handwriting-weights-${w.name}'),
                         label: Text(switch (w) {
