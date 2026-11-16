@@ -223,7 +223,7 @@ void main() {
     expect(partway.dx, inExclusiveRange(to.dx, from.dx));
   });
   testWidgets('in a window narrower than the page, the page grows and shrinks with the room a bar leaves it, not at once', (tester) async {
-    tester.view.physicalSize = const Size(700, 1100);
+    tester.view.physicalSize = const Size(730, 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     late NoteRepository repo;
