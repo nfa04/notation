@@ -147,7 +147,7 @@ def main():
     count = feeds['pixel_values'].shape[0]
     so = ort.SessionOptions()
     so.log_severity_level = 1  # (info: the CoreML provider says how many nodes it took, in how many pieces)
-    result = {'size': size, 'patches': count, 'way': way}
+    result = {'model': os.path.basename(model), 'size': size, 'patches': count, 'way': way}
     if way == 'reference':
         providers = ['CPUExecutionProvider']
     else:
@@ -156,7 +156,7 @@ def main():
         if static:
             so.add_free_dimension_override_by_name('4*m', count)
         # (CoreML keys its cache by the model's path only: every size needs a folder of its own, or it gets another size's model)
-        cache = os.path.join(out_dir, f'cache-{units}-{int(static)}-{size}')
+        cache = os.path.join(out_dir, f'cache-{os.path.basename(model)}-{units}-{int(static)}-{size}')
         os.makedirs(cache, exist_ok=True)
         providers = [('CoreMLExecutionProvider', {'ModelFormat': 'MLProgram', 'MLComputeUnits': units, 'ModelCacheDirectory': cache}),
                      'CPUExecutionProvider']
