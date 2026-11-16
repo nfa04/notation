@@ -2208,19 +2208,21 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     final buttons = _toolbarButtons(context);
     final buttonsWidth = math.max(200.0, screenWidth - titleWidth - 180 - (_toolbarProfiles.length > 1 ? _profileMenuWidth : 0));
     // (beside the title when they fit there in one row, else a row of their own, with as many rows as they need)
-    final buttonsBelow = _topButtonsWidth > buttonsWidth;
+    // (on a phone they are one line that scrolls sideways under the title, never rows)
+    final phone = _phoneBars;
+    final buttonsBelow = !phone && _topButtonsWidth > buttonsWidth;
     return CitationStyleScope(
       style: _citationStyle,
       wholeText: _noteCitationText,
       child: Scaffold(
       appBar: AppBar(
-        toolbarHeight: buttonsBelow ? kToolbarHeight : math.max(kToolbarHeight, _topBarHeight + 8),
+        toolbarHeight: phone ? 48 : buttonsBelow ? kToolbarHeight : math.max(kToolbarHeight, _topBarHeight + 8),
         // on a phone the note has the whole screen, so the way back to the notes is here
         leading: widget.onLeave != null && MediaQuery.sizeOf(context).width < 600
             ? IconButton(key: const ValueKey('editor-back'), tooltip: tr('Back'), icon: const BackButtonIcon(), onPressed: widget.onLeave)
             : null,
         title: SizedBox(
-          width: titleWidth,
+          width: phone ? null : titleWidth,
           child: TextField(
             controller: _titleController,
             onChanged: (_) {
@@ -2239,10 +2241,14 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
           // (beside the buttons, so that it is always in reach)
           ?_toolbarProfileMenu(),
           // the buttons take more rows when the screen is too narrow for them in one
-          if (!buttonsBelow) SizedBox(width: buttonsWidth, child: _topButtons(buttons, Alignment.centerRight)),
+          if (!buttonsBelow && !phone) SizedBox(width: buttonsWidth, child: _topButtons(buttons, Alignment.centerRight)),
         ],
         // (too many to fit beside the title: a row of their own under it, as many rows as they need)
-        bottom: buttonsBelow
+        bottom: phone
+            ? (buttons.isEmpty
+                ? null
+                : PreferredSize(preferredSize: const Size.fromHeight(_stripHeight), child: _buttonStrip(buttons, key: const ValueKey('top-strip'))))
+            : buttonsBelow
             ? PreferredSize(
                 preferredSize: Size.fromHeight(math.max(0, _topBarHeight)),
                 child: SizedBox(width: screenWidth, child: _topButtons(buttons, Alignment.center)),

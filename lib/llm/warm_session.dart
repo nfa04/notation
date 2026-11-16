@@ -273,7 +273,7 @@ class OneSizeAtATime {
 /// the 16-bit one CoreML takes).
 Future<WarmSession> openWarmSession(String path,
     {OrtSessionOptions? options, bool accelerate = true, bool oneSize = false, PinnedSize? pin, String? processorPath}) async {
-  if (accelerate && pin != null && await onnxUsesCoreMl()) {
+  if (accelerate && pin != null && await onnxPinsSizes(path)) {
     OrtSessionOptions fixed(int size) => OrtSessionOptions(
           intraOpNumThreads: options?.intraOpNumThreads,
           interOpNumThreads: options?.interOpNumThreads,
