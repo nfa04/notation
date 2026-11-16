@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/llm/onnx_session.dart';
 
@@ -89,5 +90,14 @@ void main() {
     expect(Directory('${building.path}/Data').existsSync(), isTrue);
     expect(await coreMlDropConvertedWeights(cache.path), 0, reason: 'nothing left to drop');
     expect(await coreMlDropConvertedWeights('${tmp.path}/nowhere'), 0);
+  });
+
+  test('the fixed sizes reach CoreML and QNN, not NNAPI or the processor', () {
+    final o = OrtSessionOptions(freeDimensions: {'4*m': 640});
+    // (without them CoreML cannot build GLM's vision network: error -14, seen in the app check when they were dropped)
+    expect(onnxOptionsFor(o, [OrtProvider.CORE_ML, OrtProvider.CPU]).freeDimensions, {'4*m': 640});
+    expect(onnxOptionsFor(o, [OrtProvider.QNN, OrtProvider.CPU]).freeDimensions, {'4*m': 640});
+    expect(onnxOptionsFor(o, [OrtProvider.NNAPI, OrtProvider.CPU]).freeDimensions, isNull);
+    expect(onnxOptionsFor(o, [OrtProvider.CPU]).freeDimensions, isNull);
   });
 }
