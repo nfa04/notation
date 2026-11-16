@@ -6,6 +6,7 @@ a free dimension override makes every shape fixed. This tries that, one way per 
 
   python probe_glm_vision.py MODEL OUT_DIR reference ROWSxCOLS          # the processor's answer, kept as a .npy
   python probe_glm_vision.py MODEL OUT_DIR coreml ROWSxCOLS UNITS STATIC  # UNITS: ALL, CPUAndGPU, CPUAndNeuralEngine, CPUOnly; STATIC 0/1
+  python probe_glm_vision.py PROBE_MODEL OUT_DIR bisect ROWSxCOLS MAP UNITS  # (add_outputs.py) each inner tensor against the processor
   python probe_glm_vision.py MODEL OUT_DIR lines LINES_DIR WAY             # WAY: cpu or a CoreML UNITS (static): NN.<way> features of
                                                                           # every picture (tool/coreml_probe/make_lines.py), for read_lines.py
 
@@ -99,7 +100,44 @@ def lines(model, out_dir, lines_dir, way):
         print('probe-result', json.dumps(result), flush=True)
 
 
+def bisect(model, out_dir, size, map_file, units):
+    """[model] is a copy with the tensors inside the blocks as outputs (add_outputs.py, labels in [map_file]): how far each is from the
+    processor's, and how large its numbers are, so that the place where CoreML's answer moves away shows."""
+    rows, cols = (int(v) for v in size.split('x'))
+    feeds = {'pixel_values': patches(picture(rows, cols), rows, cols), 'pos_ids': positions(rows, cols)}
+    count = feeds['pixel_values'].shape[0]
+    labels = dict(line.rstrip('\n').split('\t')[::-1] for line in open(map_file))
+    answers = {}
+    for way in ('cpu', units):
+        so = ort.SessionOptions()
+        so.log_severity_level = 2
+        so.add_free_dimension_override_by_name('4*m', count)
+        if way == 'cpu':
+            providers = ['CPUExecutionProvider']
+        else:
+            cache = os.path.join(out_dir, f'cache-bisect-{way}-{size}')
+            os.makedirs(cache, exist_ok=True)
+            providers = [('CoreMLExecutionProvider', {'ModelFormat': 'MLProgram', 'MLComputeUnits': way, 'ModelCacheDirectory': cache}), 'CPUExecutionProvider']
+        session = ort.InferenceSession(model, so, providers=providers)
+        names = [o.name for o in session.get_outputs()]
+        t = time.time()
+        answers[way] = dict(zip(names, session.run(None, feeds)))
+        print('probe-result', json.dumps({'mode': 'bisect', 'way': way, 'size': size, 'runS': round(time.time() - t, 2)}), flush=True)
+        del session
+    for name in names:
+        ref = answers['cpu'][name].astype(np.float64)
+        got = answers[units][name].astype(np.float64)
+        rel = float(np.linalg.norm(got - ref) / max(np.linalg.norm(ref), 1e-30))
+        row = {'mode': 'bisect', 'size': size, 'units': units, 'at': labels.get(name, name), 'relativeError': round(rel, 5),
+               'largest': round(float(np.abs(ref).max()), 2), 'rms': round(float(np.sqrt((ref ** 2).mean())), 3),
+               'largestDifference': round(float(np.abs(got - ref).max()), 4)}
+        print('probe-result', json.dumps(row), flush=True)
+
+
 def main():
+    if sys.argv[3] == 'bisect':
+        bisect(sys.argv[1], sys.argv[2], sys.argv[4], sys.argv[5], sys.argv[6])
+        return
     if sys.argv[3] == 'lines':
         lines(sys.argv[1], sys.argv[2], sys.argv[4], sys.argv[5])
         return
