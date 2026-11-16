@@ -349,7 +349,7 @@ class StoredNoteApi extends ExtensionApi {
             'x': _round(b.position.dx),
             'y': _round(b.position.dy),
             'width': _round(b.size.width),
-            'text': b.controller.text.length > 200 ? '${b.controller.text.substring(0, 200)}...' : b.controller.text,
+            'text': b.text.length > 200 ? '${b.text.substring(0, 200)}...' : b.text,
           },
     ];
   }

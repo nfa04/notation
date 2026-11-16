@@ -4,6 +4,7 @@ import '../l10n/language.dart';
 import 'package:flutter/material.dart';
 
 import '../models/image_item.dart';
+import '../widgets/bounded_image.dart';
 import 'element_drag_detector.dart';
 
 /// A picture on a page. While [interactive] a tap selects it; the selected
@@ -43,6 +44,11 @@ class ImageItemWidget extends StatelessWidget {
   /// How much of the picture shows (its layer's opacity).
   final double opacity;
 
+  /// Pixels of the screen per unit of the page, as the page is shown now; null: not known (the picture is decoded at its own size).
+  /// The picture is decoded no larger than that makes it, rounded up to a power of two: a page zoomed a little, or a picture pulled a
+  /// little bigger, does not decode it again.
+  final double? pixelScale;
+
   static const double minWidth = 40;
 
   const ImageItemWidget({
@@ -61,14 +67,25 @@ class ImageItemWidget extends StatelessWidget {
     this.onReference,
     this.onPalette,
     this.opacity = 1,
+    this.pixelScale,
     required this.onChangeEnd,
   });
+
+  /// The longest side, in pixels, the picture is decoded at for [scale] (see [pixelScale]): a power of two, at least 256.
+  static int decodeSide(Size size, double scale) {
+    final want = size.longestSide * scale;
+    if (!want.isFinite || want <= 256) return 256;
+    return 1 << (want.ceil() - 1).bitLength;
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final image = Image.file(
-      File(item.path),
+    final scale = pixelScale;
+    final side = scale == null ? null : decodeSide(item.size, scale);
+    final image = Image(
+      image: side == null ? FileImage(File(item.path)) : BoundedImage(FileImage(File(item.path)), width: side, height: side),
+      gaplessPlayback: true, // (decoded again at another size: the one there stays until the new one is ready)
       width: item.size.width,
       height: item.size.height,
       fit: BoxFit.fill,

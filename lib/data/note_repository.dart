@@ -185,13 +185,19 @@ class NoteRepository {
   /// Adds (or replaces) one text box of a note without touching the rest of it,
   /// and removes the ones of the same page whose id starts with [replacePrefix].
   /// For text made by an automation while the note may be open elsewhere.
+  ///
+  /// It is an edit: the note's time moves on (that is its version for the sync, and what tells an editor kept out of sight to read it
+  /// again) and [changes] hears of it. Not [saved]: that starts the rules that run when a note is left alone, and a rule that writes a
+  /// box would start itself again.
   Future<void> putTextBox(
     String noteId,
     int page,
     TextBoxWidgetModel box, {
     String? replacePrefix,
   }) async {
-    await _db.transaction((txn) async {
+    final written = await _db.transaction((txn) async {
+      final touched = await txn.update('notes', {'updated_at': _now()}, where: 'id = ?', whereArgs: [noteId]);
+      if (touched == 0) return false; // (no such note: no rows for it)
       if (replacePrefix != null) {
         final rows = await txn.query('text_boxes',
             columns: ['id'], where: 'note_id = ? AND page_index = ?', whereArgs: [noteId, page]);
@@ -215,14 +221,18 @@ class NoteRepository {
             'width': box.size.width,
             'height': box.size.height,
             'font_size': box.fontSize,
-            'text': box.controller.text,
-            'spans': _encodeSpans(box.controller.attributes),
+            'text': box.text,
+            'spans': _encodeSpans(box.attributes),
             'style': box.style.isDefault ? null : jsonEncode(box.style.toJson()),
             'seq': seq,
             'author': box.author,
+            'layer': box.layer == baseLayerId ? null : box.layer,
+            'grp': box.group == noGroup ? null : box.group,
           },
           conflictAlgorithm: ConflictAlgorithm.replace);
+      return true;
     });
+    if (written) _changed(noteId);
   }
 
   Future<String> createNote({String title = 'Untitled Note', String? folderId, String? id}) async {
@@ -315,8 +325,12 @@ class NoteRepository {
   /// Takes the text box [id] of page [page] out of note [noteId] without touching the rest of it (what an automation put there). For a
   /// note that is not open.
   Future<void> removeTextBox(String noteId, int page, String id) async {
-    await _db.delete('text_boxes', where: 'note_id = ? AND page_index = ? AND id = ?', whereArgs: [noteId, page, id]);
-    _changed(noteId);
+    final removed = await _db.transaction((txn) async {
+      final n = await txn.delete('text_boxes', where: 'note_id = ? AND page_index = ? AND id = ?', whereArgs: [noteId, page, id]);
+      if (n > 0) await txn.update('notes', {'updated_at': _now()}, where: 'id = ?', whereArgs: [noteId]); // (an edit, as in [putTextBox])
+      return n > 0;
+    });
+    if (removed) _changed(noteId);
   }
 
   /// Gives note [id] the title [title] without touching the rest of it. For a note that is not open: an open one is named through its editor.
@@ -364,10 +378,13 @@ class NoteRepository {
         if (f.parentId != null && gone.contains(f.parentId) && gone.add(f.id)) grew = true;
       }
     }
-    await _db.delete('folders', where: 'id = ?', whereArgs: [id]);
-    for (final g in gone) {
-      await _tombstone('folder', g, deletedAt);
-    }
+    // (the folders and their tombstones in one go: a folder that went without its tombstone would come back from the other devices)
+    await _db.transaction((txn) async {
+      await txn.delete('folders', where: 'id = ?', whereArgs: [id]);
+      for (final g in gone) {
+        await _tombstone(txn, 'folder', g, deletedAt);
+      }
+    });
     _changed(id);
   }
 
@@ -375,11 +392,11 @@ class NoteRepository {
   /// note or folder changed later than that is not deleted by it. Told by another device that deleted it, it is the time that device
   /// put there ([at]), not now: a change made elsewhere between the two must not look as if it came before the deletion. A time that is
   /// there already is only moved on, never back.
-  Future<void> _tombstone(String kind, String id, [int? at]) async {
+  Future<void> _tombstone(DatabaseExecutor db, String kind, String id, [int? at]) async {
     final when = at ?? _now();
-    final rows = await _db.query('sync_tombstones', columns: ['deleted_at'], where: 'kind = ? AND id = ?', whereArgs: [kind, id]);
+    final rows = await db.query('sync_tombstones', columns: ['deleted_at'], where: 'kind = ? AND id = ?', whereArgs: [kind, id]);
     if (rows.isNotEmpty && (rows.single['deleted_at'] as int) >= when) return;
-    await _db.insert('sync_tombstones', {'kind': kind, 'id': id, 'deleted_at': when}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('sync_tombstones', {'kind': kind, 'id': id, 'deleted_at': when}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Puts the note in the trash (it can be brought back until the trash is emptied, see [purgeTrash]).
@@ -424,27 +441,37 @@ class NoteRepository {
   /// Deletes the note for good, with all it holds. [deletedAt]: when it was deleted, if that was on another device and this is the
   /// news of it (see [_tombstone]).
   Future<void> deleteNote(String id, {int? deletedAt}) async {
-    final rows = await _db.query('notes', columns: ['theme_image'], where: 'id = ?', whereArgs: [id]);
-    await _db.delete('notes', where: 'id = ?', whereArgs: [id]);
-    await _tombstone('note', id, deletedAt);
+    // (the note and its tombstone in one go: a note that went without its tombstone would come back from the other devices)
+    final image = await _db.transaction((txn) async {
+      final rows = await txn.query('notes', columns: ['theme_image'], where: 'id = ?', whereArgs: [id]);
+      await txn.delete('notes', where: 'id = ?', whereArgs: [id]);
+      await _tombstone(txn, 'note', id, deletedAt);
+      return rows.isEmpty ? null : rows.single['theme_image'] as String?;
+    });
     _changed(id);
-    final image = rows.isEmpty ? null : rows.single['theme_image'] as String?;
     if (image != null) {
       File(image,).delete().catchError((Object _) => File(image)); // already gone is fine
     }
   }
 
   /// The note with all its annotations, or null if it does not exist.
+  ///
+  /// Its tables are read in one batch, which SQLite runs as one transaction: a save that came in between the strokes and the text boxes
+  /// would otherwise give a note that was never stored (the sync reads notes while the editor saves them). One batch is also one trip to
+  /// the database instead of six.
   Future<NoteData?> loadNote(String id) async {
-    final rows = await _db.query('notes', where: 'id = ?', whereArgs: [id]);
+    final read = _db.batch()
+      ..query('notes', where: 'id = ?', whereArgs: [id])
+      ..rawQuery('SELECT theme_image FROM folders WHERE id = (SELECT folder_id FROM notes WHERE id = ?)', [id])
+      ..query('strokes', where: 'note_id = ?', whereArgs: [id], orderBy: 'id')
+      ..query('text_boxes', where: 'note_id = ?', whereArgs: [id], orderBy: 'seq')
+      ..query('images', where: 'note_id = ?', whereArgs: [id], orderBy: 'seq')
+      ..query('highlights', where: 'note_id = ?', whereArgs: [id], orderBy: 'id');
+    final results = [for (final r in await read.commit()) (r as List).cast<Map<String, Object?>>()];
+    final rows = results[0];
     if (rows.isEmpty) return null;
     final r = rows.single;
-    final folderId = r['folder_id'] as String?;
-    final folderImage = folderId == null
-        ? null
-        : (await _db.query('folders', columns: ['theme_image'], where: 'id = ?', whereArgs: [folderId]))
-            .map((f) => f['theme_image'] as String?)
-            .firstOrNull;
+    final folderImage = results[1].map((f) => f['theme_image'] as String?).firstOrNull;
 
     final note = NoteData(
       id: id,
@@ -471,7 +498,7 @@ class NoteRepository {
       layers: LayerStack.fromJsonText(r['layers'] as String?),
     );
 
-    for (final s in await _db.query('strokes', where: 'note_id = ?', whereArgs: [id], orderBy: 'id')) {
+    for (final s in results[2]) {
       final stroke = DrawingStroke(
         id: s['uid'] as String?,
         color: Color(s['color'] as int),
@@ -495,7 +522,7 @@ class NoteRepository {
       note.strokes.putIfAbsent(s['page_index'] as int, () => []).add(stroke);
     }
 
-    for (final b in await _db.query('text_boxes', where: 'note_id = ?', whereArgs: [id], orderBy: 'seq')) {
+    for (final b in results[3]) {
       final box = TextBoxWidgetModel(
         id: b['id'] as String,
         position: Offset(b['x'] as double, b['y'] as double),
@@ -508,11 +535,11 @@ class NoteRepository {
         layer: (b['layer'] as String?) ?? baseLayerId,
         group: (b['grp'] as String?) ?? noGroup,
       );
-      box.controller.attributes.addAll(_decodeSpans(b['spans'] as String));
+      box.attributes.addAll(_decodeSpans(b['spans'] as String));
       note.textBoxes.putIfAbsent(b['page_index'] as int, () => []).add(box);
     }
 
-    for (final m in await _db.query('images', where: 'note_id = ?', whereArgs: [id], orderBy: 'seq')) {
+    for (final m in results[4]) {
       note.images.putIfAbsent(m['page_index'] as int, () => []).add(ImageItem(
             id: m['id'] as String,
             path: m['path'] as String,
@@ -524,7 +551,7 @@ class NoteRepository {
           ));
     }
 
-    for (final h in await _db.query('highlights', where: 'note_id = ?', whereArgs: [id], orderBy: 'id')) {
+    for (final h in results[5]) {
       note.highlights.putIfAbsent(h['page_index'] as int, () => []).add(PdfHighlight(
             id: h['uid'] as String?,
             rect: Rect.fromLTRB(h['left'] as double, h['top'] as double,
@@ -679,8 +706,8 @@ class NoteRepository {
             'width': b.size.width,
             'height': b.size.height,
             'font_size': b.fontSize,
-            'text': b.controller.text,
-            'spans': _encodeSpans(b.controller.attributes),
+            'text': b.text,
+            'spans': _encodeSpans(b.attributes),
             'style': b.style.isDefault ? null : jsonEncode(b.style.toJson()),
             'seq': i,
             'author': b.author,

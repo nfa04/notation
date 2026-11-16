@@ -846,6 +846,21 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     }
   }
 
+  /// The system is short of memory: the editors kept out of sight (each holds a whole note, its PDF and page pictures) are let go now,
+  /// not when their time runs out. (Flutter empties its own cache of pictures by itself.) Their notes are saved as the editors close.
+  @override
+  void didHaveMemoryPressure() {
+    if (_kept.isEmpty || !mounted) return;
+    setState(() {
+      for (final id in _kept.keys) {
+        _editorKeys.remove(id);
+      }
+      _kept.clear();
+    });
+    _keptTimer?.cancel();
+    _keptTimer = null;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _inFront = state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;

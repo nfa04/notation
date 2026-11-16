@@ -189,15 +189,15 @@ class Replica {
         'w': b.size.width,
         'h': b.size.height,
         'fs': b.fontSize,
-        'text': b.controller.text,
-        'spans': _spans(b.controller.attributes),
+        'text': b.text,
+        'spans': _spans(b.attributes),
         if (!b.style.isDefault) 'style': b.style.toJson(),
         if (b.author != null) 'a': b.author,
         if (b.layer != baseLayerId) 'ly': b.layer,
         if (b.group != noGroup) 'gr': b.group,
       };
   static int _boxPrint(TextBoxWidgetModel b, int page) =>
-      Object.hash(page, b.position, b.size, b.fontSize, b.style, b.controller.text, _hashSpans(b.controller.attributes), b.layer, b.group);
+      Object.hash(page, b.position, b.size, b.fontSize, b.style, b.text, _hashSpans(b.attributes), b.layer, b.group);
 
   static Map<String, Object?> _imageData(ImageItem m, int page) =>
       {'p': page, 'x': m.position.dx, 'y': m.position.dy, 'w': m.size.width, 'h': m.size.height, if (m.author != null) 'a': m.author, if (m.layer != baseLayerId) 'ly': m.layer, if (m.group != noGroup) 'gr': m.group};

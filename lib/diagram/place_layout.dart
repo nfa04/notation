@@ -25,7 +25,7 @@ import 'diagram_layout.dart';
       author: author,
       layer: layer,
     );
-    if (b.bold) box.controller.attributes.add(TextSpanAttribute(start: 0, end: b.text.length, type: AttributeType.bold));
+    if (b.bold) box.attributes.add(TextSpanAttribute(start: 0, end: b.text.length, type: AttributeType.bold));
     boxes.add(box);
   }
   for (final l in layout.labels) {

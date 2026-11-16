@@ -591,8 +591,8 @@ List<NoteFileEntry> noteFileEntries(NoteFileParts parts, {DateTime? now}) {
             'w': b.size.width,
             'h': b.size.height,
             'fontSize': b.fontSize,
-            'text': b.controller.text,
-            'spans': _spansJson(b.controller.attributes),
+            'text': b.text,
+            'spans': _spansJson(b.attributes),
             'style': b.style.isDefault ? null : b.style.toJson(),
             if (b.author != null) 'author': b.author,
             if (b.layer != baseLayerId) 'layer': b.layer,
@@ -894,7 +894,7 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
         layer: _str(b['layer']) ?? baseLayerId,
         group: _str(b['group']) ?? noGroup,
       );
-      box.controller.attributes.addAll(_spansFrom(b['spans']));
+      box.attributes.addAll(_spansFrom(b['spans']));
       note.textBoxes.putIfAbsent(page, () => []).add(box);
     });
   }

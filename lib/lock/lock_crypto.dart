@@ -51,7 +51,11 @@ Future<({Uint8List nonce, Uint8List data})> encrypt(Uint8List key, Uint8List cle
 /// What [encrypt] made, read again; null if the key is wrong or the data was changed.
 Future<Uint8List?> decrypt(Uint8List key, Uint8List nonce, Uint8List data) => _away(() async {
       try {
-        final box = SecretBox.fromConcatenation([...nonce, ...data], nonceLength: nonce.length, macLength: 16);
+        // (joined as bytes: a list literal of the two would hold every byte as an object, eight times the size of the note)
+        final joined = Uint8List(nonce.length + data.length)
+          ..setAll(0, nonce)
+          ..setAll(nonce.length, data);
+        final box = SecretBox.fromConcatenation(joined, nonceLength: nonce.length, macLength: 16);
         return Uint8List.fromList(await AesGcm.with256bits().decrypt(box, secretKey: SecretKey(key)));
       } on SecretBoxAuthenticationError {
         return null;

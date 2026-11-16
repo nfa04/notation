@@ -536,7 +536,7 @@ class ParamBrush extends Brush {
 
   @override
   BrushShape? shape(DrawingStroke stroke) {
-    var pts = stroke.points;
+    List<Offset> pts = stroke.points;
     if (pts.isEmpty) return null;
     final given = stroke.pressures;
     final curve = params.pressurePoints;

@@ -1,3 +1,6 @@
+import 'dart:io' show File, FileSystemException;
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -34,6 +37,10 @@ class AppDatabase {
             await db.execute(sql);
           }
         },
+        // a newer build made this database: its tables are not what this build knows, and writing this build's number into it (which
+        // sqflite does when nothing is said) would make the newer build run its upgrades a second time when it opens it again
+        onDowngrade: (db, from, to) async => throw StateError(
+            'The notes were last opened by a newer version of the app (database version $from, this version knows $to). Install that version again.'),
         onUpgrade: (db, from, to) async {
           for (var v = from; v < to; v++) {
             for (final sql in migrations[v] ?? const <String>[]) {
@@ -47,6 +54,7 @@ class AppDatabase {
           }
         },
       );
+    if (!kIsWeb && path != inMemoryDatabasePath) await backUpBeforeUpgrade(dbPath);
     // (on the web the first way of running SQLite may be refused by the browser: the next is tried, and what failed is logged)
     Object? failure;
     for (final factory in makeDatabaseFactories()) {
@@ -60,5 +68,44 @@ class AppDatabase {
       }
     }
     throw failure!;
+  }
+
+  /// The version of the schema a database file says it has (its `user_version`, read from the header without opening it), or null if
+  /// there is no such file or it is not a database.
+  static Future<int?> fileVersion(String path) async {
+    try {
+      final f = await File(path).open();
+      try {
+        final header = await f.read(100);
+        if (header.length < 100 || String.fromCharCodes(header.sublist(0, 15)) != 'SQLite format 3') return null;
+        return ByteData.sublistView(header).getUint32(60); // (big-endian, as SQLite writes it)
+      } finally {
+        await f.close();
+      }
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  /// Before an upgrade of the schema, the database (and its write-ahead log, which may hold the last commits) is copied beside it as
+  /// `<name>.before-upgrade`: an upgrade that goes wrong half way, or a build with a broken step, leaves a copy to go back to. One copy
+  /// is kept, the one from before the last upgrade. Nothing is copied when the database is new or up to date.
+  static Future<void> backUpBeforeUpgrade(String path) async {
+    final version = await fileVersion(path);
+    if (version == null || version == 0 || version >= schemaVersion) return;
+    final copy = '$path.before-upgrade';
+    try {
+      await File(path).copy(copy);
+      final wal = File('$path-wal');
+      if (await wal.exists()) {
+        await wal.copy('$copy-wal');
+      } else {
+        await File('$copy-wal').delete().catchError((Object _) => File('$copy-wal'));
+      }
+      debugPrint('The database (version $version) was copied to $copy before its upgrade to version $schemaVersion');
+    } on FileSystemException catch (e) {
+      // (no room for the copy: the upgrade goes ahead, as it did before there were copies)
+      debugPrint('The database could not be copied before its upgrade: $e');
+    }
   }
 }

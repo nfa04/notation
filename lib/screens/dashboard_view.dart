@@ -1,3 +1,4 @@
+import '../widgets/bounded_image.dart';
 import '../web/picked_file.dart';
 import 'dart:async';
 import 'dart:io';
@@ -543,7 +544,7 @@ class _DashboardViewState extends State<DashboardView> {
           if (note.themeImage != null) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.file(
+              child: BoundedFileImage(
                 File(note.themeImage!),
                 key: ValueKey(note.themeImage),
                 fit: BoxFit.cover,

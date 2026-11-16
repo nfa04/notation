@@ -1,3 +1,4 @@
+import '../widgets/bounded_image.dart';
 import '../pdf/open_pdf.dart';
 import '../web/picked_file.dart';
 import 'dart:async';
@@ -2128,8 +2129,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
       _titleController.dispose();
       for (var pageBoxes in _textBoxesPerPage.values) {
         for (var box in pageBoxes) {
-          box.controller.dispose();
-          box.focusNode.dispose();
+          box.dispose();
         }
       }
       _documentController.dispose();

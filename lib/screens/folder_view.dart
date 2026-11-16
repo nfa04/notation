@@ -1,3 +1,4 @@
+import '../widgets/bounded_image.dart';
 import '../web/picked_file.dart';
 import '../citations/citation_service.dart';
 import '../citations/citation_style.dart';
@@ -895,7 +896,7 @@ class _FolderViewState extends State<FolderView> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.file(
+            BoundedFileImage(
               File(image),
               key: ValueKey(image),
               fit: BoxFit.cover,
@@ -977,7 +978,7 @@ class _FolderViewState extends State<FolderView> {
                     else
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
+                        child: BoundedFileImage(
                           File(n.themeImage!),
                           key: ValueKey(n.themeImage),
                           width: 44,

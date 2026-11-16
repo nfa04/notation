@@ -175,7 +175,7 @@ class _Writer {
 
   TextBoxWidgetModel _make(String text, Offset at, Size size, double fontSize, TextBoxStyle style, {bool bold = false}) {
     final box = TextBoxWidgetModel(id: 'welcome${++_ids}', position: at, size: size, initialText: text, fontSize: fontSize, style: style);
-    if (bold) box.controller.attributes.add(TextSpanAttribute(start: 0, end: text.length, type: AttributeType.bold));
+    if (bold) box.attributes.add(TextSpanAttribute(start: 0, end: text.length, type: AttributeType.bold));
     return box;
   }
 

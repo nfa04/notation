@@ -42,7 +42,7 @@ extension _EditorImages on _FixedPageNoteEditorState {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.file(
+          BoundedFileImage(
             File(_bannerImage!),
             key: ValueKey(_bannerImage!),
             fit: BoxFit.cover,
@@ -278,6 +278,7 @@ extension _EditorImages on _FixedPageNoteEditorState {
         onReference: _on(Feature.layers) ? () => _useAsReference(item) : null,
         onPalette: _on(Feature.pictureEdit) ? () => _paletteFrom(item) : null,
         onDelete: () => _deleteImage(item),
+        pixelScale: controls ? null : _pageScale * MediaQuery.devicePixelRatioOf(context),
         onChangeEnd: _scheduleSave,
       );
   }

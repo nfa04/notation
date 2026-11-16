@@ -161,7 +161,7 @@ class NotePreviews {
     for (final box in note.textBoxes[0] ?? const []) {
       if (!note.layers.byId(box.layer).visible) continue;
       final text = TextPainter(
-        text: TextSpan(text: box.controller.text, style: TextStyle(color: Colors.black87, fontSize: box.fontSize)),
+        text: TextSpan(text: box.text, style: TextStyle(color: Colors.black87, fontSize: box.fontSize)),
         textDirection: TextDirection.ltr,
         maxLines: 30,
       )..layout(maxWidth: box.size.width > 0 ? box.size.width : 260);

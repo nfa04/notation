@@ -9,6 +9,7 @@ import '../models/rich_text.dart';
 import 'markdown_parser.dart';
 import 'code_highlight.dart';
 import 'document_images.dart';
+import '../widgets/bounded_image.dart';
 import 'remote_image.dart';
 
 /// How a piece of text formatted by [s] is drawn (over the style of its block), the text being [fontSize] large.
@@ -220,7 +221,7 @@ class MarkdownView extends StatelessWidget {
     final file = DocumentImages.fileOf(run.image!);
     Widget missing(BuildContext _, Object _, StackTrace? _) => Text.verbatim('🖼 ${run.text}', style: TextStyle(fontSize: fontSize * 0.8));
     return file != null
-        ? Image.file(file, width: run.imageWidth, errorBuilder: missing)
+        ? Builder(builder: (context) => Image(image: boundedFile(file, run.imageWidth, null, MediaQuery.devicePixelRatioOf(context)), width: run.imageWidth, errorBuilder: missing))
         : RemoteImage.isWeb(run.image!)
             ? RemoteImage(url: run.image!, label: run.text, width: run.imageWidth, fontSize: fontSize, color: textColor)
             : Builder(builder: (context) => missing(context, 'not a picture', null));

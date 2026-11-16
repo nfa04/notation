@@ -80,7 +80,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('add-plot')), findsNothing); // the dialog closed
     await tester.pump(const Duration(seconds: 1));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+    // (the save is several steps of real database work, each going on from the fake clock: turns of both until it is through)
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
+      await tester.pump();
+    }
 
     // the picture on the page is the one that was styled
     final saved = (await tester.runAsync(() => repo.loadNote(id)))!;

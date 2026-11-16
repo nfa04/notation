@@ -30,7 +30,7 @@ class NoteHeld {
       n.highlights.values.fold(0, (sum, l) => sum + l.length),
       {
         ...linkedNoteIds(n.documentText),
-        for (final boxes in n.textBoxes.values) for (final b in boxes) ...linkedNoteIds(b.controller.text),
+        for (final boxes in n.textBoxes.values) for (final b in boxes) ...linkedNoteIds(b.text),
       },
       n.pdfPath == null ? null : (n.pdfName ?? ''),
     );

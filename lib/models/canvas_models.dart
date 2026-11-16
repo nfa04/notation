@@ -1,3 +1,4 @@
+import 'dart:collection' show ListBase;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -54,6 +55,151 @@ List<double> pressureHalfWidths(DrawingStroke stroke, double sensitivity) {
   ];
 }
 
+/// The points of a line: a list that counts the changes made through it ([revision]), so that [DrawingStroke.stamp] sees every change
+/// without reading every point. It is the list it was made with, not a copy: a change made to that list directly is not counted (the
+/// stamp's sample of the points is there for that).
+class StrokePoints extends ListBase<Offset> {
+  final List<Offset> _points;
+  int _revision = 0;
+
+  StrokePoints._(this._points);
+
+  /// [points] as the points of a line ([points] itself if it is that already).
+  factory StrokePoints.of(List<Offset> points) => points is StrokePoints ? points : StrokePoints._(points);
+
+  /// Goes up with every change made through this list.
+  int get revision => _revision;
+
+  void _changed() => _revision++;
+
+  @override
+  int get length => _points.length;
+
+  @override
+  set length(int n) {
+    _points.length = n;
+    _changed();
+  }
+
+  @override
+  Offset operator [](int i) => _points[i];
+
+  @override
+  void operator []=(int i, Offset value) {
+    _points[i] = value;
+    _changed();
+  }
+
+  // (the reading goes straight to the list; every change below is the list's own, counted)
+  @override
+  Iterator<Offset> get iterator => _points.iterator;
+
+  @override
+  void add(Offset element) {
+    _points.add(element);
+    _changed();
+  }
+
+  @override
+  void addAll(Iterable<Offset> iterable) {
+    _points.addAll(iterable);
+    _changed();
+  }
+
+  @override
+  void insert(int index, Offset element) {
+    _points.insert(index, element);
+    _changed();
+  }
+
+  @override
+  void insertAll(int index, Iterable<Offset> iterable) {
+    _points.insertAll(index, iterable);
+    _changed();
+  }
+
+  @override
+  bool remove(Object? element) {
+    final removed = _points.remove(element);
+    if (removed) _changed();
+    return removed;
+  }
+
+  @override
+  Offset removeAt(int index) {
+    final removed = _points.removeAt(index);
+    _changed();
+    return removed;
+  }
+
+  @override
+  Offset removeLast() {
+    final removed = _points.removeLast();
+    _changed();
+    return removed;
+  }
+
+  @override
+  void removeRange(int start, int end) {
+    _points.removeRange(start, end);
+    _changed();
+  }
+
+  @override
+  void removeWhere(bool Function(Offset element) test) {
+    _points.removeWhere(test);
+    _changed();
+  }
+
+  @override
+  void retainWhere(bool Function(Offset element) test) {
+    _points.retainWhere(test);
+    _changed();
+  }
+
+  @override
+  void clear() {
+    _points.clear();
+    _changed();
+  }
+
+  @override
+  void sort([int Function(Offset a, Offset b)? compare]) {
+    _points.sort(compare);
+    _changed();
+  }
+
+  @override
+  void shuffle([math.Random? random]) {
+    _points.shuffle(random);
+    _changed();
+  }
+
+  @override
+  void setAll(int index, Iterable<Offset> iterable) {
+    _points.setAll(index, iterable);
+    _changed();
+  }
+
+  @override
+  void setRange(int start, int end, Iterable<Offset> iterable, [int skipCount = 0]) {
+    _points.setRange(start, end, iterable, skipCount);
+    _changed();
+  }
+
+  @override
+  void fillRange(int start, int end, [Offset? fill]) {
+    _points.fillRange(start, end, fill);
+    _changed();
+  }
+
+  @override
+  void replaceRange(int start, int end, Iterable<Offset> newContents) {
+    _points.replaceRange(start, end, newContents);
+    _changed();
+  }
+}
+
 /// A line drawn with the pen, or a shape; the points are in the page space of the editor.
 /// The id of the layer every note has and every line was on before there were layers (see `layers.dart`). It cannot be deleted.
 const String baseLayerId = '';
@@ -69,7 +215,9 @@ class DrawingStroke {
 
   /// What a closed line (a rectangle, an ellipse, a loop) is filled with; null: nothing.
   Color? fill;
-  final List<Offset> points;
+
+  /// Changed in place as the line is drawn, moved or reshaped; every change made through it is counted (see [StrokePoints]).
+  final StrokePoints points;
 
   /// How hard the pen pressed at each point (0 to 255, one for each point), for a line drawn with a pressure-sensitive pen:
   /// the line is thicker where it was pressed harder. Null for a line with no pressure (finger, mouse, shapes).
@@ -108,7 +256,7 @@ class DrawingStroke {
     String? id,
     required this.color,
     required this.width,
-    required this.points,
+    required List<Offset> points,
     this.author,
     this.dash = StrokeDash.solid,
     this.fill,
@@ -120,7 +268,8 @@ class DrawingStroke {
     this.curve,
     this.gradient,
     this.label,
-  }) : id = id ?? newElementId();
+  })  : id = id ?? newElementId(),
+        points = StrokePoints.of(points);
 
   /// Whether the line comes back to where it began, so that it has an inside to fill.
   bool get isClosed => points.length >= 4 && (points.first - points.last).distance <= math.max(6, width * 1.5);
@@ -142,15 +291,15 @@ class DrawingStroke {
         label: label,
       );
 
-  /// A cheap fingerprint of the stroke: its colour, width, author, length and a sample of its points
-  /// (about sixteen, the first and last among them). Every way a stroke changes (more points,
-  /// moved, straightened, put back) changes a sample; reading all of the points of every
-  /// stroke at each save is what this avoids.
+  /// A cheap fingerprint of the stroke: its look, the number of changes made to its points ([StrokePoints.revision]) and a sample of
+  /// them (about sixteen, the first and last among them). The count sees a change anywhere in the line, which a sample alone misses
+  /// (two points of four hundred moved); the sample sees a change made to the list the line was made from, which the count does not.
+  /// Reading all of the points of every stroke at each save is what this avoids. Not the same from one run of the app to the next.
   int get stamp {
     final n = points.length;
     final step = n <= 16 ? 1 : n ~/ 16;
     final pr = pressures;
-    var h = Object.hash(color.toARGB32(), width, n, author, dash, fill?.toARGB32(), pr == null || pr.isEmpty ? 0 : Object.hash(pr.length, pr.first, pr.last), brush, link, layer, group, curve == null || curve!.nodes.isEmpty ? 0 : Object.hash(curve!.nodes.length, curve!.closed, curve!.nodes.first.at, curve!.nodes.last.at, curve!.nodes.first.out, curve!.nodes.last.inn), gradient, label);
+    var h = Object.hash(points.revision, color.toARGB32(), width, n, author, dash, fill?.toARGB32(), pr == null || pr.isEmpty ? 0 : Object.hash(pr.length, pr.first, pr.last), brush, link, layer, group, curve == null || curve!.nodes.isEmpty ? 0 : Object.hash(curve!.nodes.length, curve!.closed, curve!.nodes.first.at, curve!.nodes.last.at, curve!.nodes.first.out, curve!.nodes.last.inn), gradient, label);
     for (var i = 0; i < n; i += step) {
       h = Object.hash(h, points[i]);
     }
@@ -364,7 +513,11 @@ class TextBoxStyle {
   }
 }
 
-/// A text box on a page: its place, size, text with formatting ([controller]) and look.
+/// A text box on a page: its place, size, text with formatting and look.
+///
+/// The text and its formatting are plain data ([text], [attributes]) until something edits the box: [controller] and [focusNode] are
+/// made the first time they are asked for (by the editor, which shows the box), and from then on [text] and [attributes] are theirs.
+/// A note read for the sync, the history, an export or a preview makes no controller at all; [dispose] lets go of what was made.
 class TextBoxWidgetModel {
   final String id;
   Offset position;
@@ -372,8 +525,6 @@ class TextBoxWidgetModel {
   /// The width of the box, and the least height it keeps (0: as tall as its text).
   /// The box grows with its text, so the height is only what the person pulled it to.
   Size size;
-  RichInlineTextController controller;
-  FocusNode focusNode;
   double fontSize;
   TextBoxStyle style;
 
@@ -386,6 +537,11 @@ class TextBoxWidgetModel {
   /// The group it belongs to ([noGroup] for none), see [DrawingStroke.group].
   String group;
 
+  String _text;
+  final List<TextSpanAttribute> _attributes = [];
+  RichInlineTextController? _controller;
+  FocusNode? _focusNode;
+
   TextBoxWidgetModel({
     required this.id,
     required this.position,
@@ -396,8 +552,46 @@ class TextBoxWidgetModel {
     this.author,
     this.layer = baseLayerId,
     this.group = noGroup,
-  })  : controller = RichInlineTextController()..text = initialText,
-        focusNode = FocusNode();
+  }) : _text = initialText;
+
+  /// The text (Markdown source) of the box.
+  String get text => _controller?.text ?? _text;
+  set text(String value) {
+    final c = _controller;
+    if (c != null) {
+      c.text = value;
+    } else {
+      _text = value;
+    }
+  }
+
+  /// The formatting of [text]; changed in place.
+  List<TextSpanAttribute> get attributes => _controller?.attributes ?? _attributes;
+
+  /// What edits the box's text; made the first time it is asked for, with the text and formatting there are.
+  RichInlineTextController get controller => _controller ??= RichInlineTextController()
+    ..text = _text
+    ..attributes.addAll(_attributes);
+
+  /// Whether [controller] has been made (the box is, or was, shown in an editor).
+  bool get hasController => _controller != null;
+
+  FocusNode get focusNode => _focusNode ??= FocusNode();
+
+  /// Lets go of the controller and the focus node, if they were made. The box keeps its text.
+  void dispose() {
+    final c = _controller;
+    if (c != null) {
+      _text = c.text;
+      _attributes
+        ..clear()
+        ..addAll(c.attributes);
+      c.dispose();
+    }
+    _controller = null;
+    _focusNode?.dispose();
+    _focusNode = null;
+  }
 }
 
 /// [document] is classic Markdown text editing instead of placing items on pages.

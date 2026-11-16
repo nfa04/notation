@@ -107,7 +107,11 @@ void main() {
 
     // and it was saved on Anna's side too
     await tester.pump(const Duration(seconds: 1));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    // (the save is several steps of real database work, each going on from the fake clock: turns of both until it is through)
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
+      await tester.pump();
+    }
     final saved = (await tester.runAsync(() => repo.loadNote(id)))!;
     expect(saved.textBoxes[0]!.single.controller.text, 'Ben was here');
 

@@ -16,6 +16,7 @@ import '../models/rich_text.dart';
 import 'code_highlight.dart';
 import 'document_dialogs.dart';
 import 'document_images.dart';
+import '../widgets/bounded_image.dart';
 import 'remote_image.dart';
 import 'grammar.dart';
 import 'markdown_parser.dart';
@@ -816,7 +817,8 @@ class _LiveBuilder {
         );
     final file = DocumentImages.fileOf(target);
     final Widget picture = file != null
-        ? Image.file(file, width: run.imageWidth == null ? null : w, fit: BoxFit.contain, errorBuilder: (c, e, st) => missing(e, st))
+        // (never wider than the page of text: decoded no larger than that, a photo of a camera is not kept at its full size)
+        ? Builder(builder: (context) => Image(image: boundedFile(file, w, null, MediaQuery.devicePixelRatioOf(context)), width: run.imageWidth == null ? null : w, fit: BoxFit.contain, errorBuilder: (c, e, st) => missing(e, st)))
         : RemoteImage.isWeb(target)
             ? RemoteImage(url: target, label: run.text, width: run.imageWidth == null ? null : w, fit: BoxFit.contain, fontSize: fontSize, color: textColor)
             : missing(null, null);
