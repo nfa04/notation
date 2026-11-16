@@ -5,6 +5,7 @@
 // MODEL_DIR holds teller/encoder.onnx, teller/encoder-gpu.onnx, glm/vision.onnx, glm/vision-gpu.onnx (+ .data); missing files are left out.
 // The test fails when the processor cannot run a file, or when the app's own CoreML setting ([coreMlOptions]) opens a file and answers
 // more than 5 % away from the processor. Everything else is reported, not judged (a runner has no Neural Engine, for one).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -51,15 +52,31 @@ OrtSessionOptions withCoreMl(Map<String, String>? coreMl) => OrtSessionOptions(
 
 late Directory cacheRoot;
 
+// (most telling first: a CoreML open that hangs holds the plugin's one queue, so nothing after it can run; the old NeuralNetwork
+// setting, the likeliest to be slow on a big model, comes last)
 final ways = <Way>[
   (name: 'processor', options: (_) async => OrtSessionOptions(providers: const [OrtProvider.CPU])),
-  (name: 'coreml-default', options: (_) async => withCoreMl(null)), // (what the app did before: NeuralNetwork, no cache)
   (name: 'mlprogram-all', options: (p) async => withCoreMl(await coreMlOptions(p, root: cacheRoot))), // (what the app does now)
   (name: 'mlprogram-all-again', options: (p) async => withCoreMl(await coreMlOptions(p, root: cacheRoot))), // (should find the cache)
-  (name: 'mlprogram-cpu', options: (p) async => withCoreMl(await coreMlOptions(p, computeUnits: 'CPUOnly', root: Directory('${cacheRoot.path}-cpu')))),
-  (name: 'mlprogram-gpu', options: (p) async => withCoreMl(await coreMlOptions(p, computeUnits: 'CPUAndGPU', root: Directory('${cacheRoot.path}-gpu')))),
   (name: 'mlprogram-ane', options: (p) async => withCoreMl(await coreMlOptions(p, computeUnits: 'CPUAndNeuralEngine', root: Directory('${cacheRoot.path}-ane')))),
+  (name: 'mlprogram-gpu', options: (p) async => withCoreMl(await coreMlOptions(p, computeUnits: 'CPUAndGPU', root: Directory('${cacheRoot.path}-gpu')))),
+  (name: 'mlprogram-cpu', options: (p) async => withCoreMl(await coreMlOptions(p, computeUnits: 'CPUOnly', root: Directory('${cacheRoot.path}-cpu')))),
+  (name: 'coreml-default', options: (_) async => withCoreMl(null)), // (what the app did before: NeuralNetwork, no cache)
 ];
+
+/// How long one open or one run may take before the test gives up (and stops: the plugin's queue is then still busy with it).
+const stepLimit = Duration(minutes: int.fromEnvironment('STEP_MINUTES', defaultValue: 12));
+
+final _clock = Stopwatch()..start();
+
+/// A line for the job's log, with the seconds since the start.
+void say(String text) => debugPrint('coreml-check [${(_clock.elapsedMilliseconds / 1000).toStringAsFixed(1)} s] $text');
+
+/// [work], or a [TimeoutException] after [stepLimit]; says what it is about to do first.
+Future<T> step<T>(String what, Future<T> Function() work) {
+  say('$what ...');
+  return work().timeout(stepLimit, onTimeout: () => throw TimeoutException('$what took more than ${stepLimit.inMinutes} min'));
+}
 
 /// Inputs of one picture for a model: made fresh for each run (a run may take its inputs over).
 typedef Inputs = Future<Map<String, OrtValue>> Function();
@@ -99,30 +116,38 @@ void main() {
     final results = <Map<String, Object?>>[];
     final failures = <String>[];
 
+    void save() {
+      if (outFile.isNotEmpty) File(outFile).writeAsStringSync(const JsonEncoder.withIndent(' ').convert(results));
+    }
+
+    say('drawing the pictures');
     // the pictures: one formula; two lines of handwriting of different widths (CoreML with an input size it has not seen yet)
-    final teller = await renderInkForTexTeller(formula());
+    final teller = await step('formula picture', () => renderInkForTexTeller(formula()));
     Inputs tellerInputs() => () async => {'pixel_values': await OrtValue.fromList(teller, [1, 1, texTellerImageSize, texTellerImageSize])};
     final lines = [
-      await renderInkForGlmOcr([word(0, 120, 20), word(140, 260, 22)], rows: 10, pad: true),
-      await renderInkForGlmOcr([for (var i = 0; i < 6; i++) word(i * 140.0, i * 140.0 + 120, 20 + (i % 2) * 3.0)], rows: 10, pad: true),
+      await step('short line picture', () => renderInkForGlmOcr([word(0, 120, 20), word(140, 260, 22)], rows: 10, pad: true)),
+      await step('long line picture', () => renderInkForGlmOcr([for (var i = 0; i < 6; i++) word(i * 140.0, i * 140.0 + 120, 20 + (i % 2) * 3.0)], rows: 10, pad: true)),
     ];
     Inputs glmInputs(GlmPicture p) => () async => {
           'pixel_values': await OrtValue.fromList(p.patches, [p.count, 3 * 2 * glmPatch * glmPatch]),
           'pos_ids': await int64Value(glmPatchPositions(p.gridHeight, p.gridWidth), [p.count, 2]),
         };
 
+    // (small files first)
     final models = <String, List<({String label, Inputs inputs})>>{
-      'teller/encoder.onnx': [(label: 'formula', inputs: tellerInputs())],
       'teller/encoder-gpu.onnx': [(label: 'formula', inputs: tellerInputs())],
+      'teller/encoder.onnx': [(label: 'formula', inputs: tellerInputs())],
       'glm/vision.onnx': [for (final p in lines) (label: '${p.gridHeight}x${p.gridWidth}', inputs: glmInputs(p))],
       'glm/vision-gpu.onnx': [for (final p in lines) (label: '${p.gridHeight}x${p.gridWidth}', inputs: glmInputs(p))],
     };
 
-    debugPrint('coreml-check: CoreML available: ${await OnnxRuntime().getAvailableProviders()}');
+    say('providers: ${await step('asking for the providers', () => OnnxRuntime().getAvailableProviders())}');
+    var stuck = false;
     for (final MapEntry(key: name, value: pictures) in models.entries) {
+      if (stuck) break;
       final path = '$modelDir/$name';
       if (!File(path).existsSync()) {
-        debugPrint('coreml-check: $name not in $modelDir, left out');
+        say('$name not in $modelDir, left out');
         continue;
       }
       final reference = <String, Float32List>{};
@@ -132,16 +157,17 @@ void main() {
         OrtSession? session;
         try {
           final opening = Stopwatch()..start();
-          session = await OnnxRuntime().createSession(path, options: await way.options(path));
+          final options = await way.options(path);
+          session = await step('$name ${way.name}: open', () => OnnxRuntime().createSession(path, options: options));
           row['openMs'] = opening.elapsedMilliseconds;
           for (final picture in pictures) {
             final first = Stopwatch()..start();
-            final answer = await runOnce(session, picture.inputs);
+            final answer = await step('$name ${way.name}: first run ${picture.label}', () => runOnce(session!, picture.inputs));
             final firstMs = first.elapsedMilliseconds;
             final times = <int>[];
             for (var i = 0; i < runs; i++) {
               final w = Stopwatch()..start();
-              await runOnce(session, picture.inputs);
+              await step('$name ${way.name}: run ${i + 2} ${picture.label}', () => runOnce(session!, picture.inputs));
               times.add(w.elapsedMilliseconds);
             }
             times.sort();
@@ -158,18 +184,24 @@ void main() {
             }
             row[picture.label] = picked;
           }
+        } on TimeoutException catch (e) {
+          row['error'] = '$e';
+          failures.add('$e');
+          stuck = true; // (the call still runs in the plugin: everything after it would wait behind it)
         } catch (e) {
           row['error'] = '$e';
           if (way.name == 'processor') failures.add('$name on the processor: $e');
         } finally {
-          await session?.close();
+          if (!stuck) await session?.close();
         }
-        debugPrint('coreml-check | ${jsonEncode(row)}');
+        say('| ${jsonEncode(row)}');
+        save();
+        if (stuck) break;
       }
     }
 
     // a short table for the job's log
-    debugPrint('coreml-check: ---- summary (open ms; per picture: first run ms / median run ms / error vs processor) ----');
+    say('---- summary (open ms; per picture: first run ms / median run ms / error vs processor) ----');
     for (final r in results) {
       String part(String label, Map<String, Object?> m) {
         final err = m['relativeError'];
@@ -180,9 +212,9 @@ void main() {
         for (final e in r.entries)
           if (e.value case final Map<String, Object?> m) part(e.key, m),
       ];
-      debugPrint('coreml-check | ${r['model']} | ${r['way']} | open ${r['openMs'] ?? '-'} | ${r['error'] ?? parts.join(' | ')}');
+      say('| ${r['model']} | ${r['way']} | open ${r['openMs'] ?? '-'} | ${r['error'] ?? parts.join(' | ')}');
     }
-    if (outFile.isNotEmpty) File(outFile).writeAsStringSync(const JsonEncoder.withIndent(' ').convert(results));
+    save();
     expect(results, isNotEmpty, reason: 'no model files in $modelDir');
     expect(failures, isEmpty);
   }, timeout: const Timeout(Duration(minutes: 90)));
