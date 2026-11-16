@@ -1113,7 +1113,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     );
     final page = RepaintBoundary(child: _workspace());
     return Scaffold(
-      body: Stack(children: [
+      // (the system bar of a tablet - clock, battery - must not lie over the tabs; on a desktop the padding is zero)
+      body: SafeArea(bottom: false, child: Stack(children: [
         Positioned.fill(
           child: LayoutBuilder(builder: (context, box) {
             // The page is laid out once, at the size it ends up with, and is only moved while the bar slides: laying a whole page out again on every frame is what made it stutter.
@@ -1159,7 +1160,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
               ),
             ),
           ),
-      ]),
+      ])),
     );
   }
 
