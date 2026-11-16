@@ -1,5 +1,5 @@
 
-import 'package:flutter/foundation.dart' show TargetPlatform, ValueNotifier, debugPrint, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show TargetPlatform, ValueNotifier, debugPrint, visibleForTesting, defaultTargetPlatform, kIsWeb;
 import 'dart:async';
 import 'dart:io' show Directory, File, FileSystemEntityType;
 import 'dart:math' as math;
@@ -448,10 +448,15 @@ String _qnnCache(String path, String label) {
   return p.join(dir.path, '${p.basename(path)}.$size.${label.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.onnx');
 }
 
+/// What a session asking [providers] is opened with ([_withProviders]): for the tests.
+@visibleForTesting
+OrtSessionOptions onnxOptionsFor(OrtSessionOptions? o, List<OrtProvider> providers) => _withProviders(o, providers);
+
 OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra, bool profile = false, Map<String, String>? configs]) => OrtSessionOptions(
   profile: profile,
-  // (only QNN takes what has known shapes: NNAPI, given them, compiled for longer than anyone waits)
-  freeDimensions: providers.isNotEmpty && providers.first == OrtProvider.QNN ? o?.freeDimensions : null,
+  // (QNN takes only what has known shapes, and CoreML cannot build GLM's vision network with its patch count free (error -14): both get
+  // them. NNAPI, given them, compiled for longer than anyone waits)
+  freeDimensions: providers.isNotEmpty && (providers.first == OrtProvider.QNN || providers.first == OrtProvider.CORE_ML) ? o?.freeDimensions : null,
   intraOpNumThreads: o?.intraOpNumThreads,
   interOpNumThreads: o?.interOpNumThreads,
   providers: providers,
