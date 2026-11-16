@@ -119,6 +119,8 @@ flutter:
     - assets/glm_ocr/vocab.txt
     - assets/math/vocab.txt
     - assets/texteller/vocab.txt
+    # a few convolutions, to see in the settings whether the phone's accelerator runs anything (lib/llm/onnx_session.dart)
+    - assets/diagnostics/accelerator_check.onnx
     # Mozilla's root certificates, for Windows machines that lack some (lib/net/extra_roots.dart)
     - assets/certs/ca-bundle.pem
     - docs/extensions.md
