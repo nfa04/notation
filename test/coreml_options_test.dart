@@ -69,4 +69,25 @@ void main() {
     expect(Directory(small).existsSync(), isFalse);
     expect(Directory(large).existsSync(), isFalse);
   });
+
+  test('the converted weights go once the compiled model is there; a model still being built keeps them', () async {
+    // (ONNX Runtime's layout: <cache>/<key>/<n>_dynamic_mlprogram/model/{Data, compiled_model.mlmodelc, Manifest.json})
+    final cache = Directory('${tmp.path}/cache/size')..createSync(recursive: true);
+    Directory piece(int n, {required bool compiled}) {
+      final model = Directory('${cache.path}/glmocrvisiongpu1/${n}_dynamic_mlprogram/model')..createSync(recursive: true);
+      File('${model.path}/Data/com.microsoft.OnnxRuntime/model.mlmodel').createSync(recursive: true);
+      File('${model.path}/Manifest.json').writeAsStringSync('{}');
+      if (compiled) File('${model.path}/compiled_model.mlmodelc/model.mil').createSync(recursive: true);
+      return model;
+    }
+
+    final done = piece(0, compiled: true), building = piece(1, compiled: false);
+    expect(await coreMlDropConvertedWeights(cache.path), 1);
+    expect(Directory('${done.path}/Data').existsSync(), isFalse);
+    expect(Directory('${done.path}/compiled_model.mlmodelc').existsSync(), isTrue, reason: 'what the next session loads');
+    expect(File('${done.path}/Manifest.json').existsSync(), isTrue, reason: 'the folder ONNX Runtime checks for stays');
+    expect(Directory('${building.path}/Data').existsSync(), isTrue);
+    expect(await coreMlDropConvertedWeights(cache.path), 0, reason: 'nothing left to drop');
+    expect(await coreMlDropConvertedWeights('${tmp.path}/nowhere'), 0);
+  });
 }

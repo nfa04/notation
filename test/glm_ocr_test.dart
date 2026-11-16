@@ -169,6 +169,20 @@ void main() {
       expect(glmPaddedColumns(300), 300);
     });
 
+    test('under CoreML every line is one of three widths: a longer one is drawn smaller, not wider', () async {
+      final widths = <int>{};
+      for (var right = 60.0; right < 20000; right *= 1.3) {
+        for (final rows in [6, 8, 10]) {
+          final picture = await renderInkForGlmOcr([_stroke(10, 10, right, 60)], rows: rows, padTo: glmCoreMlWidths);
+          expect(glmCoreMlWidths, contains(picture.gridWidth ~/ 2), reason: 'right $right, rows $rows');
+          expect(picture.gridHeight, rows);
+          expect(picture.patches.length, picture.count * 1176);
+          widths.add(picture.gridWidth ~/ 2);
+        }
+      }
+      expect(widths, glmCoreMlWidths.toSet(), reason: 'short, middle and long lines use all three');
+    });
+
     test('chunks of a line are put together up to a width, and not beyond', () {
       InkChunk chunk(double left, double right) =>
           InkChunk([_stroke(left, 0, right, 20)], Rect.fromLTRB(left, 0, right, 20));

@@ -51,18 +51,30 @@ jobs:
           python -c "import onnxruntime as o; print(o.__version__, o.get_available_providers())"
           model="$RUNNER_TEMP/models/glm/vision-gpu.onnx"; out="$RUNNER_TEMP/probe"; mkdir -p "$out"
           probe() { echo "::group::$*"; perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$model" "$out" "$@" 2>&1 | tee -a probe.log | grep -E "probe-result|CoreML|partition|nodes|rror" | cut -c1-600; echo "(exit ${PIPESTATUS[0]})"; echo "::endgroup::"; }
-          # the CoreML cache holds the converted model (with its weights) AND the compiled one (with them again): about 1.6 GB per size.
-          # On a cache hit ONNX Runtime only checks the converted model's folder and loads compiled_model.mlmodelc: so the converted
-          # weights (model/Data) should be deletable after the first build. Checked here: build, delete, open again in a new process.
+          # a CoreML cache key in the model (tool/coreml_probe/add_cache_key.py): ONNX Runtime then names the cache by the key, not by a hash
+          # of the model's path, so a model that moved (iOS can move an app's folder on an update) still finds its cache. Checked: build in
+          # folder A, open the same files from folder B; with the key it must say "already cached", without it it builds again.
+          a="$RUNNER_TEMP/keyA"; b="$RUNNER_TEMP/keyB"; mkdir -p "$a" "$b"
+          python -I tool/coreml_probe/add_cache_key.py "$model" "$a/vision-gpu.onnx" glmocrvisiongpu1
+          cp "$a/vision-gpu.onnx" "$b/vision-gpu.onnx"
+          ln "$RUNNER_TEMP/models/glm/vision-gpu.onnx.data" "$a/vision-gpu.onnx.data"
+          ln "$RUNNER_TEMP/models/glm/vision-gpu.onnx.data" "$b/vision-gpu.onnx.data"
           probe reference 10x48
-          probe coreml 10x48 ALL 1
-          c="$out/cache-vision-gpu.onnx-ALL-1-10x48"
-          echo "::group::before"; du -sh "$c" | tee -a probe.log; echo "::endgroup::"
-          find "$c" -type d -path '*/model/Data' -prune -exec rm -rf {} +
-          echo "::group::after deleting the converted weights"; du -sh "$c" | tee -a probe.log; find "$c" -maxdepth 3 | head -12; echo "::endgroup::"
-          probe coreml 10x48 ALL 1                   # (a new process: must say "already cached", answer the same, write nothing new)
-          du -sh "$c" | tee -a probe.log
-          grep -c "already cached" probe.log | tee -a probe.log
+          mkdir -p "$out/shared" "$out/plain"; cp "$out/ref-10x48.npy" "$out/shared/"
+          for m in "$a/vision-gpu.onnx" "$b/vision-gpu.onnx"; do
+            echo "::group::keyed model from $m"
+            perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$m" "$out/shared" coreml 10x48 ALL 1 2>&1 | tee "$out/log-$(basename $(dirname $m))" | grep -E "probe-result|already cached|rror" | sort | uniq -c | cut -c1-300
+            echo "::endgroup::"
+          done
+          echo "B found the cache built from A: $(grep -c 'already cached' "$out/log-keyB") pieces (A: $(grep -c 'already cached' "$out/log-keyA"))" | tee -a probe.log
+          cat "$out"/log-key* | grep probe-result >> probe.log
+          ls "$out/shared"/*/ | head | tee -a probe.log
+          # the same without a key: the copy in B must build again (proves the check above can fail)
+          cp "$model" "$b/vision-plain.onnx"; cp "$model" "$a/vision-plain.onnx"
+          for m in "$a/vision-plain.onnx" "$b/vision-plain.onnx"; do
+            perl -e 'alarm shift; exec @ARGV' 900 python -I tool/coreml_probe/probe_glm_vision.py "$m" "$out/plain" coreml 10x48 ALL 1 > "$out/plain-$(basename $(dirname $m))" 2>&1 || true
+          done
+          echo "without a key, B found A's cache: $(grep -c 'already cached' "$out/plain-keyB") pieces" | tee -a probe.log
       - name: Summary
         if: always()
         run: |
