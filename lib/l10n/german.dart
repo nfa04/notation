@@ -3768,4 +3768,11 @@ const germanTexts = <String, String>{
   'Show alone': 'Allein anzeigen',
   'Close tab': 'Tab schliessen',
   'Close other tabs': 'Andere Tabs schliessen',
+  'processor {share} % ({kernels} kernels)': 'Prozessor {share} % ({kernels} Kernels)',
+  '{name} {share} % of the time ({kernels} parts)': '{name} {share} % der Zeit ({kernels} Teile)',
+  'nothing ran on the accelerator': 'Nichts lief auf dem Beschleuniger',
+  'the runtime could not say what ran on it': 'Die Laufzeit konnte nicht sagen, was darauf lief',
+  'QNN (NPU)': 'QNN (NPU)',
+  'QNN (GPU)': 'QNN (GPU)',
+  'measuring what ran on it...': 'Messe, was darauf lief ...',
 };
