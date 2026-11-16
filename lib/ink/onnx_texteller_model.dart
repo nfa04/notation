@@ -213,9 +213,10 @@ class OnnxTexTeller implements ScoredTexTeller {
   }
 
   // (not while the accelerator is making a plan: that would throw the minutes away and start it again)
-  /// How long the encoder stays open: NNAPI compiles it again for every new session (seconds to minutes, and no cache), so while it
-  /// runs there it is kept longer than the decoder (which the processor opens in a moment).
-  static const _chipKeep = Duration(minutes: 2);
+  /// How long the encoder stays open: an accelerator compiles it again for every new session (seconds to minutes), so while it runs there
+  /// it is kept longer than the decoder (which the processor opens in a moment). Not longer than this: a phone with 6 GB was seen to kill
+  /// the app for its memory when the encoder's copy on the graphics chip and the handwriting reader's networks were open together.
+  static const _chipKeep = Duration(seconds: 45);
   bool _decoderLetGo = false;
 
   void _idleClose() {

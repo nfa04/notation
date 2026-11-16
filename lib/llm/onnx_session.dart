@@ -33,7 +33,7 @@ Future<OrtSession> openOnnxSession(String path, {OrtSessionOptions? options, boo
   if (!kIsWeb) {
     if (providers.isNotEmpty) {
       // (Android: one accelerator after the other, each with the processor behind it; elsewhere all at once)
-      for (final attempt in await _attempts(providers, path)) {
+      for (final attempt in await _attempts(providers, path, fixedShapes: options?.freeDimensions?.isNotEmpty ?? false)) {
         final list = attempt.providers;
         final tried = '$path|${attempt.label ?? list.first.name}';
         if (_refused.contains(tried)) continue;
@@ -365,8 +365,10 @@ typedef _Attempt = ({List<OrtProvider> providers, Map<OrtProvider, Map<String, S
 /// The ways to ask for a session on this device, best first. On Android each accelerator is tried alone with the processor behind it
 /// (a phone has the one chip, and a refusal of QNN on a phone without Qualcomm's must not cost NNAPI): QNN on the NPU, QNN on the Adreno
 /// graphics chip, then NNAPI. Elsewhere all the accelerators are given at once.
-Future<List<_Attempt>> _attempts(List<OrtProvider> providers, String path) async {
+Future<List<_Attempt>> _attempts(List<OrtProvider> providers, String path, {bool fixedShapes = true}) async {
   final all = _allAttempts(providers);
+  // (QNN takes nothing with free dimensions, and refuses the session for some of them: such a model is not offered to it at all)
+  if (!fixedShapes) return [for (final a in all) if (a.providers.first != OrtProvider.QNN) a];
   if (!all.any((a) => a.providers.first == OrtProvider.QNN)) return all;
   // (QNN opens a session without a word on a chip it cannot use, and leaves every node to the processor: only what runs a small test
   // model of its own is asked for, see [_qnnBackends])
