@@ -370,7 +370,8 @@ String _qnnCache(String path, String label) {
 
 OrtSessionOptions _withProviders(OrtSessionOptions? o, List<OrtProvider> providers, [Map<OrtProvider, Map<String, String>>? extra, bool profile = false, Map<String, String>? configs]) => OrtSessionOptions(
   profile: profile,
-  freeDimensions: o?.freeDimensions,
+  // (only QNN takes what has known shapes: NNAPI, given them, compiled for longer than anyone waits)
+  freeDimensions: providers.isNotEmpty && providers.first == OrtProvider.QNN ? o?.freeDimensions : null,
   intraOpNumThreads: o?.intraOpNumThreads,
   interOpNumThreads: o?.interOpNumThreads,
   providers: providers,
