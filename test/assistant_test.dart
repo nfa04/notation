@@ -456,8 +456,8 @@ void main() {
     expect(sent.user, contains('The note is called "Physics"'));
     expect(sent.user, contains('You are given all of its text.'));
     // the answer names page 1 and the page says it: a source to go to, with no doubt
-    expect(find.byKey(const ValueKey('assistant-cite-1-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey('assistant-cite-doubt-1-0')), findsNothing);
+    expect(find.byKey(const ValueKey('assistant-cite-1-0-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-claim-doubt-1-0')), findsNothing);
     expect(find.byKey(const ValueKey('assistant-uncited-1')), findsNothing);
     // what the model read can be looked at
     await tester.tap(find.byKey(const ValueKey('assistant-given-1')));
@@ -525,9 +525,9 @@ void main() {
     // page 1 holds the text box and the handwriting: the first statement rests on the box, the second on handwriting read by the app
     expect(provider.prompts.single.user, contains('✎ Heat flows from hot to cold.'));
     expect(provider.prompts.single.system, contains('✎'));
-    expect(find.byKey(const ValueKey('assistant-cite-1-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey('assistant-cite-ink-1-0')), findsNothing); // (one chip for the page: the first statement decides)
-    await tester.tap(find.byKey(const ValueKey('assistant-cite-1-0')));
+    expect(find.byKey(const ValueKey('assistant-cite-1-0-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-cite-ink-1-0-0')), findsNothing); // (one chip for the page: the first statement decides)
+    await tester.tap(find.byKey(const ValueKey('assistant-cite-1-0-0')));
     await tester.pumpAndSettle();
     expect((tester.widget<TextField>(find.byKey(const ValueKey('find-field')))).controller!.text, contains(r'Entropy\s+never'));
     expect(find.byKey(const ValueKey('assistant-panel')), findsOneWidget);

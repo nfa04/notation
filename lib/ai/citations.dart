@@ -42,6 +42,28 @@ class CitedSource {
   bool get supported => unsupported.isEmpty;
 }
 
+/// One source a statement names: where, and the words to light up there.
+class ClaimSource {
+  final KnownMark mark;
+  final String quote;
+  final bool handwriting;
+  const ClaimSource(this.mark, this.quote, this.handwriting);
+}
+
+/// One statement of an answer, the passages it names and whether they seem to say it.
+class ClaimCheck {
+  final String text;
+  final List<ClaimSource> sources;
+
+  /// Why the passages named do not seem to say it (null: they do, or there is nothing to check it against): 'words' (few of its
+  /// words are there) or 'numbers:' and the numbers of it that are not.
+  final String? doubt;
+
+  /// A passage that fits it better, when the model named the wrong page.
+  final KnownMark? better;
+  const ClaimCheck(this.text, this.sources, {this.doubt, this.better});
+}
+
 /// What an answer says about where it comes from, checked against what the model was given.
 class AnswerCheck {
   /// The passages the answer names, in the order it first names them.
@@ -49,7 +71,10 @@ class AnswerCheck {
 
   /// Citations that look like one but name nothing the model was given (made up, or from before).
   final List<String> unknown;
-  const AnswerCheck(this.sources, this.unknown);
+
+  /// The statements of the answer one by one (those with something to say), with the passages each names.
+  final List<ClaimCheck> claims;
+  const AnswerCheck(this.sources, this.unknown, {this.claims = const []});
 
   /// Whether the answer names a passage it was given.
   bool get cited => sources.isNotEmpty;
@@ -224,10 +249,13 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
   final doubts = <String, List<String>>{};
   final better = <String, KnownMark>{};
   final quotes = <String, ({String quote, bool handwriting})>{};
+  final shown = <ClaimCheck>[];
   for (final claim in claims) {
     if (claim.cites.isEmpty) continue;
-    final claimTerms = searchTerms(claim.text).toSet();
-    final claimNumbers = {for (final m in _number.allMatches(claim.text)) m[0]!.replaceAll(',', '.')};
+    // (a formula is written in so many ways that its symbols and digits say nothing about whether a passage has it)
+    final checked = claim.text.replaceAll(RegExp(r'\$\$?[^$]+\$\$?'), ' ');
+    final claimTerms = searchTerms(checked).toSet();
+    final claimNumbers = {for (final m in _number.allMatches(checked)) m[0]!.replaceAll(',', '.')};
     for (final k in claim.cites.toSet()) {
       final key = _norm(k.mark);
       if (!marks.containsKey(key)) {
@@ -237,16 +265,27 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
       }
     }
     final withText = claim.cites.where(hasText).toList();
-    for (final k in withText) {
-      quotes.putIfAbsent(_norm(k.mark), () => _quoteOf(passages[_norm(k.mark)]!, claimTerms));
+    final claimQuotes = {for (final k in claim.cites.toSet()) _norm(k.mark): hasText(k) ? _quoteOf(passages[_norm(k.mark)]!, claimTerms) : (quote: '', handwriting: false)};
+    for (final e in claimQuotes.entries) {
+      quotes.putIfAbsent(e.key, () => e.value);
     }
-    if (withText.isEmpty) continue; // (read by a tool, or a title: nothing here to check it against)
+    ClaimCheck made({String? doubt, KnownMark? better}) => ClaimCheck(
+        claim.text, [for (final k in claim.cites.toSet()) ClaimSource(k, claimQuotes[_norm(k.mark)]!.quote, claimQuotes[_norm(k.mark)]!.handwriting)],
+        doubt: doubt, better: better);
+    if (withText.isEmpty) {
+      shown.add(made()); // (read by a tool, or a title: nothing here to check it against)
+      continue;
+    }
     final have = {for (final k in withText) ...terms(k)};
     final haveNumbers = {for (final k in withText) ...numbers(k)};
     final overlap = claimTerms.isEmpty ? 1.0 : claimTerms.where(have.contains).length / claimTerms.length;
     final missing = claimNumbers.where((n) => !haveNumbers.contains(n) && !claim.cites.any((k) => k.page != null && '${k.page! + 1}' == n)).toList();
-    final weak = (claimTerms.length >= 3 && overlap < 0.3) || missing.isNotEmpty && claimTerms.length >= 2;
-    if (!weak) continue;
+    // (a statement that is put in other words has few of the words of the passage: only little in common, or a number that is not there)
+    final weak = (claimTerms.length >= 4 && overlap < 0.2) || missing.isNotEmpty && claimTerms.length >= 2;
+    if (!weak) {
+      shown.add(made());
+      continue;
+    }
     for (final k in withText) {
       doubts[_norm(k.mark)]!.add(claim.text);
     }
@@ -264,8 +303,21 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
       }
     }
     if (best != null) better[_norm(withText.first.mark)] = best;
+    shown.add(made(
+        doubt: missing.isNotEmpty ? 'numbers:${missing.join(', ')}' : 'words', better: best));
   }
-  return AnswerCheck([for (final key in order) CitedSource(marks[key]!, doubts[key]!, better[key], quote: quotes[key]?.quote ?? '', handwriting: quotes[key]?.handwriting ?? false)], unknown);
+  // (statements with no source, of some substance, are shown too: the person sees what stands on nothing)
+  final all = <ClaimCheck>[];
+  for (final claim in claims) {
+    final found = shown.where((c) => c.text == claim.text).firstOrNull;
+    if (claim.text.isEmpty) continue;
+    if (found != null) {
+      all.add(found);
+    } else if (claim.cites.isEmpty && searchTerms(claim.text.replaceAll(RegExp(r'\$\$?[^$]+\$\$?'), ' ')).length >= 4) {
+      all.add(ClaimCheck(claim.text, const []));
+    }
+  }
+  return AnswerCheck([for (final key in order) CitedSource(marks[key]!, doubts[key]!, better[key], quote: quotes[key]?.quote ?? '', handwriting: quotes[key]?.handwriting ?? false)], unknown, claims: all);
 }
 
 /// The search that finds [quote] (a few words of a passage) where it is written, whatever lies between its words.

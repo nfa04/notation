@@ -64,4 +64,19 @@ void main() {
     expect(q.find('Chlorophyll absorbs mostly\nred and blue light'), hasLength(1));
     expect(q.find('Chlorophyll absorbs red'), isEmpty);
   });
+
+  test('each statement lists the passages it names; one that names none is shown as such, formulas are not held against a statement', () {
+    final c = checkAnswer(
+        'Chlorophyll absorbs red and blue light [Page 1]. The exam is on 20 June [Page 3]. Plants also make oxygen and many other useful things in the leaf.\nThe value is \$x^2 = 99\$ [Page 1].',
+        given,
+        note);
+    expect(c.claims.map((x) => '${x.sources.map((s) => s.mark.mark).join('+')}|${x.doubt}'), [
+      'Page 1|null',
+      'Page 3|null',
+      '|null',
+      'Page 1|null', // (the formula and its digits are not looked for)
+    ]);
+    final wrong = checkAnswer('The exam is on 21 June [Page 3].', given, note).claims.single;
+    expect(wrong.doubt, 'numbers:21');
+  });
 }

@@ -472,6 +472,44 @@ class _AssistantPanelState extends State<AssistantPanel> {
     );
   }
 
+  /// One statement of an answer with the passages it names, each opening its place; a warning, and why, when they do not seem to say it.
+  Widget _claimRow(ClaimCheck claim, int i, int c, ColorScheme scheme, TextStyle small, String Function(KnownMark) label, void Function(KnownMark, String) open) {
+    final doubt = claim.doubt;
+    final why = doubt == null
+        ? null
+        : doubt.startsWith('numbers:')
+            ? '${tr('The passage does not have this number:')} ${doubt.substring(8)}'
+            : tr('The passage has few of these words: it may say it differently, or not at all.');
+    final text = claim.text.length > 110 ? '${claim.text.substring(0, 107)}...' : claim.text;
+    return Padding(
+      key: ValueKey('assistant-claim-$i-$c'),
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text.verbatim(text, style: small.copyWith(fontStyle: FontStyle.italic)),
+        Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          if (claim.sources.isEmpty) Text(tr('no source named'), key: ValueKey('assistant-claim-nosource-$i-$c'), style: small),
+          if (doubt != null) Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-claim-doubt-$i-$c')),
+          for (var k = 0; k < claim.sources.length; k++)
+            ActionChip(
+              key: ValueKey('assistant-cite-$i-$c-$k'),
+              avatar: claim.sources[k].handwriting ? Icon(Icons.draw_outlined, size: 16, key: ValueKey('assistant-cite-ink-$i-$c-$k')) : null,
+              label: Text.verbatim(label(claim.sources[k].mark)),
+              tooltip: claim.sources[k].handwriting ? tr('Read from handwriting by the app: it can be misread.') : null,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              onPressed: () => open(claim.sources[k].mark, claim.sources[k].quote),
+            ),
+        ]),
+        if (why != null)
+          Text(
+            '$why${claim.better == null ? '' : ' ${tr('Perhaps')}: ${label(claim.better!)}'}',
+            key: ValueKey('assistant-claim-why-$i-$c'),
+            style: TextStyle(fontSize: 12, color: scheme.error),
+          ),
+      ]),
+    );
+  }
+
   /// Where the answer says it comes from: the passages it names, each opening its place, marked when the passage does not seem to
   /// say what the answer says there; and a word when it names nothing, or something it was not given.
   List<Widget> _sourcesOf(BuildContext context, ChatMessage m, int i, ColorScheme scheme) {
@@ -494,30 +532,10 @@ class _AssistantPanelState extends State<AssistantPanel> {
     return [
       if (check.cited)
         Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Wrap(spacing: 6, runSpacing: 0, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text.verbatim('${tr('Sources')}:', style: small),
-            for (var j = 0; j < check.sources.length; j++)
-              Builder(builder: (context) {
-                final s = check.sources[j];
-                final doubt = s.supported
-                    ? null
-                    : '${tr('This passage does not seem to say:')} ${s.unsupported.first}'
-                        '${s.better == null ? '' : '\n${tr('Perhaps')}: ${label(s.better!)}'}';
-                return ActionChip(
-                  key: ValueKey('assistant-cite-$i-$j'),
-                  avatar: doubt != null
-                      ? Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$j'))
-                      : s.handwriting
-                          ? Icon(Icons.draw_outlined, size: 16, key: ValueKey('assistant-cite-ink-$i-$j'))
-                          : null,
-                  label: Text.verbatim(label(s.mark)),
-                  tooltip: doubt ?? (s.handwriting ? tr('Read from handwriting by the app: it can be misread.') : null),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  onPressed: () => open(s.mark, s.quote),
-                );
-              }),
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text.verbatim('${tr('Sources')}:', style: small.copyWith(fontWeight: FontWeight.w600)),
+            for (var c = 0; c < check.claims.length; c++) _claimRow(check.claims[c], i, c, scheme, small, label, open),
           ]),
         )
       else if (m.known.isNotEmpty)
