@@ -9,9 +9,13 @@ import '../ai/flashcards.dart' show Flashcard;
 import '../ai/line_diff.dart';
 import '../ai/note_agent.dart';
 import '../ai/note_ai.dart' show NoteAiKind;
+import '../ai/note_lookup.dart';
 import '../ai/openai_provider.dart' show OpenAiProvider;
 import '../ai/text_provider.dart';
 import '../ink/ink_recognizer.dart' show DownloadableModel;
+import '../markdown/chat_markdown.dart';
+import '../markdown/markdown_view.dart';
+import '../models/rich_text.dart';
 import 'add_to_note.dart';
 import 'flashcard_view.dart';
 import 'openai_model_switcher.dart';
@@ -77,12 +81,18 @@ class _AssistantPanelState extends State<AssistantPanel> {
   static const _suggestions = ['What are the key points?', 'What are the key terms and what do they mean?', 'What is unclear or missing?'];
 
   /// What to start with when the assistant acts on the note.
+  static const _notesAgentSuggestions = ['Make a note that sums up my notes about exams', 'Put my notes about travel in a folder called Travel', 'Add a task for every deadline I wrote down'];
+
+  /// Whether the panel is about all notes, not one.
+  bool get _allNotes => widget.title != null;
+
   static const _agentSuggestions = ['Give this note a clear structure with headings', 'Fix the spelling mistakes', 'Turn the to-dos in this note into tasks'];
 
   @override
   void initState() {
     super.initState();
     widget.chat.addListener(_followAnswer);
+    _input.addListener(_typed);
   }
 
   @override
@@ -105,11 +115,53 @@ class _AssistantPanelState extends State<AssistantPanel> {
     });
   }
 
+  /// The notes the person picked after an `@` in what they are writing, and the ones offered now for the word they are typing.
+  final List<NoteRef> _refs = [];
+  List<NoteRef> _offered = const [];
+  int _mentionFrom = -1;
+  int _lookups = 0;
+
+  /// The `@word` the cursor is at the end of, if any: offers the notes that fit it.
+  void _typed() async {
+    final lookup = widget.chat.lookup;
+    final at = _input.selection.baseOffset;
+    final before = at < 0 ? _input.text : _input.text.substring(0, at.clamp(0, _input.text.length));
+    final m = lookup == null ? null : RegExp(r'(?:^|\s)@([^\s@]*)$').firstMatch(before);
+    if (m == null) {
+      if (_offered.isNotEmpty) setState(() => _offered = const []);
+      return;
+    }
+    final mine = ++_lookups;
+    final found = await lookup!.find(m[1]!);
+    if (!mounted || mine != _lookups) return;
+    setState(() {
+      _mentionFrom = before.length - m[1]!.length - 1;
+      _offered = found;
+    });
+  }
+
+  /// Puts `@Title` where the `@word` was, and remembers the note.
+  void _pick(NoteRef ref) {
+    final at = _input.selection.baseOffset.clamp(0, _input.text.length);
+    final text = _input.text;
+    final insert = '@${ref.title} ';
+    _input.value = TextEditingValue(
+      text: text.replaceRange(_mentionFrom.clamp(0, at), at, insert),
+      selection: TextSelection.collapsed(offset: _mentionFrom.clamp(0, at) + insert.length),
+    );
+    if (!_refs.any((r) => r.id == ref.id)) _refs.add(ref);
+    setState(() => _offered = const []);
+  }
+
   void _send([String? text]) {
     final q = text ?? _input.text;
     if (q.trim().isEmpty || widget.chat.busy) return;
+    // (a note whose @Title was taken out of the text again is not meant any more)
+    final refs = [for (final r in _refs) if (q.contains('@${r.title}')) r];
     _input.clear();
-    widget.chat.ask(q);
+    _refs.clear();
+    setState(() => _offered = const []);
+    widget.chat.ask(q, refs: refs);
   }
 
   @override
@@ -207,8 +259,8 @@ class _AssistantPanelState extends State<AssistantPanel> {
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
             segments: [
-              ButtonSegment(value: false, icon: const Icon(Icons.chat_bubble_outline, size: 16), label: const Text('Ask'), tooltip: tr('Answers questions; the note stays as it is')),
-              ButtonSegment(value: true, icon: const Icon(Icons.auto_fix_normal, size: 16), label: const Text('Agent'), tooltip: tr('Works on the note; it asks before each change')),
+              ButtonSegment(value: false, icon: const Icon(Icons.chat_bubble_outline, size: 16), label: const Text('Ask'), tooltip: _allNotes ? tr('Answers questions; your notes stay as they are') : tr('Answers questions; the note stays as it is')),
+              ButtonSegment(value: true, icon: const Icon(Icons.auto_fix_normal, size: 16), label: const Text('Agent'), tooltip: _allNotes ? tr('Works on your notes, tasks and calendar; it asks before each change') : tr('Works on the note; it asks before each change')),
             ],
             selected: {chat.acting},
             onSelectionChanged: chat.busy ? null : (v) => chat.acting = v.first,
@@ -238,14 +290,16 @@ class _AssistantPanelState extends State<AssistantPanel> {
     if (chat.messages.isEmpty) {
       return ListView(padding: const EdgeInsets.all(16), children: [
         Text.verbatim(
-          chat.acting
+          chat.acting && _allNotes
+              ? tr('Tell the assistant what to do with your notes: find, make, file, tag or trash notes, and add tasks, reminders and events. It asks before each change.')
+              : chat.acting
               ? tr('Tell the assistant what to do with this note: format it, rewrite parts of it, add to it, make tasks from it. It asks before each change, and every change can be undone in the note.')
               : widget.invitation ?? tr('Ask anything about this document: its pages, your notes and text boxes are read for every question.'),
           style: TextStyle(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final s in chat.acting ? _agentSuggestions : widget.suggestions ?? _suggestions)
+          for (final s in chat.acting ? (_allNotes ? _notesAgentSuggestions : _agentSuggestions) : widget.suggestions ?? _suggestions)
             ActionChip(
               key: ValueKey('assistant-suggestion-$s'),
               label: Text(s),
@@ -329,7 +383,9 @@ class _AssistantPanelState extends State<AssistantPanel> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (var j = 0; j < m.steps.length; j++) _step(context, m.steps[j], i, j),
           if (m.text.isNotEmpty)
-            SelectableText(m.text, style: TextStyle(color: m.failed ? scheme.onErrorContainer : null)),
+            m.failed
+                ? SelectableText(m.text, style: TextStyle(color: scheme.onErrorContainer))
+                : ChatText(m.text, key: ValueKey('assistant-text-$i'), color: scheme.onSurface),
           if (done && !m.failed && m.pages.isNotEmpty && widget.onJumpToPage != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -360,23 +416,67 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   ),
               ]),
             ),
-          if (done && !m.failed && m.text.trim().isNotEmpty && m.text != '(stopped)')
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              IconButton(
-                tooltip: tr('Copy'),
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.copy, size: 16),
-                onPressed: () => Clipboard.setData(ClipboardData(text: m.text)),
+          if (done && m.cutOff && i == widget.chat.messages.length - 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                key: const ValueKey('assistant-continue'),
+                icon: const Icon(Icons.keyboard_double_arrow_down, size: 16),
+                label: Text(tr('The answer was cut off: continue')),
+                onPressed: widget.chat.continueAnswer,
               ),
-              if (widget.onAddToNote != null)
-                AddToNoteMenu(
-                  buttonKey: ValueKey('assistant-add-$i'),
-                  onSelected: (target) => widget.onAddToNote!(m.text, target),
+            ),
+          if (done && (m.failed || (m.text.trim().isNotEmpty && m.text != '(stopped)')))
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              if (!m.failed) ...[
+                IconButton(
+                  tooltip: tr('Copy'),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.copy, size: 16),
+                  onPressed: () => Clipboard.setData(ClipboardData(text: m.text)),
+                ),
+                if (widget.onAddToNote != null)
+                  AddToNoteMenu(
+                    buttonKey: ValueKey('assistant-add-$i'),
+                    onSelected: (target) => widget.onAddToNote!(m.text, target),
+                  ),
+              ],
+              // (asked again, an answer that acted on the note would act again: only answers that changed nothing)
+              if (i == widget.chat.messages.length - 1 && m.steps.isEmpty)
+                IconButton(
+                  key: const ValueKey('assistant-retry'),
+                  tooltip: tr('Ask again'),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  onPressed: widget.chat.retry,
+                ),
+              if (m.given.isNotEmpty)
+                IconButton(
+                  key: ValueKey('assistant-given-$i'),
+                  tooltip: tr('What the assistant read'),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.article_outlined, size: 16),
+                  onPressed: () => _showGiven(context, m.given),
                 ),
             ])
           else
             const SizedBox(height: 4),
         ]),
+      ),
+    );
+  }
+
+  /// What the model was given for an answer: the person can see why it said what it said (or why it missed something).
+  void _showGiven(BuildContext context, String given) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr('What the assistant read')),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(child: SelectableText(given, key: const ValueKey('assistant-given-text'), style: const TextStyle(fontSize: 13))),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Close')))],
       ),
     );
   }
@@ -516,7 +616,29 @@ class _AssistantPanelState extends State<AssistantPanel> {
     if (chat.cardMode) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-      child: Row(children: [
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (_offered.isNotEmpty)
+          Padding(
+            key: const ValueKey('assistant-mentions'),
+            padding: const EdgeInsets.only(bottom: 6, right: 4),
+            child: Material(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            clipBehavior: Clip.antiAlias,
+            child: Column(children: [
+              for (final n in _offered)
+                ListTile(
+                  key: ValueKey('assistant-mention-${n.id}'),
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(Icons.description_outlined, size: 18),
+                  title: Text.verbatim(n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => _pick(n),
+                ),
+            ]),
+            ),
+          ),
+        Row(children: [
         Expanded(
           child: TextField(
             key: const ValueKey('assistant-input'),
@@ -525,15 +647,65 @@ class _AssistantPanelState extends State<AssistantPanel> {
             maxLines: 4,
             textInputAction: TextInputAction.send,
             onSubmitted: (_) => _send(),
-            decoration: InputDecoration(hintText: chat.acting ? tr('Say what to do with this note...') : tr('Ask a question...'), border: OutlineInputBorder(), isDense: true),
+            decoration: InputDecoration(hintText: chat.acting ? (_allNotes ? tr('Say what to do with your notes...') : tr('Say what to do with this note...')) : tr('Ask a question...'), border: OutlineInputBorder(), isDense: true),
           ),
         ),
+        if (chat.lookup != null)
+          IconButton(
+            key: const ValueKey('assistant-mention'),
+            tooltip: tr('Refer to a note (@)'),
+            icon: const Icon(Icons.alternate_email, size: 20),
+            onPressed: () {
+              final t = _input.text;
+              _input.value = TextEditingValue(text: t.isEmpty || t.endsWith(' ') ? '$t@' : '$t @', selection: TextSelection.collapsed(offset: t.isEmpty || t.endsWith(' ') ? t.length + 1 : t.length + 2));
+            },
+          ),
         const SizedBox(width: 4),
         if (chat.busy)
           IconButton.filledTonal(key: const ValueKey('assistant-stop'), tooltip: tr('Stop'), icon: const Icon(Icons.stop), onPressed: chat.stop)
         else
           IconButton.filled(key: const ValueKey('assistant-send'), tooltip: tr('Ask'), icon: const Icon(Icons.arrow_upward), onPressed: _send),
+        ]),
       ]),
     );
   }
 }
+
+/// An answer of the assistant as the app draws a note: Markdown (bold, lists, headings, tables) and formulas, which models write as
+/// `$x$`, `$$x$$`, `\(x\)` or `\[x\]`. The text can be selected and copied.
+class ChatText extends StatefulWidget {
+  final String text;
+  final Color color;
+  final double fontSize;
+  const ChatText(this.text, {super.key, required this.color, this.fontSize = 14});
+
+  @override
+  State<ChatText> createState() => _ChatTextState();
+}
+
+class _ChatTextState extends State<ChatText> {
+  final _controller = RichInlineTextController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = chatMarkdown(widget.text);
+  }
+
+  @override
+  void didUpdateWidget(ChatText old) {
+    super.didUpdateWidget(old);
+    // (an answer grows while it is written)
+    if (old.text != widget.text) _controller.text = chatMarkdown(widget.text);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SelectionArea(child: MarkdownView(controller: _controller, fontSize: widget.fontSize, textColor: widget.color));
+}
+

@@ -7,6 +7,10 @@ class AiCancel {
   bool _cancelled = false;
   bool get cancelled => _cancelled;
   void cancel() => _cancelled = true;
+
+  /// Set by the provider when the answer stopped because it reached the most it may write (not because it was finished): the
+  /// person can then ask for the rest.
+  bool cutOff = false;
 }
 
 /// Why a provider cannot be used right now.

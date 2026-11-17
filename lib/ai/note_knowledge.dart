@@ -35,8 +35,21 @@ class Passage {
   final String text;
   final double score;
 
-  const Passage(this.noteId, this.title, this.label, this.page, this.text, this.score);
+  /// When the note was last changed; set for a question about time ("my latest notes"), to be told to the assistant.
+  final DateTime? edited;
+
+  const Passage(this.noteId, this.title, this.label, this.page, this.text, this.score, {this.edited});
 }
+
+final _recent = RegExp(
+    r'\b(?:latest|recent(?:ly)?|newest|last (?:few|week|days?|month)|this (?:week|month)|today|yesterday|lately|'
+    r'neueste[nmrs]?|letzte[nmrs]?|zuletzt|kürzlich|heute|gestern|diese (?:woche|monat)|derniers?|dernières?|récents?)\b',
+    caseSensitive: false,
+    unicode: true);
+
+/// Whether [question] asks about what is new ("my latest notes", "what did I write this week"): the notes are then ranked by how
+/// recently they changed, not only by what they say.
+bool asksAboutRecent(String question) => _recent.hasMatch(question);
 
 /// What was found in the notes for a question: the notes that are closest (best first) and, from them, the passages that answer it.
 class Retrieval {
@@ -50,7 +63,10 @@ class Retrieval {
     final out = StringBuffer();
     String? last;
     for (final p in passages) {
-      final mark = '[${p.title} - ${p.label}]';
+      final edited = p.edited;
+    final mark = edited == null
+        ? '[${p.title} - ${p.label}]'
+        : '[${p.title} - ${p.label} - changed ${edited.year}-${edited.month.toString().padLeft(2, '0')}-${edited.day.toString().padLeft(2, '0')}]';
       final piece = StringBuffer();
       if (mark != last) {
         if (out.isNotEmpty) piece.write('\n\n');
@@ -77,6 +93,14 @@ Future<List<DocChunk>> chunksOfNote(NoteRepository notes, String id) async {
     final page = s.page >= 0 ? s.page : null;
     final label = s.place == SearchPlace.title ? tr('Title') : tr('Page {n}', {'n': (page ?? 0) + 1});
     chunks.addAll(chunkText(label, page, s.text));
+  }
+  // the formulas read in the handwriting, a page's together
+  final formulas = <int, List<String>>{};
+  for (final f in await notes.text.inkFormulas(id)) {
+    formulas.putIfAbsent(f.page, () => []).add('\$${f.latex.trim()}\$');
+  }
+  for (final e in formulas.entries) {
+    chunks.addAll(chunkText(tr('Page {n}', {'n': e.key + 1}), e.key, e.value.join('\n')));
   }
   return chunks;
 }
@@ -138,6 +162,26 @@ class NoteKnowledge {
     return chunks.length;
   }
 
+  /// [text] read by the sentence model; null when there is none (the words alone decide then).
+  Future<Float32List?> embed(String text) async {
+    if (!ready()) return null;
+    try {
+      return await _embedder.embed(text);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// The vectors that were kept for the passages of note [id] the last time it was read (by the text of the passage), with the model
+  /// that is in use now. Nothing is read here: a passage that changed since has none, and is read by the one who asks (see
+  /// `AssistantChat`), which is far less than reading the whole note again for each change.
+  Future<Map<String, Float32List>> keptVectors(String id) async {
+    if (!ready()) return const {};
+    final state = await _notes.knowledge.chunkState(id);
+    if (state == null || state.model != _embedder.modelId) return const {};
+    return {for (final c in await _notes.knowledge.chunksOf(id)) if (c.vector != null) c.text: c.vector!};
+  }
+
   /// How many of the words of the question [text] has, 0 to 1.
   static double _overlap(Set<String> terms, String text) {
     if (terms.isEmpty) return 0;
@@ -147,7 +191,10 @@ class NoteKnowledge {
 
   /// The [notes] closest notes to [question] and from them the best [passages] passages. [status] tells what is going on.
   Future<Retrieval> retrieve(String question, {int notes = 4, int passages = 8, void Function(String status)? status}) async {
-    final terms = searchTerms(question).toSet();
+    final perNoteMost = math.max(4, (passages / notes).ceil() + 1);
+    final recent = asksAboutRecent(question);
+    // (in a question about time, its words of time and "notes" say nothing about what is in them)
+    final terms = searchTerms(recent ? question.replaceAll(_recent, ' ').replaceAll(RegExp(r'\b(?:notes?|notizen?|summar\w*|zusammenfass\w*)\b', caseSensitive: false), ' ') : question).toSet();
     await PdfIndexer(_notes).run(); // the text of PDFs not read yet is part of what the notes say
     final useModel = ready();
     final qv = useModel ? await _embedder.embed(question) : null;
@@ -155,9 +202,12 @@ class NoteKnowledge {
     status?.call(tr('Looking for the notes that fit...'));
     final citing = await _citingNotes(question);
     final scored = <({NoteSummary note, double score})>[];
+    final now = DateTime.now();
     for (final n in await _notes.listNotes()) {
       if (n.locked) continue;
       var score = 0.0;
+      // the newer, the closer (a note of today counts fully, one of a month ago hardly)
+      final fresh = recent ? math.exp(-now.difference(n.updatedAt).inHours / (24 * 7)) : 0.0;
       if (qv != null) {
         final v = await _sorter.vectorOf(n.id);
         if (v != null) score += math.max(0, cosine(qv, v));
@@ -165,6 +215,8 @@ class NoteKnowledge {
       final text = await _notes.text.noteText(n.id, limit: 6000);
       score += (qv == null ? 1.0 : 0.5) * _overlap(terms, text) + 0.3 * _overlap(terms, n.title);
       if (citing.containsKey(n.id)) score += 1.0; // it cites what the question is about
+      // asked about what is new: with nothing else asked, the newest notes; with a subject, the newest of those that fit it
+      if (recent) score = terms.isEmpty ? score * 0.2 + 1.5 * fresh : score * (0.5 + fresh);
       if (score > 0) scored.add((note: n, score: score));
     }
     scored.sort((a, b) => b.score.compareTo(a.score));
@@ -190,10 +242,12 @@ class NoteKnowledge {
       for (final k in chunks) {
         var s = _overlap(terms, k.text) * (qv == null ? 1.0 : 0.3);
         if (qv != null && k.vector != null) s += math.max(0, cosine(qv, k.vector!));
-        if (s > 0) perNote.add(Passage(c.note.id, c.note.title.isEmpty ? tr('Untitled') : c.note.title, k.label, k.page, k.text, s));
+        // (asked about what is new, a note is given from its start when nothing in it fits the words better)
+        if (recent) s += 0.05 / (1 + perNote.length + chunks.indexOf(k));
+        if (s > 0) perNote.add(Passage(c.note.id, c.note.title.isEmpty ? tr('Untitled') : c.note.title, k.label, k.page, k.text, s, edited: recent ? c.note.updatedAt : null));
       }
       perNote.sort((a, b) => b.score.compareTo(a.score));
-      found.addAll(perNote.take(4));
+      found.addAll(perNote.take(perNoteMost));
     }
     found.sort((a, b) => b.score.compareTo(a.score));
     final best = found.take(passages).toList();

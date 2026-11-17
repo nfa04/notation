@@ -544,7 +544,10 @@ void main() {
         expect(chat.messages.last.steps.map((s) => s.state), [AgentStepState.done, AgentStepState.done]);
         final first = tools.prompts.first;
         expect(first.system, isNot(contains('<tool>')));
-        expect(tools.specs.first.map((t) => t.name), containsAll(['note_get', 'note_insertText', 'note_replaceText', 'note_format', 'note_setTitle', 'tasks_add', 'clipboard_write']));
+        expect(tools.specs.first.map((t) => t.name), containsAll(['note_get', 'note_pages', 'note_find', 'note_insertText', 'note_replaceText', 'note_format', 'note_setTitle', 'tasks_add', 'tools_more']));
+        // (the tools of the groups are named in the instructions, and come when a group is asked for)
+        expect(tools.specs.first.map((t) => t.name), isNot(contains('clipboard_write')));
+        expect(first.system, contains('planner: '));
         expect(tools.specs.first.firstWhere((t) => t.name == 'note_format').parameters!['required'], ['target']);
         final second = tools.prompts.last;
         expect(second.user, isEmpty);
@@ -578,6 +581,67 @@ void main() {
       });
     });
 
+    test('a group of tools is opened by asking for it or by calling one of its tools by name', () async {
+      // the instructions name every tool, but explain only those at hand
+      final system = agentSystem([for (final t in agentTools) if (agentGroupOf(t.name) == null) t], more: agentMoreTools({}));
+      expect(system, contains('pages.add'));
+      expect(system, isNot(contains('pages.add {')));
+      expect(system.length, lessThan(agentSystem(agentTools).length * 0.7));
+      replies = [call('tools.more', {'group': 'layout'}), call('pages.list', {}), 'There is one page.'];
+      await chat.ask('How many pages are there?');
+      expect(chat.messages.last.steps.map((s) => s.state), [AgentStepState.done, AgentStepState.done]);
+      expect(model.prompts[1].user, contains('pages.add {'), reason: 'how to use the tools of the group is told');
+      expect(model.prompts[1].system, contains('- pages.list'), reason: 'and they stay at hand');
+      expect(model.prompts[1].system, isNot(contains('- layout:')));
+    });
+
+    test('the note is read by pages and searched without asking', () async {
+      note = _Note('Intro\n\nThe mitochondria is the powerhouse.\n\nThe nucleus keeps the DNA.');
+      replies = [call('note.pages', {'from': 1}), call('note.find', {'query': 'nucleus'}), 'Found it.'];
+      await chat.ask('Where is the DNA?');
+      expect(chat.messages.last.steps.map((s) => s.state), [AgentStepState.done, AgentStepState.done]);
+      final results = model.prompts.map((p) => p.user).join('\n');
+      expect(results, contains('note.pages: [Page 1]'));
+      expect(results, contains('note.find: [Page 1]'));
+    });
+
+    group('answering a question with a model that takes tools', () {
+      late _ToolModel tools;
+      setUp(() {
+        tools = _ToolModel(chars: 48000);
+        chat = AssistantChat(
+          ai: AiService(providers: [tools]),
+          index: () async => DocumentIndex(chunkText('Page 1', 0, note.body.text)),
+          agent: NoteAgent(api: note, copies: () => [scratchCopy(note.body)]),
+        );
+      });
+
+      test('it may read more of the note, but nothing is asked and nothing changed', () async {
+        tools.replies = [
+          const AiToolReply('', [AiToolCall('a', 'note_pages', {'from': 1}), AiToolCall('b', 'note_setTitle', {'title': 'X'})]),
+          const AiToolReply('It is the powerhouse (p. 1).'),
+        ];
+        await chat.ask('What is the mitochondria?');
+        expect(chat.messages.last.text, 'It is the powerhouse (p. 1).');
+        expect(chat.messages.last.steps.map((s) => s.state), [AgentStepState.done, AgentStepState.failed]);
+        expect(note.title, isNot('X'));
+        final names = tools.specs.first.map((t) => t.name).toSet();
+        expect(names, containsAll(['note_pages', 'note_find', 'note_get', 'pdf_read']));
+        expect(names.intersection({'note_setTitle', 'note_insertText', 'tasks_add', 'notes_search', 'tools_more'}), isEmpty);
+        expect(tools.prompts.first.user, contains('Question: What is the mitochondria?'));
+        expect(tools.prompts.last.history.where((t) => t.resultOf == 'a').single.text, contains('powerhouse'));
+        expect(tools.prompts.last.history.where((t) => t.resultOf == 'b').single.text, contains('only reading'));
+      });
+
+      test('a service that takes no tools answers from the passages as before', () async {
+        tools.refuse = true;
+        tools.replies = [const AiToolReply('It is the powerhouse.')];
+        await chat.ask('What is it?');
+        expect(chat.messages.last.text, 'It is the powerhouse.');
+        expect(tools.prompts.single.system, contains('<tool>'));
+      });
+    });
+
     test('only answering: the model gets no tools and nothing is asked', () async {
       chat.acting = false;
       replies = ['It is the powerhouse.'];
@@ -592,6 +656,10 @@ String _json(Map<String, Object?> m) => '{${m.entries.map((e) => '"${e.key}":${e
 
 /// A model that takes tools with the request: answers with [replies], one for each request.
 class _ToolModel extends FakeModel implements ToolCalling {
+  _ToolModel({this.chars = 3000});
+  final int chars;
+  @override
+  int get contextChars => chars;
   List<AiToolReply> replies = [];
   final specs = <List<AiToolSpec>>[];
   bool refuse = false;

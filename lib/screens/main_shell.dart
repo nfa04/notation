@@ -40,7 +40,11 @@ import 'graph_view.dart';
 import '../graph/graph_service.dart';
 import '../previews/note_preview.dart';
 import '../ai/assistant_chat.dart';
+import '../ai/note_agent.dart';
 import '../ai/note_knowledge.dart';
+import '../ai/note_lookup.dart';
+import '../ai/notes_agent_api.dart';
+import '../extensions/extension_manifest.dart' show ExtensionPermission;
 import '../automations/note_sorter.dart';
 import '../templates/templates.dart';
 import 'lock_dialogs.dart';
@@ -1276,7 +1280,25 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       case 9:
         final ai = _app.ai;
         if (ai == null) return const SizedBox.shrink();
-        final chat = _notesChat ??= AssistantChat(ai: ai, knowledge: _knowledge);
+        final chat = _notesChat ??= AssistantChat(
+          ai: ai,
+          knowledge: _knowledge,
+          lookup: NoteLookup.of(_app.repository),
+          agent: NoteAgent(
+            api: NotesAgentApi(_app.repository,
+                tasks: _app.tasks,
+                tags: _app.tags,
+                reminders: _app.reminders,
+                calendar: CalendarAccess.of(caldav: _app.caldav, device: _app.device, ics: _app.ics),
+                isOpen: (id) => _tabs.contains(id)),
+          ),
+          // (every question reads all the notes: reading one more by its id is not asked about)
+          granted: const {ExtensionPermission.notesReadAll},
+          onChanged: _pageRefresh.ring,
+          loadChat: () => _app.repository.settings.get('assistant_chat:all'),
+          saveChat: (json) => json == null ? _app.repository.settings.remove('assistant_chat:all') : _app.repository.settings.set('assistant_chat:all', json),
+        )
+          ..restoreChat();
         return Material(
           color: Theme.of(context).colorScheme.surface,
           child: AssistantPanel(
@@ -1557,6 +1579,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           paneActive: _visible.length < 2 ? null : () => _focused == id,
           onPdfImported: () => _scanDates(id),
           ai: _aiOn && _f(Feature.assistant) ? _app.ai : null,
+          knowledge: _aiOn && _f(Feature.assistant) ? _knowledge : null,
           features: _app.features,
           spell: _f(Feature.spelling) ? _app.spell : null,
           ocr: _aiOn ? _app.ocr : null,

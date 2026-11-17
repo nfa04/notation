@@ -3,11 +3,30 @@ part of 'fixed_page_note_editor.dart';
 /// The assistant for the whole document.
 extension _EditorAssistant on _FixedPageNoteEditorState {
   /// Everything written in the note, in chunks: the PDF's text, the written
-  /// document, the text boxes. Read again for every question.
+  /// document, the text boxes and the handwriting that was read. Read again for every question.
   Future<DocumentIndex> _documentIndex() async {
     await ready;
     final chunks = <DocChunk>[];
     if (_titleController.text.trim().isNotEmpty) chunks.add(DocChunk('Title', null, _titleController.text.trim()));
+
+    // the handwriting as far as it was read, and the formulas read in it, in the order they are on the page (what was read just now
+    // is kept first; a note that is locked keeps none)
+    final ink = <int, List<String>>{};
+    if (_lockMode == LockMode.none) {
+      try {
+        await _reader.saveReadings();
+        final pieces = <({int page, double top, double left, String text})>[
+          for (final t in await widget.repository.text.inkTexts(widget.noteId))
+            if (t.text.trim().isNotEmpty) (page: t.page, top: t.bounds.top, left: t.bounds.left, text: t.text.trim()),
+          for (final f in await widget.repository.text.inkFormulas(widget.noteId)) (page: f.page, top: f.top, left: f.left, text: '\$${f.latex.trim()}\$'),
+        ]..sort((a, b) => a.page != b.page ? a.page.compareTo(b.page) : (a.top != b.top ? a.top.compareTo(b.top) : a.left.compareTo(b.left)));
+        for (final p in pieces) {
+          ink.putIfAbsent(p.page, () => []).add(p.text);
+        }
+      } catch (e) {
+        debugPrint('the handwriting could not be read for the assistant: $e');
+      }
+    }
 
     await _readPdfPageTexts();
     for (var i = 0; i < _pageCount; i++) {
@@ -19,6 +38,8 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
         final t = box.controller.text.trim();
         if (t.isNotEmpty) chunks.addAll(chunkText(label, i, t));
       }
+      final written = ink[i];
+      if (written != null) chunks.addAll(chunkText(label, i, written.join('\n')));
     }
     return DocumentIndex(chunks);
   }
@@ -51,9 +72,22 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
     final chat = AssistantChat(
       ai: widget.ai!,
       index: _documentIndex,
+      lookup: NoteLookup.of(repo, except: id),
+      whereAmI: () => NoteContext(title: _titleController.text.trim(), page: _visiblePage().$1, pageCount: _pageCount, selected: _currentSelectedText?.trim()),
+      embed: widget.knowledge?.embed,
+      keptVectors: widget.knowledge == null ? null : () => widget.knowledge!.keptVectors(id),
       loadCards: () async => (await repo.ai.get(id, 'flashcards'))?.content,
       saveCards: (json) => repo.ai.put(NoteAiRow(noteId: id, kind: 'flashcards', content: json, createdAt: DateTime.now())),
       dropCards: () => repo.ai.delete(id, 'flashcards'),
+      // (kept on this device, apart from the note; a locked note keeps none, its text must not lie about in the open)
+      loadChat: () async => _lockMode == LockMode.none ? await repo.settings.get('$_chatSetting$id') : null,
+      saveChat: (json) async {
+        if (json == null || _lockMode != LockMode.none) {
+          await repo.settings.remove('$_chatSetting$id');
+        } else {
+          await repo.settings.set('$_chatSetting$id', json);
+        }
+      },
       agent: NoteAgent(api: _EditorAgentApi(this), selected: () => _currentSelectedText, copies: () => [for (final c in _agentTexts()) scratchCopy(c)],
         beforeChange: (what) => _keepVersion(VersionReason.assistantBefore, what),
         afterChange: (what) => _keepVersion(VersionReason.assistant, what),
@@ -64,11 +98,16 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
         _agentMode = on;
         repo.settings.set(_agentModeSetting, on ? '1' : '0');
       },
-    )..restoreCards();
+    )
+      ..restoreCards()
+      ..restoreChat();
     return chat;
   }
 
   static const _agentModeSetting = 'assistant_agent_mode';
+
+  /// Where the conversation about a note is kept (with its id after it).
+  static const _chatSetting = 'assistant_chat:';
 
   /// Keeps the note as it is now as a version, with [what] the assistant does or did. A version that cannot be made does not hold up
   /// the assistant (the note may be one that keeps no versions, as an encrypted one).
@@ -323,7 +362,7 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
 }
 
 /// What the assistant can do with the note that is open. It is the API of the extensions, for the whole note instead of a selection.
-class _EditorAgentApi extends ExtensionApi with LibraryApi, NotesReadApi, _EditorWideApi {
+class _EditorAgentApi extends ExtensionApi with LibraryApi, NotesReadApi, ManageNotesApi, _EditorWideApi {
   @override
   final _FixedPageNoteEditorState _editor;
 
@@ -364,8 +403,17 @@ class _EditorAgentApi extends ExtensionApi with LibraryApi, NotesReadApi, _Edito
 }
 
 /// The calls of the extension API that reach past the selection: they work the same for the assistant and for the tools of extensions.
-mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi {
+mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi, ManageNotesApi {
   _FixedPageNoteEditorState get _editor;
+
+  @override
+  NoteRepository get managedNotes => _editor.widget.repository;
+
+  @override
+  TagRepository? get managedTags => _editor.widget.tags;
+
+  @override
+  bool isOpenNote(String id) => id == _editor.widget.noteId;
 
   @override
   NoteRepository get notesRepository => _editor.widget.repository;
@@ -395,25 +443,6 @@ mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi {
     return describeNoteFormatting([for (final p in parts) p.text], [for (final p in parts) p.label], target: target);
   }
 
-  Future<String?> _folderId(String name) async {
-    final folders = await _editor.widget.repository.listFolders();
-    final found = folders.where((f) => f.name.toLowerCase() == name.trim().toLowerCase()).firstOrNull;
-    if (found == null) throw ExtensionError('There is no folder "$name". The folders are: ${folders.map((f) => f.name).join(', ')}.');
-    return found.id;
-  }
-
-  @override
-  Future<String> createNote(String title, String text, {String? folder}) async {
-    final repo = _editor.widget.repository;
-    final folderId = folder == null ? null : await _folderId(folder);
-    final id = await repo.createNote(title: title.trim().isEmpty ? 'Untitled Note' : title.trim(), folderId: folderId);
-    if (text.trim().isNotEmpty) {
-      final note = await repo.loadNote(id);
-      if (note != null) await repo.saveNote(note..documentText = text);
-    }
-    return id;
-  }
-
   @override
   Future<void> addTags(List<String> tags) async {
     final repository = _editor.widget.tags;
@@ -424,7 +453,7 @@ mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi {
 
   @override
   Future<void> moveToFolder(String? folder) async =>
-      _editor.widget.repository.moveNote(_editor.widget.noteId, folder == null ? null : await _folderId(folder));
+      _editor.widget.repository.moveNote(_editor.widget.noteId, folder == null ? null : (await folderNamed(folder)).id);
 
   // ---- pages
 
@@ -488,71 +517,6 @@ mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi {
   }
 
   // ---- folders and the library
-
-  /// The folder called [name] (as a name that is not in [folders] says which are).
-  Future<FolderEntry> _folder(String name) async {
-    final folders = await _editor.widget.repository.listFolders();
-    final found = folders.where((f) => f.name.toLowerCase() == name.trim().toLowerCase()).firstOrNull;
-    return found ?? (throw ExtensionError('There is no folder "$name". The folders are: ${folders.map((f) => f.name).join(', ')}.'));
-  }
-
-  @override
-  Future<List<Map<String, Object?>>> listFolders() async {
-    final folders = await _editor.widget.repository.listFolders();
-    final names = {for (final f in folders) f.id: f.name};
-    return [for (final f in folders) {'name': f.name, 'parent': names[f.parentId], 'notes': f.noteCount}];
-  }
-
-  @override
-  Future<void> createFolder(String name, {String? parent}) async {
-    final clean = name.trim();
-    if (clean.isEmpty) throw ExtensionError('"name" is empty.');
-    final repo = _editor.widget.repository;
-    if ((await repo.listFolders()).any((f) => f.name.toLowerCase() == clean.toLowerCase())) throw ExtensionError('There is a folder "$clean" already.');
-    await repo.createFolder(clean, parentId: parent == null ? null : (await _folder(parent)).id);
-  }
-
-  @override
-  Future<void> renameFolder(String name, String newName) async {
-    final clean = newName.trim();
-    if (clean.isEmpty) throw ExtensionError('"newName" is empty.');
-    await _editor.widget.repository.renameFolder((await _folder(name)).id, clean);
-  }
-
-  Future<NoteSummary> _noteOf(String id) async {
-    final found = (await _editor.widget.repository.listNotes()).where((n) => n.id == id).firstOrNull;
-    if (found == null) throw ExtensionError('There is no such note. notes.search and notes.list give the ids.');
-    if (found.locked) throw ExtensionError('That note is locked: it cannot be changed from here.');
-    return found;
-  }
-
-  @override
-  Future<void> moveNoteTo(String id, String? folder) async {
-    await _noteOf(id);
-    await _editor.widget.repository.moveNote(id, folder == null ? null : (await _folder(folder)).id);
-  }
-
-  @override
-  Future<void> tagNote(String id, List<String> tags) async {
-    final repository = _editor.widget.tags;
-    if (repository == null) throw ExtensionError('Tags cannot be set here.');
-    await _noteOf(id);
-    await repository.setTags(id, {...await repository.tagsOf(id), ...tags});
-  }
-
-  @override
-  Future<void> trashNote(String id) async {
-    if (id == _editor.widget.noteId) throw ExtensionError('That is the note that is open: close it first.');
-    await _noteOf(id);
-    await _editor.widget.repository.trashNote(id);
-  }
-
-  @override
-  Future<void> restoreNote(String id) async {
-    final repo = _editor.widget.repository;
-    if (!(await repo.listTrash()).any((n) => n.id == id)) throw ExtensionError('There is no such note in the trash.');
-    await repo.restoreNote(id);
-  }
 
   // ---- flashcards
 
@@ -772,12 +736,6 @@ mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi {
       if (settled == 0) throw ExtensionError('The note has no tracked changes ({++put in++} or {--taken out--}).');
       return settled;
     });
-  }
-
-  @override
-  Future<void> favoriteNote(String id, bool on) async {
-    await _noteOf(id);
-    await _editor.widget.repository.setFavorite(id, on);
   }
 
   // ---- the text of PDFs

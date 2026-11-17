@@ -6,7 +6,11 @@ import '../search/search_query.dart';
 
 /// A reading of handwriting kept in `ink_reads`: the key of the strokes, the ids of a selection's strokes (comma-separated; empty for
 /// a block), and its text or its formula.
-typedef InkRead = ({String key, String ids, String? text, String? latex});
+typedef InkRead = ({String key, String ids, String? text, String? latex, InkPlace? place});
+
+/// Where a reading lies: the page (zero-based) and the top left corner of its strokes on it. Null for one whose place is not known
+/// (a conversion of a selection, or one kept before places were).
+typedef InkPlace = ({int page, double top, double left});
 
 /// The words of notes as the search and the AI read them: titles, documents, text boxes, the text of PDF pages and of handwriting.
 /// Locked notes are never in it.
@@ -38,7 +42,8 @@ class NoteTextRepository {
   }
 
   /// The words of a note: its title, the name of its PDF, the written document and its
-  /// text boxes and the text of its PDF pages (once read, see PdfIndexer), at most [limit] characters. Pen strokes are not text and are not in it.
+  /// text boxes, the text of its PDF pages (once read, see PdfIndexer) and its handwriting (once read, see `InkIndexer`), at most [limit]
+  /// characters.
   Future<String> noteText(String id, {int limit = 8000}) async {
     final notes = await _db.query('notes', columns: ['title', 'pdf_name', 'document_text'], where: 'id = ? AND lock_mode = 0', whereArgs: [id]);
     if (notes.isEmpty) return ''; // (a locked note is not read by anything else)
@@ -49,6 +54,8 @@ class NoteTextRepository {
       n['document_text'] as String,
       for (final b in await _db.query('text_boxes', columns: ['text'], where: 'note_id = ?', whereArgs: [id], orderBy: 'page_index, seq')) b['text'] as String,
       for (final b in await _db.query('pdf_text', columns: ['text'], where: 'note_id = ?', whereArgs: [id], orderBy: 'page_index')) b['text'] as String,
+      for (final b in await _db.query('ink_text', columns: ['text'], where: 'note_id = ?', whereArgs: [id], orderBy: 'page_index, top, left')) b['text'] as String,
+      for (final f in await inkFormulas(id)) '\$${f.latex}\$',
     ].where((t) => t.trim().isNotEmpty).toList();
     final text = parts.join('\n');
     return text.length > limit ? text.substring(0, limit) : text;
@@ -137,14 +144,36 @@ class NoteTextRepository {
   /// selections that are not a whole block.
   Future<List<InkRead>> inkReads(String noteId) async => [
         for (final r in await _db.query('ink_reads', where: 'note_id = ?', whereArgs: [noteId]))
-          (key: r['key'] as String, ids: r['ids'] as String, text: r['text'] as String?, latex: r['latex'] as String?),
+          (
+            key: r['key'] as String,
+            ids: r['ids'] as String,
+            text: r['text'] as String?,
+            latex: r['latex'] as String?,
+            place: r['page_index'] == null ? null : (page: r['page_index'] as int, top: (r['top'] as num? ?? 0).toDouble(), left: (r['left'] as num? ?? 0).toDouble()),
+          ),
+      ];
+
+  /// The formulas read in the handwriting of [noteId] whose place is known, in reading order (page, top, left): what the assistant
+  /// and the search of all notes are given of them. A locked note has none.
+  Future<List<({int page, double top, double left, String latex})>> inkFormulas(String noteId) async => [
+        for (final r in await _db.query('ink_reads',
+            where: "note_id = ? AND ids = '' AND latex IS NOT NULL AND latex != '' AND page_index IS NOT NULL AND note_id IN (SELECT id FROM notes WHERE lock_mode = 0)",
+            whereArgs: [noteId],
+            orderBy: 'page_index, top, left'))
+          (page: r['page_index'] as int, top: (r['top'] as num? ?? 0).toDouble(), left: (r['left'] as num? ?? 0).toDouble(), latex: r['latex'] as String),
       ];
 
   /// Keeps [reads] of [noteId] in place of what was kept before (they are few: a note's formulas and conversions).
   Future<void> saveInkReads(String noteId, Iterable<InkRead> reads) => _db.transaction((txn) async {
         final batch = txn.batch()..delete('ink_reads', where: 'note_id = ?', whereArgs: [noteId]);
         for (final r in reads) {
-          batch.insert('ink_reads', {'note_id': noteId, 'key': r.key, 'ids': r.ids, 'text': r.text, 'latex': r.latex}, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+              'ink_reads',
+              {
+                'note_id': noteId, 'key': r.key, 'ids': r.ids, 'text': r.text, 'latex': r.latex, //
+                'page_index': r.place?.page, 'top': r.place?.top, 'left': r.place?.left,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
         await batch.commit(noResult: true);
       });

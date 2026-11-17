@@ -1,5 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes/ai/ai_service.dart';
+import 'package:notes/ai/assistant_chat.dart';
+import 'package:notes/ai/note_agent.dart';
 import 'package:notes/ai/note_knowledge.dart';
+import 'package:notes/ai/notes_agent_api.dart';
+import 'package:notes/extensions/extension_manifest.dart';
+import 'support/fake_model.dart';
 import 'package:notes/automations/note_sorter.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/note_repository.dart';
@@ -65,5 +71,74 @@ void main() {
     expect(found.notes.single.id, bio);
     expect(found.passages.first.text, contains('nucleus'));
     expect((await repo.knowledge.chunksOf(bio)).every((c) => c.vector == null), isTrue);
+  });
+
+  test('a question about the latest notes is answered from the notes changed last, with their dates', () async {
+    final (repo, bio, law, trip) = await notes();
+    final now = DateTime.now();
+    // (the database is shared by the tests of this file: the notes of the others are made old)
+    for (final n in await repo.listNotes()) {
+      if (![bio, law, trip].contains(n.id)) await repo.setTimes(n.id, created: now.subtract(const Duration(days: 400)), edited: now.subtract(const Duration(days: 400)));
+    }
+    await repo.setTimes(bio, created: now.subtract(const Duration(days: 60)), edited: now.subtract(const Duration(days: 40)));
+    await repo.setTimes(law, created: now.subtract(const Duration(days: 60)), edited: now.subtract(const Duration(days: 30)));
+    await repo.setTimes(trip, created: now.subtract(const Duration(days: 2)), edited: now.subtract(const Duration(hours: 3)));
+    final knowledge = NoteKnowledge(repo, const NoEmbedder(), NoteSorter(repo, const NoEmbedder(), ready: () => false), ready: () => false);
+    expect(asksAboutRecent('Summarize my latest notes'), isTrue);
+    expect(asksAboutRecent('Was habe ich gestern geschrieben?'), isTrue);
+    expect(asksAboutRecent('What is ATP?'), isFalse);
+    final found = await knowledge.retrieve('Summarize my latest notes', notes: 1);
+    expect(found.notes.single.id, trip);
+    expect(found.passages.map((p) => p.text).join(' '), contains('Lisbon'));
+    expect(found.render(2000), contains('changed ${now.subtract(const Duration(hours: 3)).year}-'));
+    // what the words say still counts among the recent ones
+    final law2 = await knowledge.retrieve('What did I write about contracts recently?', notes: 1);
+    expect(law2.notes.single.id, law);
+  });
+
+  test('the vectors kept for a note are handed out only for the model in use', () async {
+    final (repo, bio, _, _) = await notes();
+    final embedder = FakeEmbedder();
+    final knowledge = NoteKnowledge(repo, embedder, NoteSorter(repo, embedder, ready: () => true), ready: () => true);
+    expect(await knowledge.keptVectors(bio), isEmpty); // never read
+    await knowledge.analyse(bio);
+    final kept = await knowledge.keptVectors(bio);
+    expect(kept.keys.join(), contains('Mitochondria'));
+    final off = NoteKnowledge(repo, embedder, NoteSorter(repo, embedder, ready: () => false), ready: () => false);
+    expect(await off.keptVectors(bio), isEmpty);
+    expect(await off.embed('x'), isNull);
+  });
+
+  test('the assistant of all notes searches, asks before it files, and has no tools of an open note', () async {
+    final (repo, bio, _, _) = await notes();
+    final embedder = FakeEmbedder();
+    final knowledge = NoteKnowledge(repo, embedder, NoteSorter(repo, embedder, ready: () => true), ready: () => true);
+    final model = FakeModel();
+    final replies = <String>[
+      '<tool>{"name":"notes.search","args":{"query":"Mitochondria"}}</tool>',
+      '<tool>{"name":"note.insertText","args":{"text":"x"}}</tool>',
+      '<tool>{"name":"notes.favorite","args":{"id":"$bio","on":true}}</tool>',
+      'Starred it.',
+    ];
+    model.respond = (_) => replies.removeAt(0);
+    var changed = 0;
+    final chat = AssistantChat(
+      ai: AiService(providers: [model]),
+      knowledge: knowledge,
+      agent: NoteAgent(api: NotesAgentApi(repo, isOpen: (_) => false)),
+      granted: const {ExtensionPermission.notesReadAll},
+      onChanged: () => changed++,
+    )..acting = true;
+    final done = chat.ask('Star my biology note');
+    await pumpEventQueue(times: 400);
+    final steps = chat.messages.last.steps;
+    expect(steps.map((s) => s.state), [AgentStepState.done, AgentStepState.failed, AgentStepState.asking], reason: 'reading is granted, the in-note tool does not exist, filing asks');
+    expect(model.prompts.first.system, contains('no note is open'));
+    expect(model.prompts.first.system, isNot(contains('note.insertText {')));
+    chat.decide(AgentChoice.once);
+    await done;
+    expect(chat.messages.last.text, 'Starred it.');
+    expect(changed, 1);
+    expect((await repo.listNotes()).firstWhere((n) => n.id == bio).favorite, isTrue);
   });
 }

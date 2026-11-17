@@ -400,6 +400,36 @@ the assistant is not held up by it. Where nothing changed since the last version
 **undo button**, so it can be taken back; it works on the written document and on the text boxes (not on comments or a PDF's own text), and not while the note is shown for reading
 or its layer is locked. In *Ask* mode, as before, the note is never changed.
 
+**Tools of its own, and tools in groups.** Besides the extension calls the assistant has two tools that only read the open note, from the same text it is
+given for every question (written document, text boxes, handwriting that was read, the PDF's text): `note.pages {from, to}` (whole pages) and `note.find {query}`
+(the passages that fit best, by their words and, with the sentence model, by what they mean). They are not extension calls and need no asking. Not every tool is
+explained to the model from the start: the reading and writing tools of the note (`note.*`, `pdf.read`, `pdf.search`, `notes.search`, `notes.read`, `tasks.add`)
+are, and the others come in three groups that are only named (`library`: notes and folders; `layout`: pages, paper, text boxes, pictures, drawing, tracked
+changes; `planner`: tasks, reminders, calendar, flashcards, clipboard). The model opens a group with `tools.more {group}` and is then told how to use its
+tools; a tool of a closed group that it calls by its name is done all the same and opens its group. This keeps the instructions at about 6 000 characters instead of
+11 000 (and the tool list a service is sent with each request at about a third), which leaves a small model room for the note.
+
+**Ask mode with a model that takes tools.** With a service that takes tools and has a large window (the OpenAI-compatible provider), *Ask* is the same loop
+with only the tools that read the open note (`note.get`, `note.pages`, `note.find`, `note.inspect`, `pdf.read`, `pdf.search`): the model answers from the
+passages and may read more pages when they are not enough. Nothing is asked and nothing changes; a call of any other tool is answered with "only reading is
+possible". A service that takes no tools answers from the passages as before.
+
+**What the assistant is given for a question** (`lib/ai/document_index.dart`, `AssistantChat._read`):
+
+- *A question about the whole note* ("summarize", "key points", "worum geht es", ...): all of it when it fits; otherwise every page skimmed, its short first line (a
+  heading) and the sentences that are most its own (sentences every page has count for little), in a share of the room that goes with the length of the page.
+- *A question that names pages* ("page 12", "pp. 3-5", "Seite 7", or "this page", which is the page in view): those pages whole, then passages for the rest.
+- *Anything else*: the passages that fit best, by their words (BM25) and, when the sentence model is installed, by meaning (its vectors kept for the note are used,
+  passages that changed are read anew, at most 32 per question), each of the best three with its neighbours on the page.
+- Always a few lines first: the title and the number of pages, the page in view, today's date, what part of the note this is (all of it, pages, or passages, so
+  that the model does not say the note lacks what it was not given), and what is selected.
+- In *Ask your notes*, a question about what is new ("my latest notes", "this week", "gestern") ranks the notes by how recently they changed (within the subject when
+  there is one) and gives their dates; the number of passages grows with the room of the model (8 to 40).
+
+Answers may be up to 1 500 tokens with a service and 700 with the model on the device. An answer that reaches the limit says so, with a *continue* button that asks for
+the rest in the same message. The last answer can be asked again, and the book icon of an answer shows what the assistant read for it. The conversation carries the newest
+answers whole as far as a quarter of the room allows, and up to ten turns. `test/assistant_bench_test.dart` measures what reaches the model for questions of each kind.
+
 ## Automations
 
 An automation is a rule: **when** *event* happens (for notes in a folder, or whose title/PDF name contains a word), **do** *action*. It is

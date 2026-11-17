@@ -343,6 +343,13 @@ String? _str(Object? v) => v is String ? v : null;
 
 int? _int(Object? v) => v is num && v.isFinite ? v.toInt() : null;
 
+/// The place of a reading as the file has it: [page, top, left]; null when there is none or it is not that.
+({int page, double top, double left})? _placeOf(Object? v) {
+  if (v is! List || v.length != 3 || v.any((e) => e is! num || !e.isFinite)) return null;
+  final page = (v[0] as num).toInt();
+  return page < 0 ? null : (page: page, top: (v[1] as num).toDouble(), left: (v[2] as num).toDouble());
+}
+
 Map<String, Object?> _mapOf(Object? v) => v is Map ? v.cast<String, Object?>() : const {};
 
 List<Map<String, Object?>> _listOf(Object? v) => [for (final e in v is List ? v : const []) if (e is Map) e.cast<String, Object?>()];
@@ -621,7 +628,11 @@ List<NoteFileEntry> noteFileEntries(NoteFileParts parts, {DateTime? now}) {
             {'key': t.key, 'page': t.page, 'text': t.text, 'l': t.bounds.left, 't': t.bounds.top, 'r': t.bounds.right, 'b': t.bounds.bottom, if (t.unsure.isNotEmpty) 'u': t.unsure},
         ],
         'reads': [
-          for (final r in parts.ink.reads) {'key': r.key, if (r.ids.isNotEmpty) 'ids': r.ids, if (r.text != null) 'text': r.text, if (r.latex != null) 'latex': r.latex},
+          for (final r in parts.ink.reads)
+            {
+              'key': r.key, if (r.ids.isNotEmpty) 'ids': r.ids, if (r.text != null) 'text': r.text, if (r.latex != null) 'latex': r.latex, //
+              if (r.place case final p?) 'place': [p.page, p.top, p.left],
+            },
         ],
       },
     'highlights': [
@@ -962,7 +973,7 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
     ],
     reads: [
       for (final r in _listOf(inkMap['reads']))
-        if (r['key'] is String) (key: r['key'] as String, ids: _str(r['ids']) ?? '', text: _str(r['text']), latex: _str(r['latex'])),
+        if (r['key'] is String) (key: r['key'] as String, ids: _str(r['ids']) ?? '', text: _str(r['text']), latex: _str(r['latex']), place: _placeOf(r['place'])),
     ],
   );
   final audio = <AudioPart>[];

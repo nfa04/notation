@@ -175,7 +175,7 @@ class NoteInkReader {
   final Map<String, String> _keptUnsure = {};
   String _keptReads = '';
 
-  static String _signature(Iterable<InkRead> reads) => (reads.map((r) => '${r.key}\u0000${r.ids}\u0000${r.text}\u0000${r.latex}').toList()..sort()).join('\u0001');
+  static String _signature(Iterable<InkRead> reads) => (reads.map((r) => '${r.key}\u0000${r.ids}\u0000${r.text}\u0000${r.latex}\u0000${r.place}').toList()..sort()).join('\u0001');
 
   /// Starts reading the writing for the search, unless the person switched that off (in the settings).
   Future<void> startIndex() async {
@@ -196,8 +196,8 @@ class NoteInkReader {
     final keep = reader.toKeep();
     final texts = {for (final t in keep.texts) t.block.key: t.text};
     final reads = {
-      for (final e in keep.formulas.entries) e.key: (key: e.key, ids: '', text: null, latex: e.value),
-      for (final e in keep.picked.entries) e.key: (key: e.key, ids: (e.value.ids.toList()..sort()).join(','), text: e.value.text, latex: e.value.latex),
+      for (final e in keep.formulas.entries) e.key: (key: e.key, ids: '', text: null, latex: e.value, place: keep.places[e.key]),
+      for (final e in keep.picked.entries) e.key: (key: e.key, ids: (e.value.ids.toList()..sort()).join(','), text: e.value.text, latex: e.value.latex, place: null),
     }.values.toList();
     // (nothing new to keep, nothing dropped)
     final sameTexts = texts.length == _keptTexts.length &&
