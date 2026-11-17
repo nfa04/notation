@@ -27,4 +27,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('an answer with several blocks of code shows them all', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: ChatText('One:\n```dart\nvar a = 1;\n```\nTwo:\n```\nb\n```\nThree:\n```py\nc = 3\n```', color: Colors.black)),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('code-block')), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-block-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-block-2')), findsOneWidget);
+  });
 }

@@ -176,7 +176,7 @@ class MarkdownView extends StatelessWidget {
         Expanded(child: Text.rich(TextSpan(children: _spans(b, small, cites, notes: notes), style: small))),
       ]);
     }
-    if (b.type == MdBlockType.code) return _code(b);
+    if (b.type == MdBlockType.code) return _code(b, blocks);
     if (b.type == MdBlockType.rule) {
       return SizedBox(width: double.infinity, height: fontSize * 1.5, child: Center(child: Container(height: 1, color: textColor.withValues(alpha: 0.35))));
     }
@@ -228,11 +228,13 @@ class MarkdownView extends StatelessWidget {
   }
 
   /// A block of code on a tint, in a fixed-width font, with its language's colours.
-  Widget _code(MdBlock b) {
+  Widget _code(MdBlock b, List<MdBlock> blocks) {
+    // (several blocks of code in one text need keys of their own; the first keeps the plain one)
+    final nth = blocks.where((x) => x.type == MdBlockType.code).toList().indexOf(b);
     final dark = textColor.computeLuminance() > 0.5;
     final mono = TextStyle(fontFamily: 'monospace', fontSize: fontSize * 0.9, height: 1.35, color: textColor);
     return Container(
-      key: const ValueKey('code-block'),
+      key: ValueKey(nth <= 0 ? 'code-block' : 'code-block-$nth'),
       width: double.infinity,
       margin: EdgeInsets.symmetric(vertical: fontSize * 0.3),
       padding: EdgeInsets.all(fontSize * 0.6),
