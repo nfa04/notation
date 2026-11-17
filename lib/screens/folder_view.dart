@@ -581,7 +581,12 @@ class _FolderViewState extends State<FolderView> {
     if (!_loaded) return const Center(child: CircularProgressIndicator.adaptive());
     final selectedHere = _selectedHere;
     final narrow = _narrow;
-    return Scaffold(
+    return PopScope(
+      canPop: !(narrow && _inRealFolder && !_selecting),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goUp();
+      },
+      child: Scaffold(
       key: _scaffoldKey,
       drawer: narrow ? Drawer(child: SafeArea(child: _buildTree())) : null,
       appBar: _selecting
@@ -637,6 +642,7 @@ class _FolderViewState extends State<FolderView> {
               icon: const Icon(Icons.add),
               label: Text(_inRealFolder ? 'New note here' : 'New note'),
             ),
+    ),
     );
   }
 
@@ -814,10 +820,94 @@ class _FolderViewState extends State<FolderView> {
     return _dropTarget(f.id, _draggable(_DraggedFolder(f.id), f.name, Icons.folder_outlined, row));
   }
 
+  void _openFolder(FolderEntry f) => setState(() {
+        if (_inRealFolder) _expanded.add(_scope);
+        _scope = f.id;
+      });
+
+  /// One level up from the folder shown (to "All notes" from a top-level folder).
+  void _goUp() => setState(() => _scope = _folder(_scope)?.parentId ?? _all);
+
+  /// Where you are as a path of plain text ("All notes > Uni > Maths"); each part above the current folder goes back to it.
+  Widget _upRow() {
+    final scheme = Theme.of(context).colorScheme;
+    final chain = <FolderEntry>[];
+    var steps = 0;
+    for (var f = _folder(_scope); f != null && steps <= _folders.length; f = f.parentId == null ? null : _folder(f.parentId!)) {
+      chain.insert(0, f);
+      steps++;
+    }
+    Widget part(String text, VoidCallback? onTap) => InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text.verbatim(text, style: TextStyle(color: onTap == null ? scheme.onSurfaceVariant : scheme.primary)),
+          ),
+        );
+    final sep = Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text.verbatim('›', style: TextStyle(color: scheme.onSurfaceVariant)));
+    return Wrap(
+      key: const ValueKey('folder-path'),
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        part(tr('All notes'), () => setState(() => _scope = _all)),
+        for (final f in chain) ...[sep, part(f.name, f.id == _scope ? null : () => setState(() => _scope = f.id))],
+      ],
+    );
+  }
+
+  /// A folder as a flat row of a list (a phone finger needs more than a chip), with how many notes it holds.
+  Widget _phoneFolderTile(FolderEntry f) {
+    return _dropTarget(
+      f.id,
+      Column(
+        children: [
+          ListTile(
+            key: ValueKey('folder-tile-${f.id}'),
+            contentPadding: EdgeInsets.zero,
+            minVerticalPadding: 14,
+            leading: Icon(Icons.folder_rounded, color: Theme.of(context).colorScheme.primary),
+            title: Text.verbatim(f.name, overflow: TextOverflow.ellipsis),
+            trailing: Text.verbatim('${f.noteCount}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            onTap: () => _openFolder(f),
+            onLongPress: () => _folderActions(f),
+          ),
+          const Divider(height: 1),
+        ],
+      ),
+      radius: BorderRadius.circular(8),
+    );
+  }
+
+  /// The folder's actions as a sheet, for a long press on a phone (the same ones as the tree's menu).
+  void _folderActions(FolderEntry f) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) {
+        Widget item(IconData icon, String label, VoidCallback run) => ListTile(
+              leading: Icon(icon),
+              title: Text(label),
+              onTap: () {
+                Navigator.pop(ctx);
+                run();
+              },
+            );
+        return SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            item(Icons.create_new_folder_outlined, tr('New subfolder'), () => _newFolder(parentId: f.id)),
+            item(Icons.edit_outlined, tr('Rename'), () => _renameFolder(f)),
+            item(Icons.drive_file_move_outlined, tr('Move to...'), () => _moveFolder(f)),
+            item(Icons.delete_outline, tr('Delete'), () => _deleteFolder(f)),
+          ]),
+        );
+      },
+    );
+  }
+
   Widget _buildContent() {
     if (_scope == _trash) return TrashView(key: const ValueKey('folder-trash'), repository: _repo, onChanged: _reload);
     final notes = _visibleNotes;
-    final subfolders = _inRealFolder ? _childrenOf(_scope) : <FolderEntry>[];
+    // (on a phone the top level lists its folders too - the tree is out of sight there, and this is how a folder is opened)
+    final subfolders = _inRealFolder ? _childrenOf(_scope) : (_narrow && _scope == _all ? _childrenOf(null) : <FolderEntry>[]);
     final title = switch (_scope) {
       _all => 'All notes',
       _unfiled => 'Notes without a folder',
@@ -830,28 +920,29 @@ class _FolderViewState extends State<FolderView> {
     // (what comes before the notes is a few widgets; the notes are made as they scroll into view - a folder may hold thousands)
     final head = <Widget>[
       if (widget.collab?.nativeShares != null) ShareInvitations(service: widget.collab!.nativeShares!),
+      if (_narrow && _inRealFolder) _upRow(),
       _buildHeader(title),
       if (subfolders.isNotEmpty) ...[
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final f in subfolders)
-              _dropTarget(
-                f.id,
-                ActionChip(
-                  avatar: const Icon(Icons.folder_outlined, size: 18),
-                  label: Text.verbatim('${f.name} (${f.noteCount})'),
-                  onPressed: () => setState(() {
-                    _expanded.add(_scope);
-                    _scope = f.id;
-                  }),
+        if (_narrow)
+          for (final f in subfolders) _phoneFolderTile(f)
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final f in subfolders)
+                _dropTarget(
+                  f.id,
+                  ActionChip(
+                    avatar: const Icon(Icons.folder_outlined, size: 18),
+                    label: Text.verbatim('${f.name} (${f.noteCount})'),
+                    onPressed: () => _openFolder(f),
+                  ),
+                  radius: BorderRadius.circular(8),
                 ),
-                radius: BorderRadius.circular(8),
-              ),
-          ],
-        ),
+            ],
+          ),
       ],
       const SizedBox(height: 8),
       if (notes.length > 1) Align(alignment: Alignment.centerRight, child: _sortMenu()),
