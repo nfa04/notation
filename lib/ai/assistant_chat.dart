@@ -48,11 +48,16 @@ class ChatMessage {
   List<KnownMark> known = const [];
 
   AnswerCheck? _check;
+
+  /// The check of an answer that was kept from before.
+  AnswerCheck? restoredCheck;
   String? _checked;
 
   /// Which of those the answer names, and whether they say what it says (see [checkAnswer]); null until the answer is there.
   AnswerCheck? get check {
-    if (fromUser || failed || known.isEmpty || text.isEmpty) return null;
+    if (fromUser || failed || text.isEmpty) return null;
+    // (a conversation that was kept has the check it had, not the passages to make it again)
+    if (known.isEmpty) return restoredCheck;
     final key = '${text.length}:${given.length}:${known.length}:${text.hashCode}';
     if (_checked != key) {
       _checked = key;
@@ -193,7 +198,8 @@ class AssistantChat extends ChangeNotifier {
       final json = await loadChat?.call();
       if (json == null || messages.isNotEmpty || _disposed) return;
       for (final m in (jsonDecode(json) as List).whereType<Map>()) {
-        messages.add(ChatMessage(m['u'] == true, '${m['t'] ?? ''}', pages: [for (final p in (m['p'] as List? ?? const [])) if (p is num) p.toInt()], failed: m['f'] == true));
+        messages.add(ChatMessage(m['u'] == true, '${m['t'] ?? ''}', pages: [for (final p in (m['p'] as List? ?? const [])) if (p is num) p.toInt()], failed: m['f'] == true)
+          ..restoredCheck = m['c'] is Map ? AnswerCheck.fromJson(m['c'] as Map) : null);
       }
       // (a question without its answer cannot be gone on from)
       if (messages.isNotEmpty && messages.last.fromUser) messages.removeLast();
@@ -212,7 +218,8 @@ class AssistantChat extends ChangeNotifier {
     save(kept.length <= from
         ? null
         : jsonEncode([
-            for (final m in kept.skip(from)) {'u': m.fromUser, 't': m.text, if (m.pages.isNotEmpty) 'p': m.pages, if (m.failed) 'f': true},
+            for (final m in kept.skip(from))
+              {'u': m.fromUser, 't': m.text, if (m.pages.isNotEmpty) 'p': m.pages, if (m.failed) 'f': true, if (m.check != null && m.check!.cited) 'c': m.check!.toJson()},
           ]));
   }
 

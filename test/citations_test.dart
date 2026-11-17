@@ -95,4 +95,14 @@ void main() {
     expect(c.sources.single.quote, 'success chance in every single trial');
     expect(c.sources.single.evidence.single, contains(r'$n$'));
   });
+
+  test('the numbers are links that go to their source, and the check is kept with the conversation', () {
+    final c = checkAnswer('Chlorophyll absorbs red and blue light [Page 1]. Glycolysis yields two ATP [Page 2]; both matter [Page 1, 2]. Plants also make oxygen and many other useful things in the leaf.', given, note);
+    expect(c.linked, 'Chlorophyll absorbs red and blue light [¹](cite:1). Glycolysis yields two ATP [²](cite:2); both matter [¹](cite:1)\u2009[²](cite:2). Plants also make oxygen and many other useful things in the leaf.');
+    expect(c.unsourced, 1);
+    final back = AnswerCheck.fromJson(c.toJson());
+    expect(back.linked, c.linked);
+    expect(back.unsourced, 1);
+    expect(back.sources.map((s) => (s.mark.mark, s.mark.page, s.evidence.length)).toList(), c.sources.map((s) => (s.mark.mark, s.mark.page, s.evidence.length)).toList());
+  });
 }

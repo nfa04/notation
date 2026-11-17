@@ -1929,6 +1929,7 @@ const germanTexts = <String, String>{
   'Perhaps': 'Vielleicht',
   'The passage does not have this number:': 'Diese Zahl steht nicht in der Stelle:',
   'The passage has few of the words of the statement: it may say it differently, or not at all.': 'Die Stelle hat wenige Wörter der Aussage: sie sagt es vielleicht anders, oder gar nicht.',
+  'Show all {n} sources': 'Alle {n} Quellen zeigen',
   'Statements with no source named: {n}': 'Aussagen ohne genannte Quelle: {n}',
   'This answer names no passage of your notes: it may come from the model, not from them.': 'Diese Antwort nennt keine Stelle deiner Notizen: sie kann vom Modell stammen, nicht aus ihnen.',
   'Named, but not among what was read': 'Genannt, aber nicht unter dem Gelesenen',

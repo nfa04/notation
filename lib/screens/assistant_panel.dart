@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/language.dart';
 import '../l10n/text.dart';
@@ -390,7 +391,16 @@ class _AssistantPanelState extends State<AssistantPanel> {
           if (m.text.isNotEmpty)
             m.failed
                 ? SelectableText(m.text, style: TextStyle(color: scheme.onErrorContainer))
-                : ChatText(done && (m.check?.cited ?? false) ? m.check!.display : m.text, key: ValueKey('assistant-text-$i'), color: scheme.onSurface),
+                : ChatText(
+                    done && (m.check?.cited ?? false) ? m.check!.linked : m.text,
+                    key: ValueKey('assistant-text-$i'),
+                    color: scheme.onSurface,
+                    onLink: (link) {
+                      final n = link.startsWith('cite:') ? int.tryParse(link.substring(5)) : null;
+                      final sources = m.check?.sources;
+                      if (n != null && sources != null && n >= 1 && n <= sources.length) _openSource(sources[n - 1].mark, sources[n - 1].quote);
+                    },
+                  ),
           if (done && m.check != null) ..._sourcesOf(context, m, i, scheme),
           if (done && !m.failed && !(m.check?.cited ?? false) && m.pages.isNotEmpty && widget.onJumpToPage != null)
             Padding(
@@ -520,20 +530,26 @@ class _AssistantPanelState extends State<AssistantPanel> {
     );
   }
 
+  /// Goes to a source an answer names: the note and page, with [quote] (a few words of it) lit up.
+  void _openSource(KnownMark k, String quote) {
+    if (k.noteId.isNotEmpty && widget.onOpenSource != null) {
+      widget.onOpenSource!(k.noteId, k.page, quote: quote.isEmpty ? null : quote);
+    } else if (k.page != null && quote.isNotEmpty && widget.onShowPassage != null) {
+      widget.onShowPassage!(k.page!, quote);
+    } else if (k.page != null && widget.onJumpToPage != null) {
+      widget.onJumpToPage!(k.page!);
+    }
+  }
+
+  /// The answers whose list of sources is shown whole (the first few are shown otherwise).
+  final _allSources = <int>{};
+
   /// Where the answer says it comes from: the passages it names, each opening its place, marked when the passage does not seem to
   /// say what the answer says there; and a word when it names nothing, or something it was not given.
   List<Widget> _sourcesOf(BuildContext context, ChatMessage m, int i, ColorScheme scheme) {
     final check = m.check!;
     final small = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
-    void open(KnownMark k, String quote) {
-      if (k.noteId.isNotEmpty && widget.onOpenSource != null) {
-        widget.onOpenSource!(k.noteId, k.page, quote: quote.isEmpty ? null : quote);
-      } else if (k.page != null && quote.isNotEmpty && widget.onShowPassage != null) {
-        widget.onShowPassage!(k.page!, quote);
-      } else if (k.page != null && widget.onJumpToPage != null) {
-        widget.onJumpToPage!(k.page!);
-      }
-    }
+    final open = _openSource;
 
     String label(KnownMark k) => k.title.isEmpty
         ? (k.page == null ? k.mark : '${tr('p.')} ${k.page! + 1}')
@@ -545,12 +561,20 @@ class _AssistantPanelState extends State<AssistantPanel> {
           padding: const EdgeInsets.only(top: 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text.verbatim('${tr('Sources')}:', style: small.copyWith(fontWeight: FontWeight.w600)),
-            for (var n = 0; n < check.sources.length; n++) _sourceRow(check.sources[n], i, n, scheme, small, label, open),
-            if (check.claims.any((c) => c.sources.isEmpty))
+            for (var n = 0; n < (_allSources.contains(i) ? check.sources.length : math.min(check.sources.length, 4)); n++)
+              _sourceRow(check.sources[n], i, n, scheme, small, label, open),
+            if (check.sources.length > 4 && !_allSources.contains(i))
+              TextButton(
+                key: ValueKey('assistant-all-sources-$i'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                onPressed: () => setState(() => _allSources.add(i)),
+                child: Text(tr('Show all {n} sources', {'n': '${check.sources.length}'})),
+              ),
+            if (check.unsourced > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  tr('Statements with no source named: {n}', {'n': '${check.claims.where((c) => c.sources.isEmpty).length}'}),
+                  tr('Statements with no source named: {n}', {'n': '${check.unsourced}'}),
                   key: ValueKey('assistant-nosource-$i'),
                   style: small,
                 ),
@@ -786,7 +810,10 @@ class ChatText extends StatefulWidget {
   final String text;
   final Color color;
   final double fontSize;
-  const ChatText(this.text, {super.key, required this.color, this.fontSize = 14});
+
+  /// Called with the target of a link in the text (`cite:2`).
+  final ValueChanged<String>? onLink;
+  const ChatText(this.text, {super.key, required this.color, this.fontSize = 14, this.onLink});
 
   @override
   State<ChatText> createState() => _ChatTextState();
@@ -815,6 +842,6 @@ class _ChatTextState extends State<ChatText> {
   }
 
   @override
-  Widget build(BuildContext context) => SelectionArea(child: MarkdownView(controller: _controller, fontSize: widget.fontSize, textColor: widget.color));
+  Widget build(BuildContext context) => SelectionArea(child: MarkdownView(controller: _controller, fontSize: widget.fontSize, textColor: widget.color, onLink: widget.onLink));
 }
 

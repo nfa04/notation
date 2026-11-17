@@ -19,6 +19,11 @@ class KnownMark {
   /// The note it is in ('' for the open note).
   final String noteId;
   const KnownMark(this.mark, {this.title = '', this.page, this.noteId = ''});
+
+  Map<String, Object?> toJson() => {'m': mark, if (title.isNotEmpty) 't': title, if (page != null) 'p': page, if (noteId.isNotEmpty) 'n': noteId};
+
+  static KnownMark fromJson(Map<Object?, Object?> j) =>
+      KnownMark('${j['m']}', title: '${j['t'] ?? ''}', page: (j['p'] as num?)?.toInt(), noteId: '${j['n'] ?? ''}');
 }
 
 /// A source the answer names, and whether the passage it names says what the answer says there.
@@ -45,6 +50,26 @@ class CitedSource {
   const CitedSource(this.mark, this.unsupported, this.better, {this.quote = '', this.handwriting = false, this.evidence = const [], this.reason});
 
   bool get supported => unsupported.isEmpty;
+
+  Map<String, Object?> toJson() => {
+        'k': mark.toJson(),
+        if (unsupported.isNotEmpty) 'u': unsupported,
+        if (better != null) 'b': better!.toJson(),
+        if (quote.isNotEmpty) 'q': quote,
+        if (handwriting) 'h': true,
+        if (evidence.isNotEmpty) 'e': evidence,
+        if (reason != null) 'r': reason,
+      };
+
+  static CitedSource fromJson(Map<Object?, Object?> j) => CitedSource(
+        KnownMark.fromJson(j['k'] as Map),
+        [for (final u in (j['u'] as List? ?? const [])) '$u'],
+        j['b'] is Map ? KnownMark.fromJson(j['b'] as Map) : null,
+        quote: '${j['q'] ?? ''}',
+        handwriting: j['h'] == true,
+        evidence: [for (final e in (j['e'] as List? ?? const [])) '$e'],
+        reason: j['r'] as String?,
+      );
 }
 
 /// One source a statement names: where, and the words to light up there.
@@ -83,7 +108,34 @@ class AnswerCheck {
   /// The answer with each citation it makes written as the numbers of [sources] (`[1]`, `[2, 3]`): so that what stands on what is
   /// seen where it is said.
   final String display;
-  const AnswerCheck(this.sources, this.unknown, {this.claims = const [], this.display = ''});
+
+  /// How many statements name no source (of those with some substance).
+  final int unsourced;
+  const AnswerCheck(this.sources, this.unknown, {this.claims = const [], this.display = '', this.unsourced = 0});
+
+  /// [display] with each number a link (`cite:1`) written small, as a footnote mark: tapping it goes to the source.
+  String get linked => display.replaceAllMapped(RegExp(r'\[(\d+(?:, \d+)*)\]'), (m) {
+        final numbers = m[1]!.split(', ').map(int.parse).toList();
+        if (numbers.any((n) => n < 1 || n > sources.length)) return m[0]!;
+        const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+        String small(int n) => '$n'.split('').map((d) => sup[int.parse(d)]).join();
+        return numbers.map((n) => '[${small(n)}](cite:$n)').join('\u2009');
+      });
+
+  /// What is kept of the check with a conversation, so that the sources are there when it is opened again.
+  Map<String, Object?> toJson() => {
+        's': [for (final c in sources) c.toJson()],
+        if (unknown.isNotEmpty) 'x': unknown,
+        'd': display,
+        if (unsourced > 0) 'n': unsourced,
+      };
+
+  static AnswerCheck fromJson(Map<Object?, Object?> j) => AnswerCheck(
+        [for (final c in (j['s'] as List? ?? const []).whereType<Map>()) CitedSource.fromJson(c)],
+        [for (final x in (j['x'] as List? ?? const [])) '$x'],
+        display: '${j['d'] ?? ''}',
+        unsourced: (j['n'] as num?)?.toInt() ?? 0,
+      );
 
   /// Whether the answer names a passage it was given.
   bool get cited => sources.isNotEmpty;
@@ -356,7 +408,7 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
     for (final key in order)
       CitedSource(marks[key]!, doubts[key]!, better[key],
           quote: quotes[key]?.quote ?? '', handwriting: quotes[key]?.handwriting ?? false, evidence: evidence[key] ?? const [], reason: reasons[key])
-  ], unknown, claims: all, display: display);
+  ], unknown, claims: all, display: display, unsourced: all.where((c) => c.sources.isEmpty).length);
 }
 
 /// The search that finds [quote] (a few words of a passage) where it is written, whatever lies between its words.

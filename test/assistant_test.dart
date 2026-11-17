@@ -380,6 +380,19 @@ void main() {
       expect(kept, isNull);
     });
 
+    test('the sources of a kept answer are there when the conversation is taken up again', () async {
+      String? kept;
+      final provider = _Provider(answer: 'The final exam takes place on 20 June [Page 41].');
+      AssistantChat open() => AssistantChat(ai: AiService(providers: [provider]), index: () async => longDocument(), loadChat: () async => kept, saveChat: (json) async => kept = json);
+      await open().ask('When is the final exam?');
+      final again = open();
+      await again.restoreChat();
+      final check = again.messages.last.check!;
+      expect(check.sources.single.mark.page, 40);
+      expect(check.sources.single.evidence.single, contains('20 June'));
+      expect(check.linked, contains('(cite:1)'));
+    });
+
     test('a note the question refers to is given whole, with its id, in both chats', () async {
       final provider = _Provider(chars: 3000);
       final c = AssistantChat(
@@ -447,7 +460,8 @@ void main() {
       await tester.pump();
     }
     await tester.pumpAndSettle();
-    expect(find.text('Entropy never decreases [1].'), findsOneWidget); // (its citation as the number of its source)
+    expect(find.textContaining('Entropy never decreases'), findsWidgets); // (its citation is the small number of its source)
+    expect(find.textContaining('(p. 1)'), findsNothing);
     // what the model was given: the title and the text box
     final sent = provider.prompts.single;
     expect(sent.user, contains('[Title]\nPhysics'));
