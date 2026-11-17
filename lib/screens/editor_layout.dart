@@ -34,15 +34,8 @@ extension _EditorLayout on _FixedPageNoteEditorState {
   List<Widget> _toolbarButtons(BuildContext context, {bool bottom = false}) {
     final sections = <String, List<Widget>>{
       'edit': [
-      if (widget.onCloseSplit != null)
-        IconButton(
-          key: ValueKey('close-split-${widget.noteId}'),
-          tooltip: tr('Close this note (end the split view)'),
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.close_fullscreen, size: 20),
-          onPressed: widget.onCloseSplit,
-        )
-      else if (widget.onOpenBeside != null)
+      // (ending the split view is not here: it sits in the title bar, where no toolbar arrangement can hide it)
+      if (widget.onCloseSplit == null && widget.onOpenBeside != null)
         IconButton(
           key: const ValueKey('open-beside'),
           tooltip: tr('Open another note beside this one'),

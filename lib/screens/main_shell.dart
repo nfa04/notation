@@ -1446,8 +1446,15 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     );
   }
 
+  /// The title the open editor has, or null while it has none yet (an editor that is still loading answers "", which must not hide the stored title).
+  String? _liveTitle(String k) {
+    if (!_visible.contains(k)) return null;
+    final t = _editorOf(k)?.noteTitle;
+    return t == null || t.isEmpty ? null : t;
+  }
+
   WorkspaceTab _tabOf(String k) {
-    if (_isNote(k)) return WorkspaceTab(key: k, icon: Icons.note_alt_outlined, title: (_visible.contains(k) ? _editorOf(k)?.noteTitle : null) ?? _titles[k] ?? "", untitled: true); // (an editor that is leaving still answers during that very build)
+    if (_isNote(k)) return WorkspaceTab(key: k, icon: Icons.note_alt_outlined, title: _liveTitle(k) ?? _titles[k] ?? "", untitled: true); // (an editor that is leaving still answers during that very build)
     if (_isGraph(k)) {
       final name = _graphName(k);
       return WorkspaceTab(key: k, icon: Icons.hub_outlined, title: name.isEmpty ? tr('Graph') : name);
@@ -1524,7 +1531,20 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   Widget _pane(String key, Widget child) => Listener(
         onPointerDown: (_) => _focusPane(key),
         child: Column(children: [
-          _strip(key),
+          // ends the split view: the same place in every pane, notes included
+          if (_visible.length > 1)
+            Row(children: [
+              Expanded(child: _strip(key)),
+              IconButton(
+                key: ValueKey('close-split-$key'),
+                tooltip: tr('Close this pane (end the split view)'),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close_fullscreen, size: 20),
+                onPressed: () => _unshow(key),
+              ),
+            ])
+          else
+            _strip(key),
           ValueListenableBuilder<String?>(
             valueListenable: _focusedPane,
             builder: (context, focused, _) => Container(height: 3, color: _visible.length > 1 && focused == key ? Theme.of(context).colorScheme.primary : Colors.transparent),
