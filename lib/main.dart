@@ -445,6 +445,7 @@ Future<void> _start() async {
       ]);
       return [for (final l in lists) for (final e in l) UpcomingEvent(e.title, e.start, allDay: e.allDay, end: e.end, uid: e.uid.isEmpty ? null : e.uid)];
     },
+    cloudAccounts: () => cloudSync?.providers ?? const [],
     bus: events,
   );
   await automations.load();

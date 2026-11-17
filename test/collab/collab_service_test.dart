@@ -11,6 +11,8 @@ import 'package:notes/collab/session.dart';
 import 'package:notes/collab/transport.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/note_data.dart';
+import 'package:notes/data/note_pdfs.dart';
+import 'package:notes/collab/shared_pdf_files.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/models/canvas_models.dart';
 
@@ -127,6 +129,62 @@ void main() {
     await hostService.end(hostId);
     await settle();
     expect(attempt.session!.state, SessionState.ended);
+  });
+
+  test('a note with several PDFs is made on the other device with the same files and order of pages, and follows what the host does to them', () async {
+    final hostId = await hostRepo.createNote(title: 'Readings');
+    final files = <NotePdf>[];
+    for (final (name, text) in [('a.pdf', 'a one'), ('b.pdf', 'b two')]) {
+      final path = p.join(dir.path, name);
+      File(path).writeAsBytesSync(Uint8List.fromList('%PDF-1.4 $text'.codeUnits));
+      files.add(NotePdf(name: name, path: path, sha256: '', pages: 2));
+    }
+    final table = NotePdfs(files, const [PdfPageRef(1, 0), PdfPageRef(0, 0), PdfPageRef(0, 1), PdfPageRef(1, 1)]);
+    final hostNote = NoteData(id: 'h', title: 'Readings');
+    final binding = CollabBinding(
+      note: () => hostNote,
+      change: (f) => f(),
+      makeBox: (id) => TextBoxWidgetModel(id: id, position: Offset.zero),
+      saveImage: hostService.saveImage,
+      onNoteField: (f, d) => Replica.applyNoteField(hostNote, f, d),
+      pdf: () => sharedPdfOfTable(table),
+    );
+    final session = await hostService.startHosting(hostId, binding, title: 'Readings');
+    final attempt = guestService.join(hostService.inviteFor(hostId)!);
+    await settle();
+    await session.approve(hostService.requests.single.request.id);
+    await settle();
+
+    final made = (await guestRepo.loadNote(attempt.noteId!))!;
+    final got = made.pdfs!;
+    expect(got.layout.join(' '), '1:0 0:0 0:1 1:1');
+    expect(got.files.map((f) => f.name), ['a.pdf', 'b.pdf']);
+    expect(got.files.map((f) => File(f.path).readAsStringSync()), ['%PDF-1.4 a one', '%PDF-1.4 b two']);
+    expect(got.files.every((f) => f.path.startsWith(p.join(dir.path, 'g'))), isTrue);
+    expect((made.pdfName, made.pdfPageCount, made.pdfPath), ('a.pdf', 4, got.files.first.path));
+
+    // the host puts the pages in another order: the other device has the same files in that order
+    session.announceLayout(PdfLayoutChange(const [PdfPageRef(0, 0), PdfPageRef(0, 1), PdfPageRef(1, 0)], const [2, 2]));
+    await settle();
+    final moved = (await guestRepo.loadNote(attempt.noteId!))!;
+    expect(moved.pdfs!.layout.join(' '), '0:0 0:1 1:0');
+    expect(moved.pdfs!.files.map((f) => f.path), got.files.map((f) => f.path));
+    expect(moved.pdfPageCount, 3);
+
+    // then it is one PDF again: the files of the other device are one, the others are gone
+    session.announcePdf(SharedPdf('c.pdf', '', 2, Uint8List.fromList('%PDF-1.4 c three'.codeUnits)));
+    await settle();
+    final one = (await guestRepo.loadNote(attempt.noteId!))!;
+    expect(one.pdfs, isNull);
+    expect(File(one.pdfPath!).readAsStringSync(), '%PDF-1.4 c three');
+    expect(File(got.files[1].path).existsSync(), isFalse);
+
+    // and several again
+    session.announcePdf(await sharedPdfOfTable(table));
+    await settle();
+    final again = (await guestRepo.loadNote(attempt.noteId!))!;
+    expect(again.pdfs!.layout.join(' '), '1:0 0:0 0:1 1:1');
+    expect(again.pdfs!.files.map((f) => File(f.path).readAsStringSync()), ['%PDF-1.4 a one', '%PDF-1.4 b two']);
   });
 
   test('a refused join says so, and no note is made', () async {

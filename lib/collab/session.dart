@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/file_digest.dart';
 import '../data/note_data.dart';
+import '../data/note_pdfs.dart';
 import '../models/canvas_models.dart';
 import '../models/authorship.dart' show Author;
 import '../pdf/pdf_pages.dart' show PageArrangement;
@@ -22,6 +23,7 @@ import 'replica.dart';
 import 'compression.dart';
 import 'secure_box.dart';
 import 'transport.dart';
+import 'wet_ink.dart';
 import '../l10n/language.dart';
 
 /// Whether this device started the session (the host decides who joins) or joined it (a guest).
@@ -78,10 +80,63 @@ class PendingJoin {
 class SharedPdf {
   final String name;
   final String sha256;
+
+  /// How many pages this file has.
   final int pages;
   final Uint8List bytes;
 
-  const SharedPdf(this.name, this.sha256, this.pages, this.bytes);
+  /// A note with several PDFs: this is the first file, [more] the others (in order), and [layout] says which page of which file each page of the note
+  /// is. Null for a note with one PDF.
+  final List<SharedPdf> more;
+  final List<PdfPageRef>? layout;
+
+  const SharedPdf(this.name, this.sha256, this.pages, this.bytes, {this.more = const [], this.layout});
+
+  bool get isTable => layout != null;
+
+  /// How many pages the note has: those of the PDF, or the pages of the table.
+  int get notePages => layout?.length ?? pages;
+
+  /// The files as a table with [paths] (one for each, in order) as where they are kept.
+  NotePdfs? table(List<String> paths) {
+    final layout = this.layout;
+    if (layout == null || paths.length != 1 + more.length) return null;
+    final all = [this, ...more];
+    return NotePdfs([for (var i = 0; i < all.length; i++) NotePdf(name: all[i].name, path: paths[i], sha256: all[i].sha256, pages: all[i].pages)], layout);
+  }
+}
+
+/// What a peer says the pages of a note with several PDFs are now, without the files: for a note that has the same files (the same number, with the
+/// same number of pages each).
+class PdfLayoutChange {
+  final List<PdfPageRef> layout;
+  final List<int> pages;
+  const PdfLayoutChange(this.layout, this.pages);
+
+  Map<String, Object?> toJson() => {'l': [for (final r in layout) [r.file, r.page]], 'n': pages};
+
+  /// The change [json] says, or null when it is not one (it comes from somebody else: the pages must be in their files, none twice).
+  static PdfLayoutChange? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final table = NotePdfs.fromJson({
+      'files': [
+        if (json['n'] is List)
+          for (final n in json['n'] as List) {'name': '', 'path': '', 'sha256': '', 'pages': n},
+      ],
+      'layout': json['l'],
+    });
+    if (table == null) return null;
+    return PdfLayoutChange(table.layout, [for (final f in table.files) f.pages]);
+  }
+
+  /// Whether it fits the files of [table].
+  bool fits(NotePdfs table) {
+    if (table.files.length != pages.length) return false;
+    for (var i = 0; i < pages.length; i++) {
+      if (table.files[i].pages != pages[i]) return false;
+    }
+    return true;
+  }
 }
 
 /// What the owner of the note gives a session to work with: the note as it is now, and ways to
@@ -105,6 +160,12 @@ class CollabBinding {
   /// Gives the note the PDF somebody else put in its place (a change of its pages taken back).
   final Future<void> Function(SharedPdf pdf)? onPdf;
 
+  /// Gives a note with several PDFs the order of pages somebody else gave it.
+  final Future<void> Function(PdfLayoutChange change)? onLayout;
+
+  /// Gives the note what the host read of its handwriting (see [CollabSession.announceReadings]): the guests do not read it themselves.
+  final void Function(Map<String, Object?> readings)? onReadings;
+
   const CollabBinding({
     required this.note,
     required this.change,
@@ -114,6 +175,8 @@ class CollabBinding {
     this.pdf,
     this.onPages,
     this.onPdf,
+    this.onLayout,
+    this.onReadings,
   });
 }
 
@@ -149,6 +212,13 @@ class _Peer {
   void Function(LinkStats stats)? onBand;
   bool admitted = false;
   String? pendingId;
+
+  /// The version the device said it speaks (see [CollabSession.protocolVersion]), and what it said last of where its texts are.
+  int pv = 1;
+  Map<String, int> seen = const {};
+
+  /// What this link was sent of the lines being drawn (on the host: the link to one guest).
+  WetLane? wetLane;
 
   /// Watches this link (a question every few seconds; see [CollabSession._startHeartbeat]) and what it measured.
   KeepAlive? alive;
@@ -211,6 +281,23 @@ class CollabSession extends ChangeNotifier {
   final String site;
   late Replica replica = Replica(site);
 
+  /// The version of what this app says in a session, sent in `join` and `welcome`. 1 (or none): texts go whole, and the last change of
+  /// a text wins. 2: texts are merged character by character ([Replica]), lines are seen while they are drawn ([WetBook]), and what was
+  /// deleted from the texts is collected now and then ([CollabSession.collectEvery]). A host of 2 speaks 1 to a guest of 1: it gives it
+  /// whole texts, and takes its whole texts in as its own changes; a guest of 2 with a host of 1 does as an app of 1.
+  static const protocolVersion = 2;
+
+  int get _pv => replica.mergesTexts ? protocolVersion : 1;
+
+  /// How often a guest tells the host where its texts are, and the host sees whether everybody is where it is (to collect what was
+  /// deleted from them: see [Replica.collectTexts]).
+  static Duration collectEvery = const Duration(seconds: 5);
+  Timer? _collectTimer;
+
+  /// On a guest: the version of the host (see [protocolVersion]), and what it was told last of the texts here.
+  int _hostPv = 1;
+  Map<String, int>? _seenSent;
+
   SessionState _state = SessionState.starting;
   String? _endReason;
   String? _code;
@@ -231,6 +318,9 @@ class CollabSession extends ChangeNotifier {
 
   /// Called while no screen shows the note, when somebody put another PDF in its place: [note] is to get it.
   Future<void> Function(NoteData note, SharedPdf pdf)? onHeadlessPdf;
+
+  /// Called while no screen shows the note, when somebody gave its PDFs another order of pages.
+  Future<void> Function(NoteData note, PdfLayoutChange change)? onHeadlessLayout;
   Timer? _headlessTimer;
   Timer? _debounce;
   late final SecureBox _box = SecureBox(invite.messageKey);
@@ -441,10 +531,66 @@ class CollabSession extends ChangeNotifier {
     }
   }
 
-  static Map<String, Object?> _pdfJson(SharedPdf pdf) => {'name': pdf.name, 'sha': pdf.sha256, 'pages': pdf.pages, 'bytes': base64Encode(pdf.bytes)};
+  /// Tells the others that the pages of the note's several PDFs are in another order (the files are the same: see [PdfLayoutChange]).
+  void announceLayout(PdfLayoutChange change) {
+    if (_state != SessionState.live) return;
+    final message = {'t': 'layout', 'c': change.toJson()};
+    if (role == SessionRole.host) {
+      unawaited(_broadcast(message));
+    } else {
+      unawaited(_host?.send(message).then((_) {}, onError: (Object _) {}));
+    }
+  }
+
+  /// Whether this device is the one that reads the handwriting of the note in the background: the host (or a note not in a session). A
+  /// guest does not - reading the same strokes on every device was the same work N times - and takes what the host read
+  /// ([announceReadings]). A guest whose link broke reads for itself until it is back, and so does a guest whose host is gone.
+  bool get readsInk => role == SessionRole.host || _state != SessionState.live;
+
+  /// The host tells the guests what it read of the handwriting ([readings]: texts, unsure words and formulas by the key of the strokes
+  /// they were read from, which is the same on every device). Nothing is sent by a guest, and nothing is sent to guests that do not
+  /// know the message (an older app ignores it).
+  void announceReadings(Map<String, Object?> readings) {
+    if (role != SessionRole.host || _state != SessionState.live) return;
+    unawaited(_broadcast({'t': 'inkread', 'r': readings}));
+  }
+
+  static Map<String, Object?> _pdfJson(SharedPdf pdf) => {
+        'name': pdf.name,
+        'sha': pdf.sha256,
+        'pages': pdf.pages,
+        'bytes': base64Encode(pdf.bytes),
+        if (pdf.layout != null) ...{
+          'more': [for (final m in pdf.more) _pdfJson(m)],
+          'layout': [for (final r in pdf.layout!) [r.file, r.page]],
+        },
+      };
 
   /// The PDF [p] holds, or null when it is not one (it comes from somebody else: nothing in it can be taken for granted).
   static SharedPdf? _pdfFrom(Object? p) {
+    final one = _filePdfFrom(p);
+    if (one == null) return null;
+    final layout = (p as Map)['layout'];
+    if (layout == null) return one;
+    final more = p['more'];
+    if (layout is! List || more is! List || more.length > 500) return null;
+    final others = <SharedPdf>[];
+    for (final m in more) {
+      final other = _filePdfFrom(m);
+      if (other == null) return null;
+      others.add(other);
+    }
+    final all = [one, ...others];
+    // (the pages must be in their files, none twice)
+    final table = NotePdfs.fromJson({
+      'files': [for (final f in all) {'name': f.name, 'path': '', 'sha256': '', 'pages': f.pages}],
+      'layout': layout,
+    });
+    if (table == null) return null;
+    return SharedPdf(one.name, one.sha256, one.pages, one.bytes, more: others, layout: table.layout);
+  }
+
+  static SharedPdf? _filePdfFrom(Object? p) {
     if (p is! Map) return null;
     final name = p['name'], bytes = p['bytes'], sha = p['sha'], pages = p['pages'];
     if (name is! String || bytes is! String) return null;
@@ -460,9 +606,10 @@ class CollabSession extends ChangeNotifier {
   /// Puts the PDF in [json] in the place of this one. False when it is none, and so not to be passed on.
   Future<bool> _takePdf(Object? json) async {
     final sent = _pdfFrom(json);
-    if (sent == null || !_looksLikePdf(sent.bytes)) return false;
+    if (sent == null || !_looksLikePdf(sent.bytes) || sent.more.any((m) => !_looksLikePdf(m.bytes))) return false;
     // (the hash is worked out here: a note file is checked against it when it is read again)
-    final pdf = SharedPdf(sent.name, await sha256Of(sent.bytes), sent.pages, sent.bytes);
+    final pdf = SharedPdf(sent.name, await sha256Of(sent.bytes), sent.pages, sent.bytes,
+        more: [for (final m in sent.more) SharedPdf(m.name, await sha256Of(m.bytes), m.pages, m.bytes)], layout: sent.layout);
     final binding = _binding;
     final note = _headless;
     try {
@@ -473,6 +620,24 @@ class CollabSession extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[live] the PDF could not be taken: $e'); // (the others still get it)
+    }
+    return true;
+  }
+
+  /// Gives the note the order of pages somebody else gave its PDFs. False when it is not one, and so not to be passed on.
+  Future<bool> _takeLayout(Object? json) async {
+    final change = PdfLayoutChange.fromJson(json);
+    if (change == null) return false;
+    final binding = _binding;
+    final note = _headless;
+    try {
+      if (binding != null) {
+        await binding.onLayout?.call(change);
+      } else if (note != null) {
+        await onHeadlessLayout?.call(note, change);
+      }
+    } catch (e) {
+      debugPrint('[live] the order of the pages could not be taken: $e'); // (the others still get it)
     }
     return true;
   }
@@ -530,6 +695,9 @@ class CollabSession extends ChangeNotifier {
       .._pdfProvider = binding.pdf;
     s._participants.add(Participant(s.site, name, uid: userId));
     s._incomingSub = transport.incoming.listen(s._onIncoming);
+    s.replica
+      ..wholeTexts = false // (a guest of an older version is given them: see [_relayOps])
+      ..translatesWholeTexts = true;
     s._set(SessionState.live);
     // the note as it is, so that what is already on it counts as the host's own, first
     s.replica.localChanges(binding.note());
@@ -583,6 +751,7 @@ class CollabSession extends ChangeNotifier {
         peer.key = await _provenKey(m);
         peer.web = m['pf'] == 'web';
         peer.veto = _vetoFrom(m['nv']);
+        peer.pv = m['pv'] is int ? m['pv'] as int : 1;
         final claimed = m['site'];
         final known = claimed is String ? _members.where((x) => x.site == claimed).firstOrNull : null;
         if (known != null && known.key != peer.key) {
@@ -618,16 +787,34 @@ class CollabSession extends ChangeNotifier {
         _pending.add(PendingJoin(id, peer.name!, invite.verificationCode(hostNonce, guestNonce), uid: peer.uid));
         notifyListeners();
         await peer.send({'t': 'pending', 'z': 1, 'nonce': hostNonce, 'host': name});
+      case 'wet':
+        // (a guest speaks only for the lines it draws itself)
+        if (!peer.admitted || peer.site == null) return;
+        if (wet.take(m, from: peer.site, self: site)) _pumpWetSoon();
       case 'ops':
         if (!peer.admitted) return;
-        _takeRemote(m);
-        await _broadcast({'t': 'ops', 'ops': m['ops']}, except: peer);
+        replica.sender = peer.site;
+        try {
+          _takeRemote(m);
+        } finally {
+          replica.sender = null;
+        }
+        await _relayOps(m['ops'], from: peer);
+      case 'seen':
+        if (!peer.admitted || peer.pv < 2) return;
+        final seen = Replica.reportFrom(m['d']);
+        if (seen == null) return;
+        peer.seen = seen;
+        _tryCollect();
       case 'pages':
         if (!peer.admitted) return;
         if (await _takePages(m['a'])) await _broadcast({'t': 'pages', 'a': m['a']}, except: peer);
       case 'pdf':
         if (!peer.admitted) return;
         if (await _takePdf(m['f'])) await _broadcast({'t': 'pdf', 'f': m['f']}, except: peer);
+      case 'layout':
+        if (!peer.admitted) return;
+        if (await _takeLayout(m['c'])) await _broadcast({'t': 'layout', 'c': m['c']}, except: peer);
       case 'at':
         if (!peer.admitted) return;
         if (_takePage(peer.site, m['page'], m['sheet'], m['q'])) {
@@ -689,7 +876,8 @@ class CollabSession extends ChangeNotifier {
     }
     final note = _binding?.note() ?? _headless!;
     final pdf = await _pdfProvider?.call();
-    final ops = replica.state(note);
+    final ops = replica.state(note, wholeTexts: peer.pv < 2 ? true : null);
+    if (peer.pv < 2) replica.rememberWholeTexts(peer.site!);
     if (!identical(_latestAdmit[peer.site], peer) || _state == SessionState.ended) {
       // the guest came again meanwhile (this link is the old one, and probably dead), or the session is over
       unawaited(peer.channel.close());
@@ -704,6 +892,7 @@ class CollabSession extends ChangeNotifier {
       't': 'welcome',
       'z': 1,
       'site': site,
+      'pv': _pv,
       'token': token,
       if (resumeToken != null) 'resume': true,
       'roster': (_roster ?? registered.roster).toJson(), // (the latest: one made meanwhile went to the others, not to this link)
@@ -1383,6 +1572,7 @@ class CollabSession extends ChangeNotifier {
       't': 'join',
       'z': 1,
       'site': site,
+      'pv': _pv,
       'name': name,
       if (userId != null) 'uid': userId,
       'nonce': _guestNonce,
@@ -1421,6 +1611,14 @@ class CollabSession extends ChangeNotifier {
       case 'welcome':
         _token = m['token'] as String? ?? _token;
         _hostSite = m['site'] as String? ?? _hostSite;
+        _hostPv = m['pv'] is int ? m['pv'] as int : 1;
+        _seenSent = null; // (a host - maybe another one - that knows nothing of it yet)
+        if (_hostPv < 2) {
+          // a host of an older version: it takes whole texts, and the last change of a text wins there; so it is here (for good: this
+          // device stays so, also with a newer host later, as one of that version)
+          replica.mergesTexts = false;
+        }
+        replica.wholeTexts = !replica.mergesTexts;
         await _acceptRoster(Roster.fromJson(m['roster']), restarted: m['resume'] != true && _welcomed);
         _lastObs = null; // (a host that was started again knows nothing of what was measured)
         _reportWarm();
@@ -1440,7 +1638,9 @@ class CollabSession extends ChangeNotifier {
         }
         if (_welcomed) {
           // a host that does not know this session any more (its app was started again): its note is merged into
-          // the one here, everything here goes to it (it may have lost what it was sent before), and the session goes on
+          // the one here, everything here goes to it (it may have lost what it was sent before), and the session goes on. Its texts
+          // were made anew from the saved note: they are put together with the ones here by what they say, not by their characters
+          replica.startOver();
           _takeRemote({'ops': m['ops']});
           _setParticipants(m['peers']);
           _set(SessionState.live);
@@ -1474,6 +1674,8 @@ class CollabSession extends ChangeNotifier {
         final pdf = _pdfFrom(m['pdf']);
         _set(SessionState.live);
         onWelcome?.call(Welcome(headless, pdf));
+      case 'wet':
+        if (_state == SessionState.live && wet.take(m, self: site)) _pumpWetSoon(); // (which also takes away lines that stop)
       case 'ops':
         if (_state == SessionState.live) _takeRemote(m);
       case 'peers':
@@ -1482,6 +1684,18 @@ class CollabSession extends ChangeNotifier {
         if (_state == SessionState.live) await _takePages(m['a']);
       case 'pdf':
         if (_state == SessionState.live) await _takePdf(m['f']);
+      case 'layout':
+        if (_state == SessionState.live) await _takeLayout(m['c']);
+      case 'inkread':
+        // (only the host speaks for the readings: a guest talks to nobody else)
+        final r = m['r'];
+        if (_state == SessionState.live && r is Map) {
+          try {
+            _binding?.onReadings?.call({for (final e in r.entries) '${e.key}': e.value});
+          } catch (e) {
+            debugPrint('[live] readings of the handwriting could not be taken: $e');
+          }
+        }
       case 'at':
         _takePage(m['site'] as String?, m['page'], m['sheet'], m['q']);
       case 'bye':
@@ -1628,7 +1842,11 @@ class CollabSession extends ChangeNotifier {
       // headless copy. Bring the screen up to date with all of it, then carry on with the screen as the note.
       final old = replica;
       final catchUp = old.state(headless, includeDeleted: true);
-      replica = Replica(site, clock: old.clock);
+      replica = Replica(site, clock: old.clock)
+        ..holdBack.addAll(old.holdBack)
+        ..wholeTexts = old.wholeTexts
+        ..mergesTexts = old.mergesTexts
+        ..translatesWholeTexts = old.translatesWholeTexts;
       binding.change(() {
         final note = binding.note();
         for (final op in catchUp) {
@@ -1651,12 +1869,18 @@ class CollabSession extends ChangeNotifier {
       final ops = List.of(_buffered);
       _buffered.clear();
       _applyToHeadless(ops);
+      if (role == SessionRole.host) _flushAny(); // (whole texts of an older app among them are changes of this device now)
     }
     if (_sendAllLater) _sendAll();
   }
 
   /// The screen is going away: until [detach] gives the session a note to hold, what comes in is kept aside.
   void suspend() {
+    // (a line still being drawn when the screen goes is a line of the note as it is)
+    for (final id in replica.holdBack) {
+      wet.ended(id, kept: true);
+    }
+    replica.holdBack.clear();
     _flushLocal();
     _binding = null;
     _headless = null;
@@ -1686,6 +1910,9 @@ class CollabSession extends ChangeNotifier {
   void _takeRemote(Map<String, Object?> m) {
     final ops = [for (final j in (m['ops'] as List? ?? const [])) ?CollabOp.fromJson(j)];
     if (ops.isEmpty) return;
+    for (final o in ops) {
+      if (o.kind == ElementKind.stroke) wet.finished(o.id); // the finished line takes the place of the one that was growing
+    }
     final binding = _binding;
     if (binding != null) {
       binding.change(() {
@@ -1724,17 +1951,100 @@ class CollabSession extends ChangeNotifier {
             onNoteField: (f, d) => Replica.applyNoteField(note, f, d));
       }
       final out = replica.localChanges(note);
-      if (out.isNotEmpty && _state == SessionState.live && role == SessionRole.host) {
-        unawaited(_broadcast({'t': 'ops', 'ops': [for (final o in out) o.toJson()]}));
-      }
+      if (out.isNotEmpty && _state == SessionState.live && role == SessionRole.host) unawaited(_relayOps([for (final o in out) o.toJson()]));
       _headlessTimer?.cancel();
       _headlessTimer = Timer(const Duration(seconds: 1), () => onHeadlessChanged?.call(note));
     }
   }
 
+  // ---- lines being drawn (wet ink)
+
+  /// The lines that are being drawn right now, here and by the others (see [WetBook]); the screen shows the others' with
+  /// [WetBook.on].
+  final WetBook wet = WetBook();
+
+  /// How often what is new of the lines being drawn goes out (at most: a slow link gets them less often, see [WetLane]).
+  static Duration wetEvery = const Duration(milliseconds: 40);
+
+  Timer? _wetTimer;
+  final WetLane _hostLane = WetLane();
+  _Peer? _hostLaneOf;
+
+  /// The person here draws [stroke] on [page] (call it when the pen goes down and as it moves; it is cheap): the others see it grow.
+  /// It is not a change of the note until [drawingEnded].
+  void drawing(int page, DrawingStroke stroke) {
+    if (_state == SessionState.ended) return;
+    replica.holdBack.add(stroke.id);
+    wet.drawing(site, page, stroke);
+    _pumpWetSoon();
+  }
+
+  /// The pen was lifted from the line [id]. [kept]: it is a line of the note now (and goes as a change of it), or it was not kept
+  /// (a tap, a dot that was turned into something else).
+  void drawingEnded(String id, {required bool kept}) {
+    replica.holdBack.remove(id);
+    wet.ended(id, kept: kept);
+    _pumpWetSoon();
+    if (kept) localChanged();
+  }
+
+  void _pumpWetSoon() {
+    if (_wetTimer != null || _state == SessionState.ended || _disposed) return;
+    _wetTimer = Timer(wetEvery, _pumpWet);
+  }
+
+  Duration _wetGap(String? site) => switch (site == null ? LinkBand.unknown : bandOf(site)) {
+        LinkBand.fair => const Duration(milliseconds: 120),
+        LinkBand.poor => const Duration(milliseconds: 350),
+        _ => Duration.zero,
+      };
+
+  void _pumpWet() {
+    _wetTimer = null;
+    if (_state == SessionState.ended || _disposed) return;
+    for (final id in wet.expire(site)) {
+      replica.holdBack.remove(id);
+      localChanged();
+    }
+    if (_state == SessionState.live) {
+      if (role == SessionRole.host) {
+        for (final p in List.of(_peers)) {
+          if (!p.admitted || p.pv < 2) continue; // (an older app does not know lines being drawn)
+          final lane = p.wetLane ??= WetLane();
+          lane.gap = _wetGap(p.site);
+          _sendWet(lane, p, except: p.site);
+        }
+      } else {
+        final h = _host;
+        if (h != null && _hostPv >= 2) {
+          if (!identical(h, _hostLaneOf)) {
+            _hostLane.reset(); // (a new link has nothing yet)
+            _hostLaneOf = h;
+          }
+          _hostLane.gap = _wetGap(site);
+          _sendWet(_hostLane, h, only: site);
+        }
+      }
+    }
+    if (!wet.isEmpty) _pumpWetSoon();
+  }
+
+  void _sendWet(WetLane lane, _Peer peer, {String? except, String? only}) {
+    final m = lane.batch(wet, except: except, only: only);
+    if (m == null) return;
+    lane.busy = true;
+    peer.send(m).then((_) {}, onError: (Object _) {}).whenComplete(() {
+      lane.busy = false;
+      if (!wet.isEmpty) _pumpWetSoon();
+    });
+  }
+
   /// The person here changed the note: what changed goes to the others shortly. Called as often as
   /// you like; the work is done once things settle.
   void localChanged() {
+    // what was typed goes into the texts at once, change by change (also while the link is being made again): see [Replica.capture]
+    final binding = _binding;
+    if (binding != null && _state != SessionState.ended) replica.capture(binding.note());
     if (_state != SessionState.live) return;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 120), _flushLocal);
@@ -1750,16 +2060,90 @@ class CollabSession extends ChangeNotifier {
     if (_state != SessionState.live || _binding == null) return;
     final ops = replica.localChanges(_binding!.note());
     if (ops.isEmpty) return;
-    final message = {'t': 'ops', 'ops': [for (final o in ops) o.toJson()]};
-    if (role == SessionRole.host) {
-      unawaited(_broadcast(message));
-    } else {
-      unawaited(_host!.send(message).then((_) {}, onError: (Object _) {}));
+    for (final o in ops) {
+      if (o.kind == ElementKind.stroke) wet.finished(o.id); // (the line goes as it is now: its wet form is not needed any more)
     }
+    _sendOwn(ops);
+  }
+
+  /// Sends changes made here: the host to every guest, a guest to the host.
+  void _sendOwn(List<CollabOp> ops) {
+    final json = [for (final o in ops) o.toJson()];
+    if (role == SessionRole.host) {
+      unawaited(_relayOps(json));
+    } else {
+      unawaited(_host?.send({'t': 'ops', 'ops': json}).then((_) {}, onError: (Object _) {}));
+    }
+  }
+
+  /// What changed here goes out now, with the screen or without it (a note kept up to date while nobody looks at it).
+  void _flushAny() {
+    if (_state != SessionState.live) return;
+    if (_binding != null) {
+      _debounce?.cancel();
+      _flushLocal();
+      return;
+    }
+    final note = _headless;
+    if (note == null) return;
+    final ops = replica.localChanges(note);
+    if (ops.isNotEmpty) _sendOwn(ops);
+  }
+
+  /// The host gives changes ([ops], as they are sent; from the guest [from], or made here) to the guests: to those of an older version
+  /// (see [protocolVersion]) with whole texts. Whole texts from a guest of an older version were taken in here as changes of this device
+  /// (see [Replica.translatesWholeTexts]): the others of a newer version get them as such, right after, and not as they came (they would
+  /// start the text again from them, and lose what they merged).
+  Future<void> _relayOps(Object? ops, {_Peer? from}) async {
+    final list = ops is List ? ops.cast<Object?>() : const <Object?>[];
+    final legacy = from != null && from.pv < 2;
+    List<Object?>? toNew, toOld;
+    final sends = <Future<void>>[];
+    for (final p in List.of(_peers)) {
+      if (identical(p, from)) continue;
+      final out = p.pv >= 2
+          ? toNew ??= legacy ? [for (final o in list) if (!Replica.isWholeText(o)) o] : list
+          : toOld ??= legacy ? list : replica.withWholeTexts(list, to: [for (final q in _peers) if (q.pv < 2 && q.site != null) q.site!]);
+      if (out.isEmpty) continue;
+      sends.add(p.send({'t': 'ops', 'ops': out}).then((_) {}, onError: (Object _) {}));
+    }
+    if (legacy && list.any(Replica.isWholeText)) {
+      replica.passBases(from.site ?? '', [for (final q in _peers) if (q.pv < 2 && !identical(q, from) && q.site != null) q.site!], list);
+      _flushAny();
+    }
+    await Future.wait(sends);
+  }
+
+  // ---- collecting what was deleted from the texts
+
+  void _collectTick() {
+    if (_state != SessionState.live || _disposed) return;
+    if (role == SessionRole.host) {
+      _tryCollect();
+    } else if (_hostPv >= 2 && replica.mergesTexts) {
+      final seen = replica.reportTexts();
+      if (seen.isEmpty || mapEquals(seen, _seenSent)) return;
+      _seenSent = seen;
+      unawaited(_host?.send({'t': 'seen', 'd': seen}).then((_) {}, onError: (Object _) {}));
+    }
+  }
+
+  /// The host collects what was deleted from the texts that every guest (of a version that merges texts) says it is where the host is
+  /// (see [TextCrdt.collect]); the texts go to all of them, whole, with what was collected.
+  void _tryCollect() {
+    if (role != SessionRole.host || _state != SessionState.live || !replica.mergesTexts) return;
+    _flushAny(); // (nothing of its own may be unsent)
+    final guests = [for (final p in _peers) if (p.admitted && p.pv >= 2) p];
+    if (replica.collectTexts([for (final p in guests) p.seen]).isEmpty) return;
+    for (final p in guests) {
+      p.seen = const {}; // (of before the collection)
+    }
+    _flushAny();
   }
 
   void _set(SessionState s) {
     _state = s;
+    if (s == SessionState.live && !_disposed) _collectTimer ??= Timer.periodic(collectEvery, (_) => _collectTick());
     if (s == SessionState.live && role == SessionRole.guest) {
       final h = _host;
       if (h != null && !h.watched) _startHeartbeat(h, _hostStats);
@@ -1771,8 +2155,11 @@ class CollabSession extends ChangeNotifier {
     if (_state == SessionState.ended) return;
     _endReason = reason;
     _debounce?.cancel();
+    _wetTimer?.cancel();
+    _wetTimer = null;
     _stopHeartbeats();
     _successionTimer?.cancel();
+    _collectTimer?.cancel();
     _set(SessionState.ended);
     _warmCheck(); // (closes them all)
   }
@@ -1821,10 +2208,13 @@ class CollabSession extends ChangeNotifier {
   @override
   void dispose() {
     _successionTimer?.cancel();
+    _collectTimer?.cancel();
     _disposed = true;
     _budget?.removeListener(_reportVeto);
     _warmCheck(); // (nothing is wanted of a disposed session: closes the links to and from successors)
     _debounce?.cancel();
+    _wetTimer?.cancel();
+    wet.dispose();
     _stopHeartbeats();
     _headlessTimer?.cancel();
     super.dispose();

@@ -77,18 +77,24 @@ class _PdfEditPainter extends CustomPainter {
 
 /// Editing the PDF itself in document mode: its text, pictures and shapes, not an overlay.
 extension _PdfEdit on _FixedPageNoteEditorState {
-  /// (the text of a PDF is edited in its file; a note with several PDFs has no one file to edit)
-  bool get _pdfEditable => !_isBlank && pdfContentEditingSupported && _pdfTable == null;
+  bool get _pdfEditable => !_isBlank && pdfContentEditingSupported;
+
+  /// An editor of the note's PDF (for a note with several PDFs each file is opened when one of its pages is first edited).
+  Future<NotePdfEditor> _newPdfEditor(Map<String, Uint8List> fonts) async {
+    final table = _pdfTable;
+    if (table == null) return NotePdfEditor.single(await PdfContentEditor.open(await File(_pdfFilePath!).readAsBytes(), fallbackFonts: fonts));
+    return NotePdfEditor.table(table, (f) async => PdfContentEditor.open(await File(table.files[f].path).readAsBytes(), fallbackFonts: fonts));
+  }
 
   /// Opens the PDF for editing (once; it stays open while the mode is on).
   Future<void> _openPdfEditor() async {
     final path = _pdfFilePath;
     if (path == null || _pdfEditor != null || _pdfEditOpening) return;
     _pdfEditOpening = true;
+    final table = _pdfTable;
     try {
-      final bytes = await File(path).readAsBytes();
-      final editor = await PdfContentEditor.open(bytes, fallbackFonts: await loadStandInFonts());
-      if (!mounted || _pdfFilePath != path || _mode != CanvasInteractionMode.document) {
+      final NotePdfEditor editor = await _newPdfEditor(await loadStandInFonts());
+      if (!mounted || _pdfFilePath != path || !identical(_pdfTable, table) || _mode != CanvasInteractionMode.document) {
         unawaited(editor.close());
         return;
       }
@@ -140,7 +146,7 @@ extension _PdfEdit on _FixedPageNoteEditorState {
 
   /// Deletes the earlier states of the PDF that edits left (all but [keep]).
   void _discardEditedPdfs({required String? keep}) {
-    for (final (path, _) in _pdfEditUndo) {
+    for (final (path, _, _) in _pdfEditUndo) {
       if (path != keep) File(path).delete().catchError((Object _) => File(path));
     }
     _pdfEditUndo.clear();
@@ -162,18 +168,22 @@ extension _PdfEdit on _FixedPageNoteEditorState {
     return const [];
   }
 
-  /// Makes an edit with [edit] on the open PDF, writes the result as the note's PDF and shows it.
-  Future<void> _applyPdfEdit(int page, Future<void> Function(PdfContentEditor editor) edit, {bool keepSelected = true}) async {
+  /// Makes an edit with [edit] on the open PDF, writes the result as the PDF (for a note with several, as the file the page is in) and shows it.
+  Future<void> _applyPdfEdit(int page, Future<void> Function(NotePdfEditor editor) edit, {bool keepSelected = true}) async {
     final was = _pdfEditSelected?.$1 == page ? _pdfEditSelected!.$2 : null;
     final editor = _pdfEditor;
-    final oldPath = _pdfFilePath;
-    if (editor == null || oldPath == null || _pdfEditBusy) return;
+    final at = editor?.where(page);
+    final table = _pdfTable;
+    final oldFile = table?.files[at?.$1 ?? 0];
+    final oldPath = oldFile?.path ?? _pdfFilePath;
+    final oldSha = oldFile?.sha256 ?? _pdfSha256;
+    if (editor == null || at == null || oldPath == null || _pdfEditBusy) return;
     setState(() => _pdfEditBusy = true);
     final work = Completer<void>();
     _pdfEditWork = work.future;
     try {
       await edit(editor);
-      final bytes = await editor.save();
+      final bytes = await editor.save(at.$1);
       final objects = await editor.objects(page);
       final path = p.join(p.dirname(oldPath), '${widget.noteId}-${DateTime.now().millisecondsSinceEpoch}.pdf');
       await File(path).writeAsBytes(bytes);
@@ -187,15 +197,15 @@ extension _PdfEdit on _FixedPageNoteEditorState {
       }
       // the new picture of the page is made and decoded before it replaces the old one, which stays until then
       await _dpiSetting.catchError((Object _) => _dpi);
-      final fresh = await loadPdfPicture(doc.pages[page], _pictureWidthOf(page), priority: PdfPageRenderPriority.high);
+      final fresh = await loadPdfPicture(doc.pages[at.$2], _pictureWidthOf(page), priority: PdfPageRenderPriority.high);
       if (!mounted) {
         fresh.release();
         doc.dispose();
         return;
       }
-      _pdfEditUndo.add((oldPath, _pdfSha256));
+      _pdfEditUndo.add((oldPath, oldSha, path));
       if (_pdfEditUndo.length > 20) {
-        final (dropped, _) = _pdfEditUndo.removeAt(0);
+        final (dropped, _, _) = _pdfEditUndo.removeAt(0);
         File(dropped).delete().catchError((Object _) => File(dropped));
       }
       _pdfEditObjects[page] = objects;
@@ -208,8 +218,13 @@ extension _PdfEdit on _FixedPageNoteEditorState {
         }
       }
       _pdfEditSelected = still == null ? null : (page, still);
-      _showPdf(path, sha, doc, page: page, data: fresh);
+      if (table == null) {
+        _showPdf(path, sha, doc, page: page, data: fresh);
+      } else {
+        _showTableFile(at.$1, oldFile!.copyWith(path: path, sha256: sha), doc, page: page, data: fresh);
+      }
       _scheduleSave();
+      _announcePdfContent();
     } catch (e) {
       // what was half done is dropped: the PDF is read again from the file
       _closePdfEditor();
@@ -220,6 +235,35 @@ extension _PdfEdit on _FixedPageNoteEditorState {
       work.complete();
       if (identical(_pdfEditWork, work.future)) _pdfEditWork = null;
     }
+  }
+
+  /// Shows file number [file] of the note's PDFs as [by] (the file as an edit made it, or as it was before the edit) opened as [doc]; the pages
+  /// and what is on them stay. See [_showDocument] for [page] and [data].
+  void _showTableFile(int file, NotePdf by, PdfDocument doc, {int? page, PdfPageData? data}) {
+    final table = _pdfTable!;
+    final old = table.files[file];
+    final next = table.replacing(file, by);
+    final oldDoc = _tableDocs.remove(old.path);
+    _tableDocs[by.path] = doc;
+    // (a step taken back later that has the table as it was finds the file as it is now)
+    for (final k in _fileHeads.keys.toList()) {
+      if (_fileHeads[k]!.path == old.path) _fileHeads[k] = by;
+    }
+    _fileHeads[old.path] = by;
+    _fileHeads.remove(by.path);
+    _showDocument(
+      NotePdfDocument.table([for (final f in next.files) _tableDocs[f.path]!], next.layout),
+      page: page,
+      data: data,
+      also: () {
+        _pdfTable = next;
+        if (file == 0) {
+          _pdfFilePath = by.path;
+          _pdfSha256 = by.sha256;
+        }
+      },
+    );
+    oldDoc?.dispose();
   }
 
   /// Shows [doc] (the file at [path]) as the note's PDF; the annotations stay as they are.
@@ -269,8 +313,14 @@ extension _PdfEdit on _FixedPageNoteEditorState {
 
   Future<void> _undoPdfEdit() async {
     if (_pdfEditUndo.isEmpty || _pdfEditBusy) return;
-    final (path, sha) = _pdfEditUndo.last;
-    final undone = _pdfFilePath;
+    final (path, sha, undone) = _pdfEditUndo.last;
+    final table = _pdfTable;
+    final file = table?.files.indexWhere((f) => f.path == undone) ?? 0;
+    if (file < 0) {
+      // (the file it was made in was taken out of the note)
+      setState(() => _pdfEditUndo.removeLast());
+      return;
+    }
     try {
       final doc = await openPdfFile(path);
       if (!mounted) {
@@ -279,9 +329,15 @@ extension _PdfEdit on _FixedPageNoteEditorState {
       }
       _pdfEditUndo.removeLast();
       _closePdfEditor();
-      _showPdf(path, sha ?? '', doc);
-      if (undone != null) File(undone).delete().catchError((Object _) => File(undone));
+      if (table == null) {
+        _showPdf(path, sha ?? '', doc);
+        File(undone).delete().catchError((Object _) => File(undone));
+      } else {
+        _showTableFile(file, table.files[file].copyWith(path: path, sha256: sha ?? await sha256OfFile(path)), doc);
+        File(undone).delete().catchError((Object _) => File(undone));
+      }
       _scheduleSave();
+      _announcePdfContent();
       unawaited(_openPdfEditor());
     } catch (e) {
       _pdfEditMessage(e);

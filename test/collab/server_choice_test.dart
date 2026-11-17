@@ -75,6 +75,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-tab-Sharing and files')));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('advanced-Advanced: server and relay')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced: server and relay')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('collab-which')));
     expect(find.text('Using the built-in server.'), findsOneWidget);
     expect(find.byKey(const ValueKey('collab-server')), findsNothing);

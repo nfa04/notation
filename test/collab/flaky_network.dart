@@ -21,6 +21,9 @@ class Link implements JoinTransport {
   bool down = false;
   bool silent = false;
 
+  /// Each message on the way from this guest takes this long more (a slow network: what it sends waits for what it sent before).
+  int slowMs = 0;
+
   /// Reported as going through a relay.
   bool relayed = false;
 
@@ -120,6 +123,8 @@ class SlowChannel implements PeerChannel, RoutedChannel, WatchedChannel {
   Future<void> send(Uint8List message) async {
     final r = (link?.random ?? Random(1)).nextInt(ms + 1);
     if (r > 0) await Future<void>.delayed(Duration(milliseconds: r));
+    final slow = link?.slowMs ?? 0;
+    if (slow > 0) await Future<void>.delayed(Duration(milliseconds: slow));
     if ((link?.silent ?? false) || (link?.mute ?? false)) return;
     await inner.send(message);
   }

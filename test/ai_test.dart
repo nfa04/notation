@@ -600,6 +600,9 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), ai: ai)));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('advanced-Advanced: prompts')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced: prompts')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const ValueKey('ai-system')), 400, scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const ValueKey('ai-unavailable')), findsOneWidget);
     expect(find.textContaining('4 GB'), findsWidgets);
@@ -637,6 +640,9 @@ void main() {
     final settings = SettingsRepository(db!);
     final ai = AiService(settings: settings, providers: [_FakeProvider('a')]);
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), ai: ai)));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('advanced-Advanced: prompts')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced: prompts')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const ValueKey('ai-ask-system')), 400, scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('ai-ask-save'))).onPressed, isNull);

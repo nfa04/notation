@@ -418,7 +418,9 @@ class Automation {
         lastResult: lastResult ?? this.lastResult,
       );
 
-  Map<String, Object?> toJson() => {
+  /// With [status] (when it last ran, and what came of it) for the copy kept on this device; without, for the rules that travel
+  /// between devices: what one device did is not what another should show, and a run must not rewrite the rules.
+  Map<String, Object?> toJson({bool status = true}) => {
         'id': id,
         'event': event.name,
         'action': action.name,
@@ -427,8 +429,8 @@ class Automation {
         'params': params,
         if (then.isNotEmpty) 'then': [for (final t in then) t.toJson()],
         'enabled': enabled,
-        'lastRun': lastRun?.millisecondsSinceEpoch,
-        'lastResult': lastResult,
+        if (status) 'lastRun': lastRun?.millisecondsSinceEpoch,
+        if (status) 'lastResult': lastResult,
       };
 
   /// Null for an entry this version cannot read (an action it does not know).
@@ -453,7 +455,7 @@ class Automation {
     );
   }
 
-  static String encodeAll(List<Automation> all) => jsonEncode([for (final a in all) a.toJson()]);
+  static String encodeAll(List<Automation> all, {bool status = true}) => jsonEncode([for (final a in all) a.toJson(status: status)]);
 
   static List<Automation> decodeAll(String? source) {
     if (source == null || source.isEmpty) return [];

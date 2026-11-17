@@ -120,7 +120,7 @@ void main() {
     expect(b.note.strokes[0], isEmpty);
   });
 
-  test('two changes to one text box: the later one wins on both devices, whatever the order', () {
+  test('two changes to one text box at the same time are both kept, the same on both devices, whatever the order', () {
     final a = Device('a', dir), b = Device('b', dir);
     final box = TextBoxWidgetModel(id: 'box', position: const Offset(1, 1), initialText: 'start');
     a.note.textBoxes[0] = [box];
@@ -133,7 +133,7 @@ void main() {
     a.takeAll(opsB);
     b.takeAll(opsA);
     expect(a.note.textBoxes[0]!.single.controller.text, b.note.textBoxes[0]!.single.controller.text);
-    expect(a.note.textBoxes[0]!.single.controller.text, isIn(['from a', 'from b']));
+    expect(a.note.textBoxes[0]!.single.controller.text, anyOf('from afrom b', 'from bfrom a'));
   });
 
   test('text box position, size, text, spans and style all arrive', () {

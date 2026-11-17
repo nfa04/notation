@@ -22,6 +22,8 @@ extension _EditorCollab on _FixedPageNoteEditorState {
         pdf: _pdfForGuests,
         onPages: _takeRemotePages,
         onPdf: _takeRemotePdf,
+        onLayout: _takeRemoteLayout,
+        onReadings: (r) => _reader.takeShared(r),
       );
 
   /// Says so when the note has lines of a brush of an extension this device does not have (not installed, or switched off): the lines
@@ -70,7 +72,17 @@ extension _EditorCollab on _FixedPageNoteEditorState {
         _marginTop = n.marginTop;
         _marginBottom = n.marginBottom;
       case 'doc':
-        if (_documentController.text != n.documentText) _documentController.text = n.documentText;
+        if (_documentController.text != n.documentText) {
+          // (the cursor stays where it was in what the person is writing, while what others wrote comes in around it)
+          final sel = _documentController.selection;
+          final map = data['_map'];
+          _documentController.value = TextEditingValue(
+            text: n.documentText,
+            selection: sel.isValid && map is int Function(int)
+                ? TextSelection(baseOffset: map(sel.baseOffset), extentOffset: map(sel.extentOffset))
+                : const TextSelection.collapsed(offset: -1),
+          );
+        }
         _documentController.attributes
           ..clear()
           ..addAll(n.documentSpans);
@@ -81,12 +93,8 @@ extension _EditorCollab on _FixedPageNoteEditorState {
   Future<SharedPdf?> _pdfForGuests() async {
     final path = _pdfFilePath;
     if (path == null) return null;
-    // (a note with several PDFs: the others get one PDF with the pages in the order they are shown)
     final table = _pdfTable;
-    if (table != null) {
-      final bytes = await combinePdfFiles(table);
-      return SharedPdf(_importedPdfName ?? 'document.pdf', await sha256Of(bytes), table.pageCount, bytes);
-    }
+    if (table != null) return sharedPdfOfTable(table);
     return SharedPdf(_importedPdfName ?? 'document.pdf', _pdfSha256 ?? '', _totalPages, await File(path).readAsBytes());
   }
 
@@ -117,10 +125,21 @@ extension _EditorCollab on _FixedPageNoteEditorState {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.endReason ?? 'The live session ended')));
     }
     _lastLiveState = s?.state;
+    // who reads the handwriting changed (this device became the host, or lost it): the one that reads now starts, and tells the others all
+    final reads = _inkReadsHere();
+    if (reads != _inkWasReadingHere) {
+      _inkWasReadingHere = reads;
+      if (reads) {
+        _reader.shareAgain();
+        _ink?.changed();
+        unawaited(_reader.startIndex());
+      }
+    }
     setState(() {});
     // someone new does not know the page yet (every message is sealed, so they are not sent for nothing)
     final people = s?.participants.length ?? 0;
     if (people != _announcedPeople) {
+      if (people > _announcedPeople) _reader.shareAgain(); // (somebody new has none of the readings)
       _announcedPeople = people;
       _announceView(force: true);
     }

@@ -23,6 +23,9 @@ extension _EditorPages on _FixedPageNoteEditorState {
     put(_textBoxesPerPage, c.boxes);
     put(_imagesPerPage, c.images);
     put(_highlightsPerPage, c.highlights);
+    // (the writing is on other pages now: the underlines and marks follow it, instead of staying at the old page numbers)
+    _ink?.changed();
+    _inkProgressed();
   }
 
   /// Gives everything on page `i` the page `to(i)` (null: it goes away), as one step to take back.
@@ -211,6 +214,42 @@ extension _EditorPages on _FixedPageNoteEditorState {
     await _addPdfFiles(sources, at: at);
   }
 
+  /// Puts the PDFs at [sources] into a note that has written pages and no PDF: those [lead] pages stay as they are, first, and the pages of the
+  /// PDFs follow them. Nothing that was written is taken away.
+  Future<void> _importPdfsAfterPages(int lead, List<String> sources) async {
+    setState(() => _isLoadingPdf = true);
+    final taken = <NotePdf>[];
+    try {
+      for (final source in sources) {
+        try {
+          final (file, doc) = await _takePdfCopy(source);
+          taken.add(file);
+          _tableDocs[file.path] = doc;
+        } catch (e) {
+          throw StateError('${p.basename(source)}: $e');
+        }
+      }
+      if (!mounted) return;
+      final pdfs = NotePdfs.inOrder(taken);
+      final table = pdfs.withLayout([for (var i = 0; i < lead; i++) const PdfPageRef.blank(), ...pdfs.layout]);
+      _nativePages = {..._nativePages, for (var i = 0; i < lead; i++) i};
+      await _applyTable(table);
+      widget.onPdfImported?.call();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToPage(lead));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(tr('{pages} pages added from {files} PDFs', {'pages': pdfs.pageCount, 'files': taken.length}))));
+      }
+    } catch (e) {
+      for (final file in taken) {
+        _tableDocs.remove(file.path)?.dispose();
+        File(file.path).delete().catchError((Object _) => File(file.path));
+      }
+      _pdfEditMessage(e);
+    } finally {
+      if (mounted) setState(() => _isLoadingPdf = false);
+    }
+  }
+
   /// Copies the PDF at [source] into the app's folder (the original may be moved or deleted later) and opens it.
   Future<(NotePdf, PdfDocument)> _takePdfCopy(String source) async {
     final dir = Directory(p.join((await getApplicationSupportDirectory()).path, 'pdfs'));
@@ -237,9 +276,12 @@ extension _EditorPages on _FixedPageNoteEditorState {
 
   /// Shows the PDFs of [table] (null: the one file [single], on its own as before); the files must be open (see [_openTableFiles]) unless
   /// it is [single]. What is on the pages is not touched.
-  Future<void> _applyTable(NotePdfs? table, {NotePdf? single}) async {
+  Future<void> _applyTable(NotePdfs? given, {NotePdf? single, bool announce = true}) async {
+    final previous = _pdfTable;
+    // (a file that was edited since is the edited one)
+    final table = given == null ? null : NotePdfs([for (final f in given.files) _fileHeads[f.path] ?? f], given.layout);
     if (table == null) {
-      final file = single!;
+      final file = _fileHeads[single!.path] ?? single;
       final doc = await openPdfFile(file.path);
       if (!mounted) {
         doc.dispose();
@@ -249,7 +291,9 @@ extension _EditorPages on _FixedPageNoteEditorState {
       _closePdfEditor();
       _showPdf(file.path, file.sha256, doc);
       _importedPdfName = file.name;
+      if (_mode == CanvasInteractionMode.document) unawaited(_openPdfEditor());
       _scheduleSave();
+      if (announce) _announcePdfs(previous);
       return;
     }
     await _openTableFiles(table);
@@ -266,7 +310,9 @@ extension _EditorPages on _FixedPageNoteEditorState {
         _pdfSha256 = first.sha256;
       },
     );
+    if (_mode == CanvasInteractionMode.document) unawaited(_openPdfEditor());
     _scheduleSave();
+    if (announce) _announcePdfs(previous);
   }
 
   /// Adds the PDFs at [sources] to the note, each as a file of its own (see [_addPdfs]). A note with one PDF becomes one with several.
@@ -311,7 +357,6 @@ extension _EditorPages on _FixedPageNoteEditorState {
         },
       );
       await _applyTable(next);
-      _announceTable();
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToPage(into));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(tr('{pages} pages added from {files} PDFs', {'pages': brought, 'files': taken.length}))));
@@ -368,7 +413,6 @@ extension _EditorPages on _FixedPageNoteEditorState {
       },
     );
     await _applyTable(next);
-    _announceTable();
     if (mounted) setState(() {});
   }
 
@@ -457,23 +501,60 @@ extension _EditorPages on _FixedPageNoteEditorState {
       },
     );
     await _applyTable(next);
-    _announceTable();
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToPage(jumpTo));
   }
 
-  /// Tells the others in a live session what the PDF is now: one PDF with the pages in the order they are shown (their copy of the note has no page table).
-  void _announceTable() {
+  /// Tells the others in a live session what the PDFs are now: only the order of pages when the files are the ones [previous] had, else the
+  /// files (all of them: what the others have must be what this note has).
+  void _announcePdfs(NotePdfs? previous) {
     final live = _live, table = _pdfTable;
-    if (live == null || table == null) return;
-    final name = _importedPdfName ?? 'document.pdf';
+    if (live == null) return;
+    if (table == null) {
+      final path = _pdfFilePath;
+      if (path == null) return;
+      final name = _importedPdfName ?? 'document.pdf', sha = _pdfSha256 ?? '', pages = _totalPages;
+      unawaited(() async {
+        try {
+          live.announcePdf(SharedPdf(name, sha, pages, await File(path).readAsBytes()));
+        } catch (e) {
+          debugPrint('sharing the PDF failed: $e');
+        }
+      }());
+      return;
+    }
+    final same = previous != null && previous.files.length == table.files.length && [for (var i = 0; i < table.files.length; i++) previous.files[i].path == table.files[i].path].every((b) => b);
+    if (same) {
+      live.announceLayout(PdfLayoutChange(table.layout, [for (final f in table.files) f.pages]));
+      return;
+    }
     unawaited(() async {
       try {
-        final bytes = await combinePdfFiles(table);
-        live.announcePdf(SharedPdf(name, await sha256Of(bytes), table.pageCount, bytes));
+        live.announcePdf(await sharedPdfOfTable(table));
       } catch (e) {
         debugPrint('sharing the PDFs failed: $e');
       }
     }());
+  }
+
+  /// Tells the others in a live session what the PDFs contain now, after an edit of their own text (or taking it back): the files as they are,
+  /// a moment after the last change.
+  void _announcePdfContent() {
+    if (_live == null) return;
+    _pdfContentTimer?.cancel();
+    _pdfContentTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) _announcePdfs(null);
+    });
+  }
+
+  /// Gives the PDFs the order of pages somebody else gave theirs in the live session (what is on the pages comes with their other changes).
+  Future<void> _takeRemoteLayout(PdfLayoutChange change) async {
+    for (var i = 0; i < 100 && _pdfEditBusy && mounted; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    final table = _pdfTable;
+    if (!mounted || table == null || _pdfEditBusy || !change.fits(table)) return;
+    _endPdfInlineEdit(apply: true);
+    await _applyTable(table.withLayout(change.layout), announce: false);
   }
 
   /// Gives the PDF the pages somebody else arranged in the live session (what is on the pages comes with their other changes).
@@ -508,38 +589,60 @@ extension _EditorPages on _FixedPageNoteEditorState {
     }
   }
 
-  /// Puts the PDF somebody else sent in the place of this one.
+  /// Puts the PDF somebody else sent in the place of this one (one PDF, or several with their order of pages: this note then has the same).
   Future<void> _takeRemotePdf(SharedPdf pdf) async {
     for (var i = 0; i < 100 && _pdfEditBusy && mounted; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
+    // (a note with no PDF yet takes it too: its written pages stay, as on the device that imported it)
     final oldPath = _pdfFilePath;
-    // (a note with several PDFs keeps its own: what the others share is one PDF)
-    if (!mounted || oldPath == null || _pdfTable != null || _pdfEditBusy) return;
+    if (!mounted || _pdfEditBusy) return;
     setState(() => _pdfEditBusy = true);
     _endPdfInlineEdit(apply: true);
+    final written = <String>[];
     try {
       await _pdfEditWork;
-      final path = p.join(p.dirname(oldPath), '${widget.noteId}-${DateTime.now().millisecondsSinceEpoch}.pdf');
-      await File(path).writeAsBytes(pdf.bytes, flush: true);
-      final PdfDocument doc;
-      try {
-        doc = await openPdfFile(path);
-      } catch (_) {
-        File(path).delete().catchError((Object _) => File(path));
-        rethrow;
+      final dir = oldPath != null ? Directory(p.dirname(oldPath)) : await Directory(p.join((await getApplicationSupportDirectory()).path, 'pdfs')).create(recursive: true);
+      final stem = '${widget.noteId}-${DateTime.now().millisecondsSinceEpoch}';
+      final oldFiles = [?oldPath, for (final f in _pdfTable?.files ?? const <NotePdf>[]) f.path];
+      if (pdf.isTable) {
+        final table = await keepSharedTable(pdf, dir, stem);
+        written.addAll([for (final f in table.files) f.path]);
+        _discardEditedPdfs(keep: null);
+        // (the blank pages of the table are the written pages the note has)
+        _nativePages = {..._nativePages, for (var i = 0; i < table.layout.length; i++) if (table.layout[i].isBlank) i};
+        await _applyTable(table, announce: false);
+      } else {
+        final path = p.join(dir.path, '$stem.pdf');
+        await File(path).writeAsBytes(pdf.bytes, flush: true);
+        written.add(path);
+        if (_pdfTable != null) {
+          _discardEditedPdfs(keep: null);
+          await _applyTable(null, single: NotePdf(name: pdf.name, path: path, sha256: pdf.sha256, pages: pdf.pages), announce: false);
+        } else {
+          final PdfDocument doc;
+          try {
+            doc = await openPdfFile(path);
+          } catch (_) {
+            File(path).delete().catchError((Object _) => File(path));
+            rethrow;
+          }
+          if (!mounted) {
+            doc.dispose();
+            return;
+          }
+          _discardEditedPdfs(keep: null);
+          _closePdfEditor();
+          _showPdf(path, pdf.sha256, doc);
+          if (_mode == CanvasInteractionMode.document) unawaited(_openPdfEditor());
+          _scheduleSave();
+        }
       }
-      if (!mounted) {
-        doc.dispose();
-        return;
-      }
-      _pdfShaped.addAll([oldPath, path]);
-      _discardEditedPdfs(keep: null);
-      _closePdfEditor();
-      _showPdf(path, pdf.sha256, doc);
-      if (_mode == CanvasInteractionMode.document) unawaited(_openPdfEditor());
-      _scheduleSave();
+      _pdfShaped.addAll(oldFiles);
     } catch (e) {
+      for (final path in written) {
+        if (path != _pdfFilePath && !(_pdfTable?.files.any((f) => f.path == path) ?? false)) File(path).delete().catchError((Object _) => File(path));
+      }
       _pdfEditMessage(e);
     } finally {
       if (mounted) setState(() => _pdfEditBusy = false);

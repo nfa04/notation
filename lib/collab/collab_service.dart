@@ -11,7 +11,6 @@ import '../data/safe_names.dart';
 import '../models/canvas_models.dart';
 import '../pdf/pdf_pages.dart';
 import '../data/note_pdfs.dart';
-import '../data/file_digest.dart';
 import '../data/brush_library.dart';
 import '../data/note_repository.dart';
 import 'cloud_share.dart';
@@ -31,6 +30,7 @@ import 'replica.dart';
 import 'shared_notes.dart';
 import 'standby.dart';
 import 'session.dart';
+import 'shared_pdf_files.dart';
 import 'signaling.dart';
 import 'transport.dart';
 import 'ice_settings.dart';
@@ -493,14 +493,12 @@ class CollabService extends ChangeNotifier implements LiveSource {
         final path = note.pdfPath;
         if (path == null || !File(path).existsSync()) return null;
         final table = note.pdfs;
-        if (table != null) {
-          final bytes = await combinePdfFiles(table);
-          return SharedPdf(note.pdfName ?? 'document.pdf', await sha256Of(bytes), table.pageCount, bytes);
-        }
+        if (table != null) return sharedPdfOfTable(table);
         return SharedPdf(note.pdfName ?? 'document.pdf', note.pdfSha256 ?? '', note.pdfPageCount ?? 0, await File(path).readAsBytes());
       },
       onPages: (arrangement) => _arrangePdfOf(note, arrangement),
       onPdf: (pdf) => _replacePdfOf(note, pdf),
+      onLayout: (change) => _relayoutPdfOf(note, change),
     );
     final session = await startHosting(noteId, binding, title: note.title, invite: invite);
     session.detach(note);
@@ -675,24 +673,45 @@ class CollabService extends ChangeNotifier implements LiveSource {
     File(path).delete().catchError((Object _) => File(path));
   }
 
-  /// Puts the PDF somebody else sent in the place of the PDF of [note] (a note nobody has open), and keeps the note.
-  Future<void> _replacePdfOf(NoteData note, SharedPdf pdf) async {
-    final path = note.pdfPath;
-    if (path == null) return;
-    // (a note that had several PDFs has this one instead: the others go)
-    final others = [for (final f in note.pdfs?.files ?? const <NotePdf>[]) f.path];
-    note.pdfs = null;
-    for (final other in others) {
-      if (other != path) File(other).delete().catchError((Object _) => File(other));
-    }
-    final fresh = p.join(p.dirname(path), '${note.id}-${DateTime.now().millisecondsSinceEpoch}.pdf');
-    await File(fresh).writeAsBytes(pdf.bytes, flush: true);
+  /// Gives the PDFs of [note] (a note nobody has open) the order of pages somebody else gave theirs, when they are the same files.
+  Future<void> _relayoutPdfOf(NoteData note, PdfLayoutChange change) async {
+    final table = note.pdfs;
+    if (table == null || !change.fits(table)) return;
     note
-      ..pdfPath = fresh
-      ..pdfSha256 = pdf.sha256
-      ..pdfPageCount = pdf.pages;
+      ..pdfs = table.withLayout(change.layout)
+      ..pdfPageCount = change.layout.length;
     await _notes.saveNote(note);
-    File(path).delete().catchError((Object _) => File(path));
+  }
+
+  /// Puts the PDF somebody else sent in the place of the PDF of [note] (a note nobody has open), and keeps the note. A note that had several PDFs
+  /// has the one that was sent, or the several that were.
+  Future<void> _replacePdfOf(NoteData note, SharedPdf pdf) async {
+    // (a note with written pages and no PDF yet takes it too: the pages stay, the PDF comes after them as the sender has it)
+    final path = note.pdfPath;
+    final old = {?path, for (final f in note.pdfs?.files ?? const <NotePdf>[]) f.path};
+    final dir = path != null ? Directory(p.dirname(path)) : await Directory(p.join((await _support()).path, 'pdfs')).create(recursive: true);
+    final stem = '${note.id}-${DateTime.now().millisecondsSinceEpoch}';
+    if (pdf.isTable) {
+      final table = await keepSharedTable(pdf, dir, stem);
+      note
+        ..pdfs = table
+        ..pdfName = table.files.first.name
+        ..pdfPath = table.files.first.path
+        ..pdfSha256 = table.files.first.sha256
+        ..pdfPageCount = table.pageCount;
+    } else {
+      final fresh = p.join(dir.path, '$stem.pdf');
+      await File(fresh).writeAsBytes(pdf.bytes, flush: true);
+      note
+        ..pdfs = null
+        ..pdfPath = fresh
+        ..pdfSha256 = pdf.sha256
+        ..pdfPageCount = pdf.pages;
+    }
+    await _notes.saveNote(note);
+    for (final gone in old) {
+      File(gone).delete().catchError((Object _) => File(gone));
+    }
   }
 
   void _track(String noteId, CollabSession session, SessionInvite invite, String title) {
@@ -703,6 +722,7 @@ class CollabService extends ChangeNotifier implements LiveSource {
     session.onHeadlessChanged = (note) => unawaited(_notes.saveNote(note));
     session.onHeadlessPages = _arrangePdfOf;
     session.onHeadlessPdf = _replacePdfOf;
+    session.onHeadlessLayout = _relayoutPdfOf;
     session.addListener(() {
       notifyListeners();
     });
@@ -800,7 +820,16 @@ class CollabService extends ChangeNotifier implements LiveSource {
       images: note.images,
     );
     final pdf = w.pdf;
-    if (pdf != null) {
+    if (pdf != null && pdf.isTable) {
+      final dir = await Directory(p.join((await _support()).path, 'pdfs')).create(recursive: true);
+      final table = await keepSharedTable(pdf, dir, '${DateTime.now().microsecondsSinceEpoch}');
+      copy
+        ..pdfs = table
+        ..pdfName = table.files.first.name
+        ..pdfPath = table.files.first.path
+        ..pdfSha256 = table.files.first.sha256
+        ..pdfPageCount = table.pageCount;
+    } else if (pdf != null) {
       final dir = await Directory(p.join((await _support()).path, 'pdfs')).create(recursive: true);
       final path = p.join(dir.path, '${DateTime.now().microsecondsSinceEpoch}_${pdf.name}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'));
       await File(path).writeAsBytes(pdf.bytes, flush: true);

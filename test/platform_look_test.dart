@@ -146,6 +146,8 @@ void main() {
     ));
     expect(Theme.of(tester.element(find.byType(Switch).first)).platform, TargetPlatform.android);
 
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced')));
+    await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byKey(const ValueKey('platform-look')), matching: find.text('iOS')));
     await tester.pumpAndSettle();
 

@@ -571,11 +571,25 @@ class _DashboardViewState extends State<DashboardView> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0x99000000), Color(0x33000000)],
+                  stops: [0, 0.5, 1],
+                  colors: [Color(0xB3000000), Color(0x40000000), Color(0xB3000000)],
                 ),
               ),
             ),
           ],
+          if (note.themeImage == null && widget.previews != null)
+            // the card colours are always light, so a light fade keeps the title clear of the page preview
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.all(Radius.circular(16)),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0, 0.4, 0.65, 1],
+                  colors: [color.withValues(alpha: 0.95), color.withValues(alpha: 0), color.withValues(alpha: 0), color.withValues(alpha: 0.95)],
+                ),
+              ),
+            ),
           Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -592,7 +606,8 @@ class _DashboardViewState extends State<DashboardView> {
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: note.themeImage != null ? Colors.white : null),
+                          color: note.themeImage != null ? Colors.white : Colors.black87,
+                          shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null),
                     ),
                   ),
                   if (_selecting)
@@ -604,13 +619,13 @@ class _DashboardViewState extends State<DashboardView> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                     icon: Icon(note.favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                        size: 20, color: note.favorite ? Colors.amber : (note.themeImage != null ? Colors.white : null)),
+                        size: 20, color: note.favorite ? Colors.amber : (note.themeImage != null ? Colors.white : Colors.black87)),
                     onPressed: () => _toggleFavorite(note),
                   ),
                   PopupMenuButton<void>(
                     tooltip: tr('More'),
                     padding: EdgeInsets.zero,
-                    icon: Icon(Icons.more_vert, size: 18, color: note.themeImage != null ? Colors.white : null),
+                    icon: Icon(Icons.more_vert, size: 18, color: note.themeImage != null ? Colors.white : Colors.black87),
                     itemBuilder: (_) => [
                       PopupMenuItem(onTap: () => _toggleFavorite(note), child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
                       if (widget.noteFiles != null && !note.locked)
@@ -623,17 +638,17 @@ class _DashboardViewState extends State<DashboardView> {
                 ],
               ),
               Text(_ago(note.updatedAt),
-                  style: TextStyle(fontSize: 11, color: note.themeImage != null ? Colors.white70 : Colors.black54)),
+                  style: TextStyle(fontSize: 11, color: note.themeImage != null ? Colors.white : Colors.black87, shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null)),
               const Spacer(),
               Row(children: [
                 SharedBadge(
                   key: ValueKey('shared-badge-${note.id}'),
                   kind: widget.collab?.shared.kindOf(note.id) ?? SharedKind.none,
                   from: widget.collab?.shared.fromWhom(note.id),
-                  color: note.themeImage != null ? Colors.white : null,
+                  color: note.themeImage != null ? Colors.white : Colors.black87,
                 ),
                 const Spacer(),
-                Icon(note.locked ? Icons.lock_outline : (note.isPdf ? Icons.picture_as_pdf : Icons.edit_note_rounded), color: note.themeImage != null ? Colors.white70 : Colors.black54),
+                Icon(note.locked ? Icons.lock_outline : (note.isPdf ? Icons.picture_as_pdf : Icons.edit_note_rounded), color: note.themeImage != null ? Colors.white : Colors.black87, shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null),
               ])
             ],
           ),

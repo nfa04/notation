@@ -198,6 +198,14 @@ class NoteFileService {
     final note = parsed.note;
     // a copy of the note under its new id; its files are put on disk
     final stamp = DateTime.now().microsecondsSinceEpoch;
+    // (the PDFs the note has here already, by checksum: a file that came again, as when only the order of pages changed, is not written again)
+    final had = <String, String>{};
+    final previous = await _notes.loadNote(id);
+    if (previous != null) {
+      for (final f in previous.pdfs?.files ?? [if (previous.pdfPath != null) NotePdf(name: '', path: previous.pdfPath!, sha256: previous.pdfSha256 ?? '', pages: 0)]) {
+        if (f.sha256.isNotEmpty && File(f.path).existsSync()) had[f.sha256] = f.path;
+      }
+    }
     final copy = NoteData(
       id: id,
       title: note.title,
@@ -220,8 +228,11 @@ class NoteFileService {
       final ok = note.pdfSha256 == null || sha256.convert(parsed.pdf!).toString() == note.pdfSha256;
       if (ok) {
         final dir = await Directory(p.join(support, 'pdfs')).create(recursive: true);
-        final path = p.join(dir.path, '${stamp}_${note.pdfName ?? 'document.pdf'}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'));
-        await File(path).writeAsBytes(parsed.pdf!, flush: true);
+        var path = had[sha256.convert(parsed.pdf!).toString()] ?? '';
+        if (path.isEmpty) {
+          path = p.join(dir.path, '${stamp}_${note.pdfName ?? 'document.pdf'}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'));
+          await File(path).writeAsBytes(parsed.pdf!, flush: true);
+        }
         copy
           ..pdfName = note.pdfName
           ..pdfPath = path
@@ -239,8 +250,11 @@ class NoteFileService {
               ok2 = false;
               break;
             }
-            final more = p.join(dir.path, '${stamp}_$i ${name.isEmpty ? 'document.pdf' : name}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'));
-            await File(more).writeAsBytes(bytes, flush: true);
+            var more = had[sha256.convert(bytes).toString()] ?? '';
+            if (more.isEmpty) {
+              more = p.join(dir.path, '${stamp}_$i ${name.isEmpty ? 'document.pdf' : name}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'));
+              await File(more).writeAsBytes(bytes, flush: true);
+            }
             files.add(table.files[i].copyWith(path: more));
           }
           if (ok2) {

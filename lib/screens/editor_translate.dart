@@ -49,7 +49,7 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
     final results = <TextBoxWidgetModel, String>{};
     String? document;
     Object? failure;
-    PdfContentEditor? pdfEditor;
+    NotePdfEditor? pdfEditor;
     final pdfLines = <int, List<PdfEditObject>>{};
     final pdfTexts = <int, List<String>>{};
     try {
@@ -64,7 +64,7 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
       }
       if (withPdf && !keepOriginal && !cancel.cancelled) {
         // the lines of each page, as the PDF draws them, then their translation a page at a time
-        pdfEditor = await PdfContentEditor.open(await File(_pdfFilePath!).readAsBytes(), fallbackFonts: await _standInFontsOrNone());
+        pdfEditor = await _newPdfEditor(await _standInFontsOrNone());
         for (var page = 0; page < _totalPages && !cancel.cancelled; page++) {
           final lines = [for (final o in await pdfEditor.objects(page)) if (o.kind == PdfObjectKind.text && worthTranslating(o.text ?? '')) o];
           if (lines.isEmpty) continue;
@@ -128,17 +128,30 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
       setState(() {});
     }
 
-    // the PDF: its lines are set again in the translation and the result is the note's PDF from now on
+    // the PDF: its lines are set again in the translation and the result is the note's PDF from now on (for a note with several PDFs, each
+    // file that has a translated page is a new file)
+    final oldTable = _pdfTable;
     final oldPdf = (path: _pdfFilePath, sha: _pdfSha256 ?? '');
     ({String path, String sha})? newPdf;
+    final newFiles = <int, NotePdf>{};
     var unshown = 0;
     if (pdfEditor != null && pdfTexts.isNotEmpty) {
       try {
         unshown = await _rewritePdfLines(pdfEditor, pdfLines, pdfTexts);
-        final bytes = await pdfEditor.save();
-        final path = p.join(p.dirname(oldPdf.path!), '${widget.noteId}-${DateTime.now().millisecondsSinceEpoch}.pdf');
-        await File(path).writeAsBytes(bytes);
-        newPdf = (path: path, sha: await sha256Of(bytes));
+        if (oldTable == null) {
+          final bytes = await pdfEditor.save(0);
+          final path = p.join(p.dirname(oldPdf.path!), '${widget.noteId}-${DateTime.now().millisecondsSinceEpoch}.pdf');
+          await File(path).writeAsBytes(bytes);
+          newPdf = (path: path, sha: await sha256Of(bytes));
+        } else {
+          for (final f in pdfEditor.touched) {
+            final bytes = await pdfEditor.save(f);
+            final was = oldTable.files[f];
+            final path = p.join(p.dirname(was.path), '${widget.noteId}-${DateTime.now().millisecondsSinceEpoch}-$f.pdf');
+            await File(path).writeAsBytes(bytes);
+            newFiles[f] = was.copyWith(path: path, sha256: await sha256Of(bytes));
+          }
+        }
       } catch (e) {
         failure = e;
       }
@@ -149,16 +162,20 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
       messenger.showSnackBar(SnackBar(content: Text.verbatim('$failure'.replaceFirst('Bad state: ', ''))));
       return;
     }
+    final oldFiles = {for (final f in newFiles.keys) f: oldTable!.files[f]};
     if (newPdf != null) await _swapPdf(newPdf.path, newPdf.sha);
+    if (newFiles.isNotEmpty) await _swapTableFiles(newFiles);
     if (!mounted) return;
 
     apply(true);
     _undoStack.push(UndoStep(() {
       apply(false);
       if (newPdf != null) unawaited(_swapPdf(oldPdf.path!, oldPdf.sha));
+      if (newFiles.isNotEmpty) unawaited(_swapTableFiles(oldFiles));
     }, () {
       apply(true);
       if (newPdf != null) unawaited(_swapPdf(newPdf.path, newPdf.sha));
+      if (newFiles.isNotEmpty) unawaited(_swapTableFiles(newFiles));
     }));
     final left = translator.kept + unshown;
     messenger.showSnackBar(SnackBar(
@@ -170,7 +187,7 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
 
   /// Sets the lines of the PDF again in [texts] (page -> a translation for each of [lines]); the number of lines that could not be
   /// shown (a character no font has) and stayed as they were.
-  Future<int> _rewritePdfLines(PdfContentEditor editor, Map<int, List<PdfEditObject>> lines, Map<int, List<String>> texts) async {
+  Future<int> _rewritePdfLines(NotePdfEditor editor, Map<int, List<PdfEditObject>> lines, Map<int, List<String>> texts) async {
     var unshown = 0;
     for (final page in texts.keys) {
       final originals = lines[page]!;
@@ -218,6 +235,30 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
       _closePdfEditor();
       _showPdf(path, sha, doc);
       _scheduleSave();
+      _announcePdfContent();
+      if (_mode == CanvasInteractionMode.document) unawaited(_openPdfEditor());
+    } catch (e) {
+      _pdfEditMessage(e);
+    }
+  }
+
+  /// Shows the files [files] (by number) in the place of those of the same number in a note with several PDFs, for the translation of their pages (or
+  /// taking it back).
+  Future<void> _swapTableFiles(Map<int, NotePdf> files) async {
+    try {
+      for (final e in files.entries) {
+        final table = _pdfTable;
+        if (table == null || e.key >= table.files.length) return;
+        final doc = _tableDocs[e.value.path] ?? await openPdfFile(e.value.path);
+        if (!mounted) {
+          doc.dispose();
+          return;
+        }
+        _closePdfEditor();
+        _showTableFile(e.key, e.value, doc);
+      }
+      _scheduleSave();
+      _announcePdfContent();
       if (_mode == CanvasInteractionMode.document) unawaited(_openPdfEditor());
     } catch (e) {
       _pdfEditMessage(e);

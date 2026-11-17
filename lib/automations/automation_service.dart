@@ -21,6 +21,7 @@ import '../templates/templates.dart';
 import '../ai/flashcards.dart';
 import '../ai/text_provider.dart' show ProviderState;
 import '../citations/citation_service.dart';
+import '../cloudsync/cloud_sync_service.dart' show CloudProvider;
 import '../citations/source.dart';
 import '../data/card_repository.dart';
 import '../data/note_file_service.dart';
@@ -198,6 +199,11 @@ class AutomationService extends ChangeNotifier {
   final DateTime Function() _now;
   static const _key = 'automations';
   static const _firedKey = 'automations_fired';
+
+  /// When each rule last ran here and what came of it (`id` -> `{t, r}`): per device, so it is not in [_key], which travels.
+  static const _statusKey = 'automations_status';
+  String? _written;
+  StreamSubscription<String>? _syncWatch;
   static const _seenKey = 'automations_seen';
 
   /// When each note was last edited as of the last time an opening or closing automation ran for it:
@@ -363,6 +369,9 @@ class AutomationService extends ChangeNotifier {
   /// there is no calendar.
   final Future<List<UpcomingEvent>> Function(DateTime from, DateTime to)? _upcoming;
 
+  /// The cloud services an automation can put a file on (the ones with an account on this device can); null where there are none.
+  final List<CloudProvider> Function()? _cloudAccounts;
+
   /// Where the events come from; the automations react to what is emitted on it.
   final EventBus bus;
   void Function()? _unlisten;
@@ -385,8 +394,10 @@ class AutomationService extends ChangeNotifier {
     TemplateService? templates,
     ReminderService? reminders,
     Future<List<UpcomingEvent>> Function(DateTime from, DateTime to)? upcomingEvents,
+    List<CloudProvider> Function()? cloudAccounts,
     EventBus? bus,
   })  : bus = bus ?? EventBus(),
+        _cloudAccounts = cloudAccounts,
         _upcoming = upcomingEvents,
         _ai = ai,
         _cards = cards,
@@ -403,13 +414,19 @@ class AutomationService extends ChangeNotifier {
         _readInk = readInk,
         _inkReady = inkReady;
 
+  /// The cloud services a PDF can be put on: the id (what a rule keeps) and the name.
+  List<({String id, String label})> get cloudChoices => [for (final c in _cloudAccounts?.call() ?? const <CloudProvider>[]) (id: c.id, label: c.label)];
+
   List<Automation> get all => List.unmodifiable(_all);
 
   /// The events a rule can be made for: every one announced on the [bus] that is not plumbing.
   List<AutomationEvent> get events => [for (final t in bus.types) if (!t.internal) AutomationEvent.of(t)];
 
   Future<void> load() async {
-    _all = Automation.decodeAll(await _notes.settings.get(_key));
+    _syncWatch ??= _notes.settings.changedBySync.listen((k) {
+      if (k == _key) unawaited(_reloadRules());
+    });
+    await _reloadRules(first: true);
     try {
       _fired = {...((jsonDecode(await _notes.settings.get(_firedKey) ?? '[]') as List).cast<String>())};
     } catch (_) {
@@ -481,7 +498,37 @@ class AutomationService extends ChangeNotifier {
     return results;
   }
 
-  Future<void> _save() => _notes.settings.set(_key, Automation.encodeAll(_all));
+  /// The rules came from another device (a sync) or are read at the start: the rules are the stored ones, the last runs the ones kept here.
+  Future<void> _reloadRules({bool first = false}) async {
+    final stored = await _notes.settings.get(_key);
+    final rules = Automation.decodeAll(stored);
+    Map status = {};
+    try {
+      status = jsonDecode(await _notes.settings.get(_statusKey) ?? '{}') as Map;
+    } catch (_) {}
+    final old = {for (final a in _all) a.id: a};
+    _all = [
+      for (final a in rules)
+        () {
+          final s = status[a.id];
+          if (s is Map && s['t'] is int) return a.copyWith(lastRun: DateTime.fromMillisecondsSinceEpoch(s['t'] as int), lastResult: s['r'] as String?);
+          final o = old[a.id];
+          return o?.lastRun != null && a.lastRun == null ? a.copyWith(lastRun: o!.lastRun, lastResult: o.lastResult) : a;
+        }(),
+    ];
+    _written = stored == null ? null : Automation.encodeAll(rules, status: false);
+    if (!first) notifyListeners();
+  }
+
+  /// The rules are written (and so travel) only when they changed; a run only changes the last runs, which stay on this device.
+  Future<void> _save() async {
+    final rules = Automation.encodeAll(_all, status: false);
+    if (rules != _written) {
+      _written = rules;
+      await _notes.settings.set(_key, rules);
+    }
+    await _notes.settings.set(_statusKey, jsonEncode({for (final a in _all) if (a.lastRun != null) a.id: {'t': a.lastRun!.millisecondsSinceEpoch, 'r': a.lastResult}}));
+  }
 
   /// Opening and closing run an automation only for a note that was edited since the last time.
   static bool _onlyWhenChanged(AutomationEvent e) => e == AutomationEvent.noteOpened || e == AutomationEvent.noteClosed;
@@ -1326,7 +1373,15 @@ class AutomationService extends ChangeNotifier {
         if (!_fired.add(key)) continue; // done for this line already
         firedNew = true;
       }
-      final (result, steps, later) = await _recorded(() => _performRule(a, noteId: noteId, title: title, editor: editor, found: found, todo: todo, event: event, data: data));
+      // (a rule that throws is a rule that failed, in the log and on its card: the bus would only print it, and the rule would look as if
+      // it had never been asked to run)
+      var (result, steps, later) = ('', const <UndoStep>[], false);
+      try {
+        (result, steps, later) = await _recorded(() => _performRule(a, noteId: noteId, title: title, editor: editor, found: found, todo: todo, event: event, data: data));
+      } catch (e, stack) {
+        debugPrint('automation ${a.id} (${a.action.name}) failed for ${event.name}: $e\n$stack');
+        result = tr('Failed: {error}', {'error': '$e'.replaceFirst('Bad state: ', '')});
+      }
       if (!later) _record(a, result, noteId: noteId, title: title, steps: steps);
       if (noteId != null && _onlyWhenChanged(event) && a.action != AutomationAction.prepareInk) await _remember(a.id, noteId, event);
       results.add(result);
@@ -1347,6 +1402,29 @@ class AutomationService extends ChangeNotifier {
     return v is Map ? {for (final e in v.entries) '${e.key}': '${e.value}'} : const {};
   }
 
+  /// Writes the note as a PDF into [dir] (a folder, `/` between the names) of the cloud account [providerId] - the account is the one
+  /// connected on this device, so a rule that is synced works on every device that has the account, wherever its own folders are.
+  Future<String> _exportPdfToCloud(NoteEditorHandle editor, String providerId, String dir, String title) async {
+    final provider = _cloudAccounts?.call().where((c) => c.id == providerId).firstOrNull;
+    if (provider == null) return tr('That cloud account is not known here');
+    if (!provider.available()) return tr('{account} is not connected on this device', {'account': provider.label});
+    await editor.ready;
+    final temp = await Directory.systemTemp.createTemp('notation_pdf');
+    try {
+      final name = '${safeFileName(title)}.pdf';
+      final file = p.join(temp.path, name);
+      final error = await editor.exportPdfTo(file);
+      if (error != null) return tr('Could not export: {error}', {'error': error});
+      final root = dir.split('/').where((e) => e.trim().isNotEmpty).join('/');
+      await provider.folderFor(root).write(name, await File(file).readAsBytes());
+      return tr('Uploaded to {account}: {path}', {'account': provider.label, 'path': root.isEmpty ? name : '$root/$name'});
+    } catch (e) {
+      return tr('Could not upload: {error}', {'error': '$e'});
+    } finally {
+      await temp.delete(recursive: true).then((_) {}, onError: (Object _) {});
+    }
+  }
+
   Future<String> _perform(Automation a,
       {String? noteId, required String title, NoteEditorHandle? editor, FoundDate? found, TodoItem? todo, AutomationEvent? event, Map<String, Object?> data = const {}}) async {
     switch (a.action) {
@@ -1354,6 +1432,8 @@ class AutomationService extends ChangeNotifier {
         final dir = a.params['dir'];
         if (dir == null || dir.trim().isEmpty) return tr('No folder chosen for the PDF');
         if (editor == null) return tr('The note was not open');
+        final cloud = a.params['cloud'];
+        if (cloud != null && cloud.isNotEmpty) return _exportPdfToCloud(editor, cloud, dir.trim(), title);
         await editor.ready;
         await Directory(dir).create(recursive: true);
         final path = p.join(dir, '${safeFileName(title)}.pdf');
@@ -1515,6 +1595,7 @@ class AutomationService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _syncWatch?.cancel();
     _unlisten?.call();
     super.dispose();
   }

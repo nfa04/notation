@@ -50,6 +50,7 @@ class _AiSettingsState extends State<_AiSettings> {
           ),
           const SizedBox(height: 12),
           for (final p in ai.providers) _provider(context, p, p.id == ai.provider?.id),
+          AdvancedSection(label: 'Advanced: prompts', children: [
           const SizedBox(height: 16),
           Text('Prompt for "Summarize"', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
@@ -117,6 +118,7 @@ class _AiSettingsState extends State<_AiSettings> {
             title: 'Prompt for the document assistant',
             helper: '{text} is the passages of the document found for the question, {question} what you ask',
           ),
+          ]),
         ]);
       },
     );

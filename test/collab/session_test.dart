@@ -12,6 +12,7 @@ import 'package:notes/collab/replica.dart';
 import 'package:notes/collab/session.dart';
 import 'package:notes/collab/transport.dart';
 import 'package:notes/data/note_data.dart';
+import 'package:notes/data/note_pdfs.dart';
 import 'package:notes/models/canvas_models.dart';
 import 'package:notes/pdf/pdf_pages.dart';
 
@@ -25,6 +26,7 @@ class Screen {
   /// What others did to the pages of the PDF, and the PDFs they sent in its place.
   final List<PageArrangement> arrangements = [];
   final List<SharedPdf> pdfs = [];
+  final List<PdfLayoutChange> layouts = [];
   late final CollabBinding binding;
   Screen(Directory dir, {SharedPdf? pdf}) {
     binding = CollabBinding(
@@ -39,6 +41,7 @@ class Screen {
       pdf: pdf == null ? null : () async => pdf,
       onPages: (a) async => arrangements.add(a),
       onPdf: (f) async => pdfs.add(f),
+      onLayout: (c) async => layouts.add(c),
     );
   }
 }
@@ -550,6 +553,52 @@ void main() {
     expect(restarted.note.strokes[1]!.length, 2);
   });
 
+  test('a host app started again with a text in a box: the text is not doubled, and what the guest typed meanwhile is kept', () async {
+    hostScreen.note.textBoxes[0] = [TextBoxWidgetModel(id: 'b1', position: const Offset(5, 5), initialText: 'hello world')];
+    hostScreen.note.documentText = 'the document';
+    host.localChanged();
+    final (ben, benScreen) = await joinAndApprove(name: 'Ben');
+    await settle();
+    expect(benScreen.note.textBoxes[0]!.single.text, 'hello world');
+
+    await hub.cut();
+    await host.end();
+    toClose.remove(host);
+    host.dispose();
+    await settle();
+
+    final box = benScreen.note.textBoxes[0]!.single;
+    box.controller.text = 'hello wide world'; // typed while the host was gone
+    benScreen.note.documentText = 'the whole document';
+    ben.localChanged();
+
+    final restarted = Screen(dir);
+    restarted.note.textBoxes[0] = [TextBoxWidgetModel(id: 'b1', position: const Offset(5, 5), initialText: 'hello world')];
+    restarted.note.documentText = 'the document';
+    hub.hostPresent = true;
+    final again = CollabSession.host(invite, hub.host, restarted.binding, name: 'Anna')..trust = (_) => true;
+    toClose.add(again);
+    ben.wake();
+    await settle();
+    await settle();
+
+    expect(ben.state, SessionState.live);
+    for (final s in [restarted, benScreen]) {
+      expect(s.note.textBoxes[0]!.single.text, 'hello wide world');
+      expect(s.note.documentText, 'the whole document');
+    }
+    // and both go on merging
+    restarted.note.textBoxes[0]!.single.controller.text = 'oh hello wide world';
+    again.localChanged();
+    benScreen.note.textBoxes[0]!.single.controller.text = 'hello wide world!';
+    ben.localChanged();
+    await settle();
+    await settle();
+    for (final s in [restarted, benScreen]) {
+      expect(s.note.textBoxes[0]!.single.text, 'oh hello wide world!');
+    }
+  });
+
   test('a fresh welcome that comes while the screen is going away waits for the note, then is merged into it', () async {
     final (ben, benScreen) = await joinAndApprove(name: 'Ben');
     await hub.cut();
@@ -624,6 +673,62 @@ void main() {
       expect(screen.pdfs.single.bytes, bytes);
     }
     expect(hostScreen.pdfs, isEmpty);
+  });
+
+  test('several PDFs go to the others as they are, with the order of their pages, and a new order goes without the files', () async {
+    final (ben, benScreen) = await joinAndApprove(name: 'Ben');
+    final (_, cyScreen) = await joinAndApprove(name: 'Cy');
+    Uint8List pdf(String s) => Uint8List.fromList(utf8.encode('%PDF-1.4 $s'));
+
+    final sent = SharedPdf('a.pdf', '', 2, pdf('a'), more: [SharedPdf('b.pdf', '', 1, pdf('b'))], layout: const [PdfPageRef(1, 0), PdfPageRef(0, 0), PdfPageRef.blank(), PdfPageRef(0, 1)]);
+    host.announcePdf(sent);
+    await settle();
+    for (final screen in [benScreen, cyScreen]) {
+      final got = screen.pdfs.single;
+      expect(got.isTable, isTrue);
+      expect((got.name, got.pages), ('a.pdf', 2));
+      expect(got.bytes, orderedEquals(sent.bytes));
+      expect((got.more.single.name, got.more.single.pages), ('b.pdf', 1));
+      expect(got.more.single.bytes, orderedEquals(sent.more.single.bytes));
+      expect(got.sha256, sha256.convert(sent.bytes).toString(), reason: 'the hash is the one of the file');
+      expect(got.more.single.sha256, sha256.convert(sent.more.single.bytes).toString());
+      expect(got.layout!.join(' '), '1:0 0:0 blank 0:1');
+      final table = got.table(['x/a.pdf', 'x/b.pdf'])!;
+      expect(table.files.map((f) => f.path), ['x/a.pdf', 'x/b.pdf']);
+      expect(table.pageCount, 4);
+    }
+
+    // another order of the same files is a small message
+    ben.announceLayout(const PdfLayoutChange([PdfPageRef(0, 0), PdfPageRef(0, 1), PdfPageRef(1, 0)], [2, 1]));
+    await settle();
+    for (final screen in [hostScreen, cyScreen]) {
+      expect(screen.layouts.single.layout.join(' '), '0:0 0:1 1:0');
+      expect(screen.layouts.single.fits(sent.table(['a', 'b'])!), isTrue);
+    }
+    expect(benScreen.layouts, isEmpty);
+
+    // what cannot be an order of those files is not passed on
+    for (final bad in const [
+      PdfLayoutChange([PdfPageRef(0, 0), PdfPageRef(0, 0)], [2, 1]), // a page twice
+      PdfLayoutChange([PdfPageRef(2, 0)], [2, 1]), // a file there is not
+      PdfLayoutChange([PdfPageRef(1, 3)], [2, 1]), // a page there is not
+      PdfLayoutChange([], [2, 1]),
+    ]) {
+      ben.announceLayout(bad);
+    }
+    ben.announcePdf(SharedPdf('a.pdf', '', 1, pdf('a'), more: [SharedPdf('b.pdf', '', 1, Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8, 9]))], layout: const [PdfPageRef(0, 0), PdfPageRef(1, 0)]));
+    await settle();
+    expect(hostScreen.layouts, hasLength(1));
+    expect(cyScreen.layouts, hasLength(1));
+    expect(hostScreen.pdfs, isEmpty);
+    expect(cyScreen.pdfs, hasLength(1), reason: 'only the first, the one that was right');
+  });
+
+  test('a layout fits only the files it was made for', () {
+    final table = NotePdfs.inOrder(const [NotePdf(name: 'a', path: 'a', sha256: '', pages: 2), NotePdf(name: 'b', path: 'b', sha256: '', pages: 1)]);
+    expect(const PdfLayoutChange([PdfPageRef(0, 0)], [2, 1]).fits(table), isTrue);
+    expect(const PdfLayoutChange([PdfPageRef(0, 0)], [2]).fits(table), isFalse);
+    expect(const PdfLayoutChange([PdfPageRef(0, 0)], [3, 1]).fits(table), isFalse);
   });
 
   test('pages and PDFs that cannot be right are neither done nor passed on', () async {

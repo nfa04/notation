@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 
@@ -9,6 +10,11 @@ class SettingsRepository {
   final Database _db;
 
   SettingsRepository(this._db);
+
+  final _fromSync = StreamController<String>.broadcast();
+
+  /// The keys of settings that were replaced by a value from another device (a sync), for what holds a copy of one in memory.
+  Stream<String> get changedBySync => _fromSync.stream;
 
   Future<String?> get(String key) async {
     final rows = await _db.query('settings', where: 'key = ?', whereArgs: [key]);
@@ -22,8 +28,10 @@ class SettingsRepository {
       );
 
   /// A value that came from another device, with the time it was set there.
-  Future<void> setFromSync(String key, String value, int changedAt) =>
-      _db.insert('settings', {'key': key, 'value': value, 'changed_at': changedAt}, conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<void> setFromSync(String key, String value, int changedAt) async {
+    await _db.insert('settings', {'key': key, 'value': value, 'changed_at': changedAt}, conflictAlgorithm: ConflictAlgorithm.replace);
+    _fromSync.add(key);
+  }
 
   /// The value of every key with the time it was set, for those that [include] (the settings that sync between devices).
   Future<Map<String, ({String value, int changedAt})>> allWhere(bool Function(String key) include) async {

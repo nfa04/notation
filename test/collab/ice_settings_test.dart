@@ -117,6 +117,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-tab-Sharing and files')));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced: server and relay')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('relay-urls')));
 
     await tester.enterText(find.byKey(const ValueKey('relay-urls')), 'https://nonsense');

@@ -48,7 +48,7 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
   Widget _inkProgressChip() => ValueListenableBuilder<int>(
         valueListenable: _reader.pending,
         builder: (context, waiting, _) {
-          if (waiting <= 0) return const SizedBox.shrink();
+          if (waiting <= 0 || (!_inkReadsHere() && !_checkOn)) return const SizedBox.shrink();
           final scheme = Theme.of(context).colorScheme;
           return Material(
             key: const ValueKey('ink-progress'),

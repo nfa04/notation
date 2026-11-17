@@ -20,6 +20,7 @@ import '../style/refresh_rate.dart' show refreshRateAdjustable;
 import '../llm/onnx_session.dart' show onnxAvailableAccelerators, onnxNeedsFixedShapes, onnxPlatformAccelerators;
 import '../style/stylus_settings.dart';
 import 'about_settings.dart';
+import 'advanced_section.dart';
 import 'stylus_settings_card.dart';
 import 'accessibility_settings.dart';
 import 'pdf_quality_settings.dart';
@@ -165,7 +166,9 @@ class SettingsScreen extends StatelessWidget {
             ]
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          AdvancedSection(children: [
+          const SizedBox(height: 8),
           const Text('Platform look'),
           const SizedBox(height: 4),
           Text(
@@ -200,6 +203,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 20),
             RefreshRateSettings(repository: repository!),
           ],
+          ]),
           const SizedBox(height: 28),
           const _LanguageSettings(),
           if (accessibility != null) ...[
@@ -233,8 +237,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 28),
           ],
           if (repository != null) ...[
-            PdfQualitySettings(repository: repository!),
-            const SizedBox(height: 28),
+            AdvancedSection(children: [const SizedBox(height: 8), PdfQualitySettings(repository: repository!)]),
             const SizedBox(height: 28),
           ],
           if (features != null) ToolSettings(features: features!),
@@ -259,7 +262,30 @@ class SettingsScreen extends StatelessWidget {
         sections: [
           ..._spaced([
             if (aiSwitch != null) _AiSwitchCard(aiSwitch: aiSwitch!),
-            if (repository != null && onnxPlatformAccelerators().isNotEmpty) AccelerationSettings(
+            if (handwriting != null) _HandwritingSettings(service: handwriting!, repository: repository),
+            if (math != null) _MathSettings(service: math!),
+            if (ocr != null) _OcrSettings(service: ocr!),
+            if (subject != null && (features?.on(Feature.pictureEdit) ?? true))
+              _ModelSettings(
+                service: subject!,
+                title: 'Subjects in pictures',
+                description: 'Finds the person, animal or object in a photograph, so that "Find the subject" in the picture editor can take the '
+                    'background out. It runs on this device (U²-Net, Apache-2.0 licence); nothing is sent away.',
+              ),
+            if (ai != null) _AiSettings(ai: ai!),
+            if (llm != null)
+              _ModelSettings(
+                service: llm!,
+                title: 'Language model',
+                description: 'Writes short titles for the tasks that automations make from dates in a PDF '
+                    '(Qwen3-0.6B, Apache-2.0 licence). It runs on this device and nothing is sent away; '
+                    'it is loaded only while it works. It needs a fair amount of memory while it does.',
+              ),
+            if (embeddings != null) _EmbeddingSettings(service: embeddings!),
+            if (speech != null) _SpeechSettings(service: speech!),
+            if (repository != null && onnxPlatformAccelerators().isNotEmpty)
+              AdvancedSection(label: 'Advanced: speed and graphics card', children: [const SizedBox(height: 8),
+            AccelerationSettings(
                 repository: repository!,
                 benchmark: handwriting != null && handwriting!.glm.installed ? () => benchmarkGlmVision(handwriting!.glm) : null,
                 precompile: handwriting == null && math == null ? null : (progress, cancelled) async {
@@ -299,28 +325,7 @@ class SettingsScreen extends StatelessWidget {
                         }
                         return lines;
                       },
-              ),
-            if (handwriting != null) _HandwritingSettings(service: handwriting!, repository: repository),
-            if (math != null) _MathSettings(service: math!),
-            if (ocr != null) _OcrSettings(service: ocr!),
-            if (subject != null && (features?.on(Feature.pictureEdit) ?? true))
-              _ModelSettings(
-                service: subject!,
-                title: 'Subjects in pictures',
-                description: 'Finds the person, animal or object in a photograph, so that "Find the subject" in the picture editor can take the '
-                    'background out. It runs on this device (U²-Net, Apache-2.0 licence); nothing is sent away.',
-              ),
-            if (ai != null) _AiSettings(ai: ai!),
-            if (llm != null)
-              _ModelSettings(
-                service: llm!,
-                title: 'Language model',
-                description: 'Writes short titles for the tasks that automations make from dates in a PDF '
-                    '(Qwen3-0.6B, Apache-2.0 licence). It runs on this device and nothing is sent away; '
-                    'it is loaded only while it works. It needs a fair amount of memory while it does.',
-              ),
-            if (embeddings != null) _EmbeddingSettings(service: embeddings!),
-            if (speech != null) _SpeechSettings(service: speech!),
+              )]),
           ]),
         ],
       ),
@@ -330,7 +335,7 @@ class SettingsScreen extends StatelessWidget {
         sections: [
           ..._spaced([
             if (extensions != null) ExtensionSettings(service: extensions!, ai: aiSwitch?.enabled ?? true ? ai : null, automations: automations),
-            if (mcp != null) _McpSettings(service: mcp!),
+            if (mcp != null) AdvancedSection(label: 'Advanced: connect an AI agent', children: [const SizedBox(height: 8), _McpSettings(service: mcp!)]),
           ]),
         ],
       ),
@@ -517,6 +522,7 @@ class _EmbeddingSettings extends StatelessWidget {
                 'It files notes by the automation "Move the note to the folder it fits best", finds the passages that answer a '
                 'question across all notes, and makes the graph follow the meaning. It runs on this device; nothing is sent away.',
           ),
+          AdvancedSection(children: [
           const SizedBox(height: 12),
           SegmentedButton<String>(
           showSelectedIcon: false,
@@ -527,6 +533,7 @@ class _EmbeddingSettings extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(service.spec.description, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+          ]),
         ]),
       );
 }
@@ -547,6 +554,7 @@ class _SpeechSettings extends StatelessWidget {
             description: 'Record a meeting on the dashboard, or dictate into a note, and what is said is written down. It happens on '
                 'this device (Whisper, MIT and Apache-2.0 licences); the sound is never sent away and not kept.',
           ),
+          AdvancedSection(children: [
           const SizedBox(height: 12),
           SegmentedButton<String>(
           showSelectedIcon: false,
@@ -557,6 +565,7 @@ class _SpeechSettings extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(service.spec.description, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+          ]),
           const SizedBox(height: 12),
           Row(children: [
             const Text('Language spoken'),
@@ -601,7 +610,7 @@ class _HandwritingSettings extends StatelessWidget {
               if (service.paddle != null) HandwritingReader.paddle,
             ];
             final busy = service.status == HandwritingStatus.downloading;
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            return AdvancedSection(children: [
               if (readers.length > 1) ...[
                 const SizedBox(height: 16),
                 Text(tr('Which model reads the handwriting'), style: Theme.of(context).textTheme.titleSmall),
@@ -822,6 +831,7 @@ class _MathSettings extends StatelessWidget {
               description: 'Select a handwritten formula with the lasso and choose "Convert a handwritten formula to '
                   'LaTeX". Reading happens on this device; nothing is sent away.',
             ),
+            AdvancedSection(children: [
             const SizedBox(height: 16),
             Text(tr('Which model reads the formulas'), style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
@@ -891,6 +901,7 @@ class _MathSettings extends StatelessWidget {
                 style: muted,
               ),
             ],
+            ]),
           ]);
         },
       );

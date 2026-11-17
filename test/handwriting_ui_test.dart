@@ -72,6 +72,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), handwriting: service)));
     await tester.tap(find.byKey(const ValueKey('settings-tab-AI and models')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced')));
+    await tester.pumpAndSettle();
     for (final q in GlmQuality.values) {
       expect(find.byKey(ValueKey('handwriting-quality-${q.name}')), findsOneWidget);
     }

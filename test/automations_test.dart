@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/app_services.dart';
 import 'package:notes/automations/automation.dart';
 import 'package:notes/automations/automation_service.dart';
+import 'package:notes/cloudsync/cloud_sync_service.dart' show CloudProvider;
 import 'package:notes/data/app_database.dart';
 import 'package:notes/events/event_bus.dart';
 import 'package:notes/events/event_sources.dart';
@@ -19,6 +20,8 @@ import 'package:notes/style/style_service.dart';
 import 'package:notes/sync/caldav_service.dart';
 import 'package:notes/sync/device_calendar_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'cloudsync/memory_cloud_folder.dart';
 
 class _Editor implements NoteEditorHandle {
   final String title;
@@ -188,6 +191,30 @@ void main() {
       expect(out.single, startsWith('Exported to'));
     });
 
+    test('the PDF can go into a cloud account instead, named after the note, an older one replaced', () async {
+      final cloud = MemoryCloudFolder();
+      final roots = <String>[];
+      var connected = true;
+      final withCloud = AutomationService(notes, tasks, cloudAccounts: () => [
+            CloudProvider(id: 'nextcloud', label: 'Nextcloud', available: () => connected, changes: ValueNotifier(0), folderFor: (n) {
+              roots.add(n);
+              return cloud;
+            }),
+          ]);
+      addTearDown(withCloud.dispose);
+      expect(withCloud.cloudChoices, [(id: 'nextcloud', label: 'Nextcloud')]);
+      await withCloud.add(const Automation(id: '1', event: AutomationEvent.noteClosed, action: AutomationAction.exportPdf, params: {'dir': '/Notes//PDFs/', 'cloud': 'nextcloud'}));
+      final out = await withCloud.run(AutomationEvent.noteClosed, noteId: 'n', title: 'My/Note', editor: _Editor('My/Note'));
+      expect(out.single, 'Uploaded to Nextcloud: Notes/PDFs/My_Note.pdf');
+      expect(roots, ['Notes/PDFs']);
+      expect(String.fromCharCodes(cloud.files['My_Note.pdf']!), '%PDF');
+      // the temporary file is gone
+      expect(Directory.systemTemp.listSync().where((e) => e.path.contains('notation_pdf')), isEmpty);
+      // no account on this device (the rule came with a sync): said, not thrown
+      connected = false;
+      expect((await withCloud.run(AutomationEvent.noteClosed, noteId: 'n', title: 'T', editor: _Editor('T'))).single, 'Nextcloud is not connected on this device');
+    });
+
     test('what cannot be done is said, not thrown', () async {
       await service.add(const Automation(id: '1', event: AutomationEvent.noteClosed, action: AutomationAction.exportPdf, params: {'dir': '/tmp/x'}));
       expect((await service.run(AutomationEvent.noteClosed, noteId: 'n', title: 'T')).single, 'The note was not open');
@@ -221,6 +248,30 @@ void main() {
       await again.load();
       expect(again.all.single.id, '1');
       again.dispose();
+    });
+
+    test('a run does not rewrite the rules that travel, and rules that arrive from another device show up at once', () async {
+      await service.add(const Automation(id: '1', event: AutomationEvent.appStarted, action: AutomationAction.addTask, params: {'title': 'x'}));
+      final before = (await notes.settings.allWhere((k) => k == 'automations'))['automations']!;
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await service.bus.emit(const AppEvent('appStarted'));
+      final after = (await notes.settings.allWhere((k) => k == 'automations'))['automations']!;
+      expect(service.all.single.lastRun, isNotNull);
+      expect(after.value, before.value);
+      expect(after.changedAt, before.changedAt);
+      expect(after.value, isNot(contains('lastRun')));
+
+      var told = 0;
+      service.addListener(() => told++);
+      final theirs = Automation.encodeAll(const [
+        Automation(id: '1', event: AutomationEvent.appStarted, action: AutomationAction.addTask, params: {'title': 'x'}),
+        Automation(id: '2', event: AutomationEvent.appStarted, action: AutomationAction.addTask, params: {'title': 'y'}),
+      ], status: false);
+      await notes.settings.setFromSync('automations', theirs, before.changedAt + 1000);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.all.map((a) => a.id), ['1', '2']);
+      expect(service.all.first.lastRun, isNotNull, reason: 'what ran here stays on the card');
+      expect(told, greaterThan(0));
     });
   });
 

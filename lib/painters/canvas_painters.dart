@@ -4,6 +4,7 @@ import 'dart:ui' as ui show Image;
 import 'dart:ui' show Picture, PictureRecorder, PointMode;
 
 import 'package:flutter/material.dart';
+import '../collab/wet_ink.dart';
 import '../models/brush.dart';
 import '../models/pdf_models.dart';
 import '../models/canvas_models.dart';
@@ -572,6 +573,25 @@ class ActiveInkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ActiveInkPainter old) => true;
+}
+
+/// The lines others are drawing on a page right now (see `wet_ink.dart`), painted again as they grow.
+class WetInkPainter extends CustomPainter {
+  final WetBook book;
+  final int page;
+  final String self;
+  final double pressureSensitivity;
+
+  WetInkPainter(this.book, this.page, this.self, {this.pressureSensitivity = 0.6}) : super(repaint: book);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lines = book.on(page, except: self);
+    if (lines.isNotEmpty) paintStrokes(canvas, lines, pressureSensitivity);
+  }
+
+  @override
+  bool shouldRepaint(covariant WetInkPainter old) => !identical(old.book, book) || old.page != page;
 }
 
 class PageBackgroundPainter extends CustomPainter {

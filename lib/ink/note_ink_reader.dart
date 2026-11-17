@@ -51,6 +51,13 @@ class NoteInkReader {
   /// What was kept of the readings of the note: the text of blocks (by the key of the block of strokes) and the other readings.
   final Future<({Map<String, String> texts, Map<String, String> unsure, List<InkRead> reads})> Function(String noteId) loadSaved;
 
+  /// Whether this device reads the writing in the background. False for a guest of a live session: the host reads, and what it read
+  /// arrives by [takeShared]. (A person's own maths check, switched on here, still reads here.)
+  final bool Function() readsHere;
+
+  /// Gives the others in a live session what was read ([shareNew] says what); null when there is no session to tell.
+  final void Function(Map<String, Object?> readings)? share;
+
   /// Told when readings arrived (or the work changed): the editor shows which selections are ready and marks checked maths.
   final void Function() onProgress;
 
@@ -70,7 +77,11 @@ class NoteInkReader {
     required this.saveReads,
     required this.loadSaved,
     required this.onProgress,
+    this.readsHere = _always,
+    this.share,
   });
+
+  static bool _always() => true;
 
   /// How many blocks of writing are still to be read (for the chip that says the writing is being read).
   final pending = ValueNotifier<int>(0);
@@ -113,7 +124,7 @@ class NoteInkReader {
 
   InkPrefetcher _ensure() => prefetcher ??= InkPrefetcher(
         strokes: strokes,
-        canRun: isQuiet,
+        canRun: () => (readsHere() || checkOn) && isQuiet(),
         idle: idle,
         // (only the page in view and its neighbours; a rest after each piece so that the screen keeps up)
         // (all of it when the writing is read for the search)
@@ -190,6 +201,7 @@ class NoteInkReader {
   /// opened again reads nothing that was read before.
   Future<void> saveReadings() async {
     _indexTimer?.cancel();
+    _shareNew();
     final reader = prefetcher;
     // (a locked note keeps nothing in the open)
     if (reader == null || isLocked()) return;
@@ -220,6 +232,67 @@ class NoteInkReader {
     } catch (e) {
       debugPrint('[ink] could not keep the readings: $e');
     }
+  }
+
+  /// What was last given to the others, by key: only what is new or different goes out the next time.
+  final Map<String, String> _sentTexts = {}, _sentUnsure = {}, _sentFormulas = {};
+
+  /// The others know nothing of it (somebody joined, or this device became the one that reads): everything goes out the next time.
+  void shareAgain() {
+    _sentTexts.clear();
+    _sentUnsure.clear();
+    _sentFormulas.clear();
+    _saveSoon();
+  }
+
+  /// Tells the others what was read since they were last told (in pieces, so that no message is huge).
+  void _shareNew() {
+    final send = share;
+    final reader = prefetcher;
+    if (send == null || reader == null || !readsHere() || isLocked()) return;
+    final keep = reader.toKeep();
+    final texts = <String, String>{}, unsure = <String, String>{}, formulas = <String, String>{};
+    for (final t in keep.texts) {
+      if (_sentTexts[t.block.key] != t.text) texts[t.block.key] = t.text;
+    }
+    for (final e in keep.unsure.entries) {
+      if (_sentUnsure[e.key] != e.value) unsure[e.key] = e.value;
+    }
+    for (final e in keep.formulas.entries) {
+      if (_sentFormulas[e.key] != e.value) formulas[e.key] = e.value;
+    }
+    if (texts.isEmpty && unsure.isEmpty && formulas.isEmpty) return;
+    _sentTexts.addAll(texts);
+    _sentUnsure.addAll(unsure);
+    _sentFormulas.addAll(formulas);
+    final keys = {...texts.keys, ...unsure.keys, ...formulas.keys}.toList();
+    for (var i = 0; i < keys.length; i += _sharePiece) {
+      final part = keys.skip(i).take(_sharePiece).toSet();
+      send({
+        'texts': {for (final k in part) if (texts.containsKey(k)) k: texts[k]},
+        'unsure': {for (final k in part) if (unsure.containsKey(k)) k: unsure[k]},
+        'formulas': {for (final k in part) if (formulas.containsKey(k)) k: formulas[k]},
+      });
+    }
+  }
+
+  static const _sharePiece = 200;
+
+  /// Takes what the host read (see [share]): it is there as if it had been read here, and kept like it. Nothing read here is replaced.
+  /// [readings] comes from another device: only what is a text by a key is taken.
+  void takeShared(Map<String, Object?> readings) {
+    if (!isOpen() || isLocked() || (handwriting == null && math == null)) return;
+    Map<String, String> strings(Object? m) {
+      if (m is! Map || m.length > _sharePiece * 2) return const {};
+      return {
+        for (final e in m.entries)
+          if (e.key is String && e.value is String && (e.value as String).length < 200000 && (e.key as String).length < 100) e.key as String: e.value as String,
+      };
+    }
+
+    final texts = strings(readings['texts']), unsure = strings(readings['unsure']), formulas = strings(readings['formulas']);
+    if (texts.isEmpty && unsure.isEmpty && formulas.isEmpty) return;
+    _ensure().seed(texts: texts, unsure: unsure, formulas: formulas);
   }
 
   /// Keeps what was read of the writing soon after the readings change.

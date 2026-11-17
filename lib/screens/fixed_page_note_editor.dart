@@ -9,6 +9,7 @@ import 'dart:ui' as ui;
 import '../data/file_digest.dart';
 import '../data/note_pdfs.dart';
 import '../pdf/note_pdf_document.dart';
+import '../pdf/note_pdf_editor.dart';
 import 'package:archive/archive.dart' show Archive, ArchiveFile, CompressionType, ZipEncoder;
 import '../export/file_dialogs.dart';
 import '../export/image_export.dart';
@@ -72,6 +73,7 @@ import '../collab/collab_service.dart';
 import '../collab/invite.dart';
 import '../collab/replica.dart';
 import '../collab/session.dart';
+import '../collab/shared_pdf_files.dart';
 import '../collab/transport.dart' show HostTransport;
 import 'link_signal.dart';
 import 'presence.dart';
@@ -642,7 +644,14 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
       );
     },
     onProgress: _inkProgressed,
+    // (in a live session the host reads and tells the guests; a guest reads for itself only while it has no host to read for it)
+    readsHere: _inkReadsHere,
+    share: (r) => _live?.announceReadings(r),
   );
+
+  /// Whether the writing of this note is read here in the background (false for a guest that has a host).
+  bool _inkReadsHere() => _live?.readsInk ?? true;
+  bool _inkWasReadingHere = true; // (to see when that changes: a host that left, a guest that was left by its host)
 
   /// The lines of maths that were checked, and who checks.
   final _marker = MathMarker();
@@ -1098,7 +1107,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   int _totalPages = 0;
 
   // editing the imported PDF itself in document mode (editor_pdf_edit.dart)
-  PdfContentEditor? _pdfEditor;
+  NotePdfEditor? _pdfEditor;
   bool _pdfEditOpening = false;
   bool _pdfEditBusy = false;
   Future<void>? _pdfEditWork; // (the edit being made, if any: the editor stays open until it is done)
@@ -1116,8 +1125,12 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   PdfEditObject? _pdfEditInfoFor;
   Future<PdfFontInfo>? _pdfEditInfo;
 
-  /// The files the PDF was in before each edit, latest last, to take edits back.
-  final List<(String, String?)> _pdfEditUndo = [];
+  /// The files the PDF was in before each edit (path, checksum) and the file the edit made, latest last, to take edits back.
+  final List<(String, String?, String)> _pdfEditUndo = [];
+
+  /// For a file of a note with several PDFs that an edit replaced: the file it is now, by the path it had (so a step that is taken back or done
+  /// again later, which has the table as it was, still finds the file as it is).
+  final Map<String, NotePdf> _fileHeads = {};
 
   /// The pages of the PDF that are notebook pages (added ones): the paper of the note shows on them, not the file.
   Set<int> _nativePages = {};
@@ -1127,6 +1140,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   /// Counts the swaps of the PDF for another file, so that only the last one asked for happens.
   int _pdfSwapTurn = 0;
+
+  /// Waits a moment after a change of what the PDFs contain before telling the live session (a run of edits sends the files once).
+  Timer? _pdfContentTimer;
 
   /// Pages of the blank notebook shown while no PDF is imported.
   final LiveMarkdownController _documentController = LiveMarkdownController();
@@ -2141,6 +2157,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   @override
   void dispose() {
+    _pdfContentTimer?.cancel();
     _soundPlayer?.dispose();
     _followIds.dispose();
     _finishLectureOnClose();
@@ -2199,7 +2216,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     final keep = _pdfFilePath;
     final inUse = {for (final file in _pdfTable?.files ?? const <NotePdf>[]) file.path};
     // (files that were added to the note and then taken back, or taken out of it, are not kept)
-    final superseded = [for (final (path, _) in _pdfEditUndo) path, ..._pdfShaped, ..._tableDocs.keys].where((path) => path != keep && !inUse.contains(path)).toList();
+    final superseded = [for (final (path, _, _) in _pdfEditUndo) path, ..._pdfShaped, ..._tableDocs.keys].where((path) => path != keep && !inUse.contains(path)).toList();
     _pdfEditUndo.clear();
     _pdfShaped.clear();
     _pdfEditBox.dispose();

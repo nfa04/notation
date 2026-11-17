@@ -55,6 +55,7 @@ class _LiveSettingsState extends State<_LiveSettings> {
         style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
       ),
       const SizedBox(height: 12),
+      AdvancedSection(label: 'Advanced: server and relay', initiallyOpen: _own, children: [
       if (service.hasBuiltInServer)
         SegmentedButton<bool>(
             showSelectedIcon: false,
@@ -107,6 +108,11 @@ class _LiveSettingsState extends State<_LiveSettings> {
           padding: const EdgeInsets.only(top: 6),
           child: Text('Using the built-in server.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
         ),
+      if (service.ice != null) ...[
+        const SizedBox(height: 16),
+        _RelaySettings(ice: service.ice!),
+      ],
+      ]),
       const SizedBox(height: 8),
       TextField(
         key: const ValueKey('collab-name'),
@@ -115,10 +121,6 @@ class _LiveSettingsState extends State<_LiveSettings> {
         onSubmitted: service.setName,
         onTapOutside: (_) => service.setName(_name.text),
       ),
-      if (service.ice != null) ...[
-        const SizedBox(height: 16),
-        _RelaySettings(ice: service.ice!),
-      ],
     ]);
   }
 }

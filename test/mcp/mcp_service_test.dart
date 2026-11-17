@@ -214,6 +214,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('settings-tab-Extensions')), warnIfMissed: false);
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('advanced-Advanced: connect an AI agent')));
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('mcp-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('mcp-token')), findsNothing, reason: 'nothing of the token while it is off');

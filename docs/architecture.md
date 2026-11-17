@@ -231,8 +231,54 @@ render object for the whole layer, taking part in the selection as a `Selectable
 
 ### A note with several PDFs
 
-A note can hold more than one PDF, each kept as its own file (never merged). `NotePdfs` (`lib/data/note_pdfs.dart`) is the files plus a page table: page `n` of the note is `layout[n]`, a reference to page `p` of file `f` (or a blank notebook page). Moving, deleting or inserting pages in such a note only changes the table (`_reshapeTable`), so pages can be put in any order across files and nothing is rewritten; the file of a deleted page keeps it, hidden. A note with one PDF has no table and works as it always did; adding a second PDF turns it into one (and undo turns it back). `NotePdfDocument` composes the pages of the open files for the editor, so rendering, words, zoom and export read `pages[n]` as before. Stored in `notes.pdf_files` (the first file is also in `pdf_name`/`pdf_path`/`pdf_sha256`) and in `.uninote` as `source.pdf` plus `pdfs/<n>.pdf`. Export, live sessions and the like get one PDF made by `combinePdfFiles`. Editing the text inside a PDF (document mode) works only for one-file notes.
+A note can hold more than one PDF, each kept as its own file (never merged). `NotePdfs` (`lib/data/note_pdfs.dart`) is the files plus a page table: page `n` of the note is `layout[n]`, a reference to page `p` of file `f` (or a blank notebook page). Moving, deleting or inserting pages in such a note only changes the table (`_reshapeTable`), so pages can be put in any order across files and nothing is rewritten; the file of a deleted page keeps it, hidden. A note with one PDF has no table and works as it always did; adding a second PDF turns it into one (and undo turns it back). `NotePdfDocument` composes the pages of the open files for the editor, so rendering, words, zoom and export read `pages[n]` as before. Stored in `notes.pdf_files` (the first file is also in `pdf_name`/`pdf_path`/`pdf_sha256`) and in `.uninote` as `source.pdf` plus `pdfs/<n>.pdf`. Only PDF export gets one PDF made by `combinePdfFiles`.
 
+* **Editing inside a PDF** (document mode, translate with PDF): `NotePdfEditor` (`lib/pdf/note_pdf_editor.dart`) works by page number of the note and sends each call to the file the table says, opening a file's `PdfContentEditor` when one of its pages is first edited. An edit writes a new version of that file only (`_showTableFile`); the other files and the table stay. Undo of an edit is `(old path, old sha, new path)`. `_fileHeads` maps the path a file had to the file it is now, so a step taken back or redone later (an add/remove/reorder, which hold the table as it was) still finds the edited file (`_applyTable` resolves through it).
+* **Live sessions**: `SharedPdf` carries the other files (`more`) and the table (`layout`). The whole set goes on welcome, on adding/removing/replacing files and on undo of those; a new order of pages alone is the small `PdfLayoutChange` (`layout` message: the order plus the page count of each file, applied only to a note with the same files). A guest of any kind (open editor, headless note, a note made from the welcome) ends with the same files and table; a table can turn into one PDF and back. An edit of a PDF's own text (or its undo, or a translation) is announced 0.7 s after the last change as the whole set (`_announcePdfContent`, one file or several), so a run of edits sends the files once.
+* **Sync and copies** go through the `.uninote` file. A restore into a note keeps the PDF files it has when the same checksum comes again (so a changed order of pages writes nothing); eight 4 MB files export in about 0.2 s and restore in 0.4 s.
+
+
+## Live sessions: texts that are merged, and lines that are seen while they are drawn
+
+* **Everything but text** is merged element by element: a stroke, box, picture or mark is replaced by the later change (`Replica`,
+  a Lamport `Version` per change; a deletion wins within a generation).
+* **The text of a box and of the written document** is merged character by character (`collab/text_crdt.dart`, an RGA sequence):
+  every character has an id `(counter, device)`, is put in after the character it was typed behind, and a deletion keeps its place as a
+  tombstone. Any order of delivery, twice or late, gives the same text everywhere; a change whose parent has not come yet waits for it.
+  Formatting is a set of pieces (`TextMark`: tag, first character, end character, kind, value) on characters, not offsets; taking one
+  away keeps its tag so a late copy cannot bring it back. Per kind the highest tag wins where pieces overlap, so two people making
+  different words bold both keep it, and un-bolding does not remove bold another added unseen. The place/look of a box is a register
+  per part (`at`, `size`, `fs`, `style`, `ly`, `gr`, versions in `gv`): a move and a restyle made at once are both kept.
+  A change carries `tc` (characters, deletions, marks typed since the last one; whole on first sight, in a welcome and in `_sendAll`).
+* **Collecting deleted characters**: a guest with enough tombstones (`TextCrdt.collectAfter`) and nothing unsent sends `seen` with a
+  fingerprint of its text (`digest`) every `CollabSession.collectEvery`; when every guest of protocol 2 has the host's fingerprint, the
+  host collects (`collect`): dead characters and taken-away tags are removed, marks on them move to the next survivor, ids go to a
+  `gone` list, `epoch` rises, and the whole text goes out. Guests that were at that point collect the same; others (away, stale) rebuild
+  from it (`_rebase`): what they typed that the host lacks is typed again as copies (`copyOf`, deduplicated deterministically so several
+  devices doing the same give one copy). A host app restarted from the saved note has texts under new ids: guests take them by comparing
+  texts (`adoptUnrelated`, `Replica.startOver`).
+* **Protocol version** (`CollabSession.protocolVersion`, `pv` in join/welcome): with an older guest the host gives whole texts
+  (`withWholeTexts`, with a fresh version so the old app's last-writer-wins accepts them), takes its whole texts as edits against the
+  text it was last given (`applyWhole`, bases kept per device) and sends it no wet ink; with an older host a newer guest behaves as an
+  old app. Collection waits only for protocol 2 guests.
+* **Edits are taken in as they are made**: `CollabSession.localChanged` (called at every change of a text controller) runs
+  `Replica.capture`, so each edit is one diff of one place (`collab/text_diff.dart`: common start and end, then the place where a word
+  begins among the places that give the same text). Several edits found at once can only be guessed (word by word, Myers); in a text full
+  of `[`, `:` and spaces a guess can put one person's word into another's - the reason for capturing.
+* **Wet ink** (`collab/wet_ink.dart`): while the pen is down, the stroke is held back from the replica (`Replica.holdBack`) and sent as
+  `wet` messages with only the new points; a lane per link (`WetLane`) sends the next message only when the link took the last (and at
+  most every 120/350 ms on a fair/poor link), so a slow link gets fewer, bigger messages. A shape being drawn is a new `revision` (sent
+  whole). A gap (a lost message) waits for the whole line, which a link that was made again gets. The host relays from its own copy.
+  The wet line goes when the finished stroke arrives as an ordinary change, when the drawer says it was not kept (`x: 2`), or when nothing
+  more comes (`WetBook.staleAfter`); a stroke the screen never ended is given up on as kept after `WetBook.abandonedAfter`.
+* Tests: `text_crdt_test`, `replica_text_test` (shuffled, doubled, lost changes, then states), `text_live_test` and `wet_live_test`
+  (sessions over links that drop, die silently and are slow; seeded chaos runs), `editor_wet_ink_test` (the pen in the editor).
+* Symmetry copies of a stroke are wet too (a mirror line grows live); `WetLane.batch` sends several lines in one message.
+* Tests also: `text_collect_test` (formatting conflicts, collection with lost/doubled/reordered messages, devices away and back, split hosts).
+* Not done / unverified: real WebRTC and a real tablet were never tried (tests use in-memory links). A device that comes back after a
+  collection with offline edits rebuilds by retyping; words typed after a character others deleted and collected, from a device that
+  never saw the collection outside the resume flow, are dropped (logged as `lost`). An older app's simultaneous edits to one text are
+  merged only against the text it was last given, so a very old base can mis-place them.
 
 ## The block editor
 

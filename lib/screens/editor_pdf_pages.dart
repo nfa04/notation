@@ -157,6 +157,13 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
         for (final file in pickedAll.skip(1)) ?await pickedPath(file),
       ];
 
+      // (a note with pages written in it keeps them: the PDF comes after them)
+      final written = _pdfFilePath == null ? _lastUsedBlankPage + 1 : 0;
+      if (written > 0) {
+        await _importPdfsAfterPages(written, [pickedFile, ...others]);
+        return;
+      }
+
       setState(() => _isLoadingPdf = true);
 
       final fileName = picked.name;
@@ -240,6 +247,8 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
         ).delete().catchError((Object _) => File(previousFile));
       }
       widget.onPdfImported?.call();
+      // (the others in a live session get the PDF; with more files, adding them tells what all of them are)
+      if (others.isEmpty) _announcePdfs(null);
       if (others.isNotEmpty) await _addPdfFiles(others);
     } catch (e) {
       setState(() => _isLoadingPdf = false);

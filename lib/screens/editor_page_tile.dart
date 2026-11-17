@@ -486,6 +486,18 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                 ),
               ),
 
+            // the lines others are drawing right now (gone when they are finished: they then are lines of the note)
+            if (_live != null)
+              IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    key: const ValueKey('wet-ink'),
+                    painter: WetInkPainter(_live!.wet, pageIndex, _live!.site, pressureSensitivity: widget.stylus?.effectiveSensitivity ?? 0.6),
+                    size: Size(_paperWidth, pageHeight),
+                  ),
+                ),
+              ),
+
             // the guides: an overlay, the spokes of a perspective drawing, a ruler or a set square
             if (_mode == CanvasInteractionMode.draw && _guidesShown) _guidesLayer(pageIndex, pageHeight),
 
@@ -674,6 +686,12 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                         .putIfAbsent(pageIndex, () => [])
                         .add(_currentActiveStroke!);
                   });
+                  if (!_lassoing && _currentActiveStroke != null) {
+                    _live?.drawing(pageIndex, _currentActiveStroke!); // (the others see it grow, with its repeats)
+                    for (final copy in _symmetryCopies) {
+                      _live?.drawing(pageIndex, copy);
+                    }
+                  }
                 },
                 onPointerHover: (event) {
                   if (_penPath != null && _penPage == pageIndex) {
@@ -730,6 +748,10 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                       _remakeSymmetry(stroke);
                     }
                     _inkTick.value++;
+                    _live?.drawing(pageIndex, stroke);
+                    for (final copy in _symmetryCopies) {
+                      _live?.drawing(pageIndex, copy);
+                    }
                   }
                 },
                 onPointerUp: (event) {
@@ -881,6 +903,12 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     _draggingStroke = false;
                   });
                   if (moved) _scheduleSave();
+                  // the line is a part of the note now (and goes as a change of it), or it was a tap and is gone
+                  if (stroke != null) {
+                    for (final s in [stroke, ...copies]) {
+                      _live?.drawingEnded(s.id, kept: _strokesPerPage[pageIndex]?.contains(s) ?? false);
+                    }
+                  }
                 },
                 onPointerCancel: (_) {
                   _commitErase();
@@ -903,6 +931,11 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                   _draggingStroke = false;
                   _stylusDown = false;
                   if (_penDown) setState(() => _penDown = false);
+                  if (cut != null) {
+                    for (final s in [cut, ...cutCopies]) {
+                      _live?.drawingEnded(s.id, kept: true);
+                    }
+                  }
                 },
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,

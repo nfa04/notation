@@ -41,7 +41,7 @@ class AutomationsView extends StatelessWidget {
     if (!context.mounted) return;
     final result = await showDialog<Automation>(
       context: context,
-      builder: (context) => AutomationDialog(existing: existing, folders: folders, extensions: extensions, events: service.events, templates: choices),
+      builder: (context) => AutomationDialog(existing: existing, folders: folders, extensions: extensions, events: service.events, templates: choices, clouds: service.cloudChoices),
     );
     if (result == null) return;
     if (existing == null) {
@@ -160,7 +160,9 @@ class AutomationsView extends StatelessWidget {
           if (a.folderId != null) tr('Only for notes in {folder}', {'folder': folderName(a.folderId)}),
           if (a.contains != null && a.contains!.trim().isNotEmpty) tr('Only when the name contains: {text}', {'text': a.contains}),
           switch (a.action) {
-            AutomationAction.exportPdf => tr('Into {folder}', {'folder': a.params['dir'] ?? tr('(no folder chosen)')}),
+            AutomationAction.exportPdf => (a.params['cloud'] ?? '').isNotEmpty
+                ? tr('Into {folder} on {account}', {'folder': a.params['dir'] ?? '', 'account': service.cloudChoices.where((c) => c.id == a.params['cloud']).firstOrNull?.label ?? a.params['cloud']})
+                : tr('Into {folder}', {'folder': a.params['dir'] ?? tr('(no folder chosen)')}),
             AutomationAction.addTask =>
               tr('Task: {title}', {'title': a.params['title'] ?? '{title}'}) +
                   (a.params['smart'] == '1' ? tr(' (title improved by the language model)') : ''),
@@ -291,8 +293,11 @@ class AutomationDialog extends StatefulWidget {
   /// is one that can follow another. What comes back is an [Automation] of which only the action and the settings count.
   final bool step;
 
+  /// The cloud accounts a PDF can be put on (id and name).
+  final List<({String id, String label})> clouds;
+
   const AutomationDialog(
-      {super.key, this.existing, required this.folders, this.extensions, this.events = AutomationEvent.values, this.templates = const [], this.step = false});
+      {super.key, this.existing, required this.folders, this.extensions, this.events = AutomationEvent.values, this.templates = const [], this.step = false, this.clouds = const []});
 
   @override
   State<AutomationDialog> createState() => _AutomationDialogState();
@@ -312,6 +317,8 @@ class _AutomationDialogState extends State<AutomationDialog> {
   late String? _scope = widget.existing?.folderId;
   late String? _target = widget.existing?.params['folder'];
   late TaskDue _due = TaskDue.values.where((d) => d.name == widget.existing?.params['due']).firstOrNull ?? TaskDue.none;
+  /// Where the PDF goes: '' this device, else the id of a cloud account (the folder is then a folder of it).
+  late String _cloud = widget.clouds.any((c) => c.id == widget.existing?.params['cloud']) ? widget.existing!.params['cloud']! : '';
   late final TextEditingController _dir = TextEditingController(text: widget.existing?.params['dir'] ?? '');
   late final TextEditingController _taskTitle =
       TextEditingController(text: widget.existing?.params['title'] ?? _defaultTask(_event));
@@ -412,7 +419,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
         lastRun: widget.existing?.lastRun,
         lastResult: widget.existing?.lastResult,
         params: switch (_action) {
-          AutomationAction.exportPdf => {'dir': _dir.text.trim()},
+          AutomationAction.exportPdf => {'dir': _dir.text.trim(), if (_cloud.isNotEmpty) 'cloud': _cloud},
           AutomationAction.addTask => {
             'title': _taskTitle.text.trim(),
             'due': _due.name,
@@ -670,7 +677,30 @@ class _AutomationDialogState extends State<AutomationDialog> {
                     }),
             ),
             const SizedBox(height: 8),
-            if (_action == AutomationAction.exportPdf || _action == AutomationAction.saveNoteFile)
+            if (_action == AutomationAction.exportPdf && widget.clouds.isNotEmpty) ...[
+              DropdownButtonFormField<String>(
+                key: const ValueKey('automation-pdf-where'),
+                initialValue: _cloud,
+                decoration: InputDecoration(labelText: tr('Put the PDF'), helperText: tr('A cloud account works on every device that has it; a folder of this device only here')),
+                items: [
+                  DropdownMenuItem(value: '', child: Text(tr('In a folder on this device'))),
+                  for (final c in widget.clouds) DropdownMenuItem(value: c.id, child: Text(tr('In {account}', {'account': c.label}))),
+                ],
+                onChanged: (v) => setState(() => _cloud = v ?? ''),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (_action == AutomationAction.exportPdf && _cloud.isNotEmpty)
+              TextField(
+                key: const ValueKey('automation-dir'),
+                controller: _dir,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: tr('Folder in the account'),
+                  helperText: tr('e.g. Notes/PDFs (made if it is not there); named after the note, an older one is replaced'),
+                ),
+              )
+            else if (_action == AutomationAction.exportPdf || _action == AutomationAction.saveNoteFile)
               Row(children: [
                 Expanded(
                   child: TextField(
