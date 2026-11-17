@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,13 +9,16 @@ import 'package:notes/ai/ai_prompt.dart';
 import 'package:notes/ai/ai_service.dart';
 import 'package:notes/ai/assistant_chat.dart';
 import 'package:notes/ai/document_index.dart';
+import 'package:notes/ai/note_lookup.dart';
 import 'package:notes/ai/openai_provider.dart';
 import 'package:notes/ai/text_provider.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/llm/onnx_chat_provider.dart';
 import 'package:notes/models/canvas_models.dart';
+import 'package:notes/screens/assistant_panel.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
+import 'package:notes/search/search_query.dart' show InkText;
 import 'package:notes/sync/caldav_service.dart' show SecretStore;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
@@ -54,6 +58,21 @@ class _Provider extends ChangeNotifier implements TextModelProvider, ContextSize
       await hold?.future;
     }
     return shown;
+  }
+}
+
+/// Answers the first time with the start of an answer that reached the limit, then with the rest.
+class _CutProvider extends _Provider {
+  var _turn = 0;
+  @override
+  Future<String> complete(AiPrompt prompt, {int maxTokens = 256, void Function(String partial)? onPartial, AiCancel? cancel}) async {
+    prompts.add(prompt);
+    final n = _turn++;
+    if (n == 0) {
+      cancel?.cutOff = true;
+      return 'The exam is on 20';
+    }
+    return n == 1 ? 'June in room B12.' : 'The exam is on 20 June in room B12.';
   }
 }
 
@@ -213,7 +232,7 @@ void main() {
       for (var i = 0; i < 6; i++) {
         await c.ask('question $i');
       }
-      expect(big.prompts.last.history.length, lessThanOrEqualTo(6));
+      expect(big.prompts.last.history.length, lessThanOrEqualTo(10));
       expect(big.prompts.last.history.first.fromUser, isTrue);
     });
 
@@ -250,6 +269,127 @@ void main() {
     });
   });
 
+  group('what the assistant reads for a question', () {
+    test('a question names its pages, "this page" is the one looked at, a summary is about everything', () {
+      expect(focusOf('Summarize page 12', pageCount: 30).pages, [11]);
+      expect(focusOf('What do pages 3-5 say?', pageCount: 30).pages, [2, 3, 4]);
+      expect(focusOf('Fasse Seite 7 zusammen', pageCount: 30).pages, [6]);
+      expect(focusOf('Explain this page', currentPage: 4, pageCount: 30).pages, [4]);
+      expect(focusOf('What is on page 99?', pageCount: 30).scope, isNot(QuestionScope.pages));
+      expect(focusOf('What are the key points?').scope, QuestionScope.whole);
+      expect(focusOf('Was sind die wichtigsten Punkte?').scope, QuestionScope.whole);
+      expect(focusOf('When is the exam?').scope, QuestionScope.passages);
+    });
+
+    test('a passage that says it in other words is found by its vector', () {
+      final doc = longDocument();
+      // the question shares no word with the passage about entropy; the "sentence model" says they are close
+      final vectors = [for (final c in doc.chunks) c.text.contains('Entropy') ? Float32List.fromList([1, 0]) : Float32List.fromList([0, 1])];
+      final asked = Float32List.fromList([1, 0.1]);
+      expect(doc.select('Why does disorder grow?', 1500).text, isNot(contains('Entropy never decreases')));
+      expect(doc.withVectors(vectors).select('Why does disorder grow?', 1500, queryVector: asked).text, contains('Entropy never decreases'));
+    });
+
+    test('the model is told where the person is, what is selected, the date and what part of the note it sees', () async {
+      final provider = _Provider(chars: 2000);
+      final c = AssistantChat(
+        ai: AiService(providers: [provider]),
+        index: () async => longDocument(),
+        whereAmI: () => const NoteContext(title: 'Physics', page: 40, pageCount: 42, selected: 'Bring a calculator.'),
+      );
+      await c.ask('Explain this page');
+      final user = provider.prompts.single.user;
+      expect(user, contains('The note is called "Physics" and has 42 pages.'));
+      expect(user, contains('The user is looking at page 41.'));
+      expect(user, contains('Today is '));
+      expect(user, contains('You are given page 41'));
+      expect(user, contains('Selected by the user:\nBring a calculator.'));
+      expect(user, contains('The final exam takes place on 20 June'));
+      expect(c.messages.last.given, contains('The final exam takes place'));
+    });
+
+    test('the sentence model is asked only for passages it did not read before', () async {
+      final provider = _Provider(chars: 2000);
+      final read = <String>[];
+      final c = AssistantChat(
+        ai: AiService(providers: [provider]),
+        index: () async => longDocument(),
+        embed: (text) async {
+          read.add(text);
+          return Float32List.fromList([text.contains('Entropy') || text.contains('disorder') ? 1 : 0, 1]);
+        },
+        keptVectors: () async => {for (final c in longDocument().chunks.take(10)) c.text: Float32List.fromList([0, 1])},
+      );
+      await c.ask('Why does disorder grow in a closed box?');
+      final first = read.length;
+      expect(first, lessThanOrEqualTo(33)); // the question and at most 32 passages
+      expect(read.skip(1).toSet().intersection(longDocument().chunks.take(10).map((c) => c.text).toSet()), isEmpty); // kept ones are not read again
+      await c.ask('Why does disorder grow in a closed box?');
+      expect(read.skip(first + 1).toSet().intersection(read.take(first).toSet()), isEmpty);
+    });
+
+    test('an answer that was cut off can be continued in the same message, and the last question asked again', () async {
+      final provider = _CutProvider();
+      final c = AssistantChat(ai: AiService(providers: [provider]), index: () async => longDocument());
+      await c.ask('When is the final exam?');
+      expect(c.messages.last.cutOff, isTrue);
+      await c.continueAnswer();
+      expect(c.messages.length, 2);
+      expect(c.messages.last.text, 'The exam is on 20 June in room B12.');
+      expect(c.messages.last.cutOff, isFalse);
+      expect(provider.prompts.last.history.last.text, 'The exam is on 20');
+      expect(provider.prompts.last.user, contains('cut off'));
+      await c.retry();
+      expect(c.messages.length, 2);
+      expect(provider.prompts.length, 3);
+    });
+
+    test('the conversation is kept and taken up again; clearing it forgets it', () async {
+      String? kept;
+      AssistantChat open() => AssistantChat(
+            ai: AiService(providers: [_Provider()]),
+            index: () async => longDocument(),
+            loadChat: () async => kept,
+            saveChat: (json) async => kept = json,
+          );
+      final first = open();
+      await first.ask('When is the final exam?');
+      expect(kept, isNotNull);
+      final again = open();
+      await again.restoreChat();
+      expect(again.messages.map((m) => m.text), ['When is the final exam?', 'It is about entropy (p. 1).']);
+      expect(again.messages.last.pages, isNotEmpty);
+      again.clear();
+      expect(kept, isNull);
+    });
+
+    test('a note the question refers to is given whole, with its id, in both chats', () async {
+      final provider = _Provider(chars: 3000);
+      final c = AssistantChat(
+        ai: AiService(providers: [provider]),
+        index: () async => longDocument(),
+        lookup: NoteLookup(find: (q) async => [const NoteRef('n1', 'Chemistry')], read: (id, limit) async => 'Acids donate protons.'),
+      );
+      await c.ask('Compare it with @Chemistry', refs: const [NoteRef('n1', 'Chemistry')]);
+      final user = provider.prompts.single.user;
+      expect(user, contains('[Chemistry (id n1)]\nAcids donate protons.'));
+      expect(c.messages.first.refs.single.id, 'n1');
+      await c.ask('And without a note');
+      expect(provider.prompts.last.user, isNot(contains('Acids donate protons.')), reason: 'only for the question that names it');
+    });
+
+    test('the newest answer is given whole in the history, older ones shortened', () async {
+      final provider = _Provider(chars: 48000, answer: 'word ' * 400);
+      final c = AssistantChat(ai: AiService(providers: [provider]), index: () async => longDocument());
+      await c.ask('First?');
+      await c.ask('Second?');
+      await c.ask('Third?');
+      final history = provider.prompts.last.history;
+      expect(history.last.text.length, greaterThan(1500));
+      expect(history[1].text.length, greaterThan(1500)); // there was room for both
+    });
+  });
+
   testWidgets('the assistant beside a note: ask, read the answer, go to the page, add it to the note', (tester) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;
@@ -264,6 +404,10 @@ void main() {
       note.title = 'Physics';
       note.textBoxes[0] = [TextBoxWidgetModel(id: 'b', position: const Offset(100, 100), initialText: 'Entropy never decreases in an isolated system.')];
       await repo.saveNote(note);
+      // handwriting that was read before
+      await repo.text.saveInkText(id, [const InkText(key: 'k1', page: 0, text: 'Heat flows from hot to cold.', bounds: Rect.fromLTRB(100, 300, 400, 340))], {'k1'});
+      // and a formula read above it
+      await repo.text.saveInkReads(id, [(key: 'f1', ids: '', text: null, latex: r'\Delta S \geq 0', place: (page: 0, top: 200.0, left: 100.0))]);
     });
     final provider = _Provider(answer: 'Entropy never decreases (p. 1).');
     final ai = AiService(providers: [provider]);
@@ -291,7 +435,18 @@ void main() {
     final sent = provider.prompts.single;
     expect(sent.user, contains('[Title]\nPhysics'));
     expect(sent.user, contains('[Page 1]\nEntropy never decreases in an isolated system.'));
+    expect(sent.user, contains('\$\\Delta S \\geq 0\$\nHeat flows from hot to cold.')); // the handwriting, the formula first as it is higher up
+    expect(sent.user, contains('The note is called "Physics"'));
+    expect(sent.user, contains('You are given all of its text.'));
     expect(find.byKey(const ValueKey('assistant-page-1')), findsOneWidget);
+    // what the model read can be looked at
+    await tester.tap(find.byKey(const ValueKey('assistant-given-1')));
+    await tester.pumpAndSettle();
+    expect((tester.widget<SelectableText>(find.byKey(const ValueKey('assistant-given-text')))).data, contains('Heat flows from hot to cold.'));
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('assistant-retry')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-continue')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('assistant-add-1')));
     await tester.pumpAndSettle();
@@ -299,8 +454,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Added to page 1'), findsOneWidget);
     final boxes = tester.widgetList<EditableText>(find.byType(EditableText)).map((e) => e.controller.text);
-    // (the answer in the panel is selectable text, which is an editable text too)
-    expect(boxes.where((t) => t == 'Entropy never decreases (p. 1).'), hasLength(2));
+    expect(boxes.where((t) => t == 'Entropy never decreases (p. 1).'), hasLength(1)); // the new text box (the answer is drawn, not editable)
 
     await tester.tap(find.byKey(const ValueKey('assistant-close')));
     await tester.pumpAndSettle();
@@ -309,6 +463,45 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('assistant-button')));
     await tester.pumpAndSettle();
     expect(find.text('What does entropy do?'), findsOneWidget);
+    // and it was kept for the next time the note is opened (real time for the writes to the database)
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
+      await tester.pump();
+    }
+    final kept = await tester.runAsync(() => repo.settings.get('assistant_chat:$id'));
+    expect(kept, contains('What does entropy do?'));
+  });
+
+  testWidgets('typing @ offers notes; the picked one goes with the question', (tester) async {
+    tester.view.physicalSize = const Size(900, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final provider = _Provider();
+    final chat = AssistantChat(
+      ai: AiService(providers: [provider]),
+      index: () async => longDocument(),
+      lookup: NoteLookup(
+        find: (q) async => [for (final t in ['Chemistry', 'Physics']) if (t.toLowerCase().contains(q.toLowerCase())) NoteRef(t.toLowerCase(), t)],
+        read: (id, limit) async => 'Text of $id.',
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AssistantPanel(ai: AiService(providers: [provider]), chat: chat))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('assistant-input')), 'Compare with @ch');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('assistant-mention-chemistry')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-mention-physics')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('assistant-mention-chemistry')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('assistant-mentions')), findsNothing);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('assistant-input'))).controller!.text, 'Compare with @Chemistry ');
+    await tester.tap(find.byKey(const ValueKey('assistant-send')));
+    for (var i = 0; i < 20 && provider.prompts.isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(provider.prompts.single.user, contains('[Chemistry (id chemistry)]\nText of chemistry.'));
   });
 
   testWidgets('no assistant button without an AI service', (tester) async {

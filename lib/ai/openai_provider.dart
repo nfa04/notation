@@ -485,6 +485,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
         final json = jsonDecode(data) as Map<String, dynamic>;
         final choices = json['choices'] as List?;
         final delta = (choices == null || choices.isEmpty ? null : (choices.first as Map)['delta']) as Map?;
+        if (choices != null && choices.isNotEmpty && (choices.first as Map)['finish_reason'] == 'length') cancel?.cutOff = true;
         final piece = delta?['content'];
         if (piece is String && piece.isNotEmpty) {
           text.write(piece);
@@ -511,6 +512,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
       try {
         final json = jsonDecode(other.toString()) as Map<String, dynamic>;
         final choice = (json['choices'] as List).first as Map;
+        if (choice['finish_reason'] == 'length') cancel?.cutOff = true;
         final message = choice['message'] as Map;
         final content = message['content'];
         if (content is String) text.write(content);

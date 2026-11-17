@@ -86,6 +86,21 @@ class AiService extends ChangeNotifier {
     return p is ContextSized ? (p as ContextSized).contextChars : 6000;
   }
 
+  /// How long an answer of the assistant may be (tokens): a service in the cloud writes a summary of a long note whole, a model on the
+  /// device is slow and gets less room.
+  int get answerTokens => contextChars >= 20000 ? 1500 : 700;
+
+  /// The prompt of [converse].
+  AiPrompt conversePrompt(String excerpts, String question, {List<AiTurn> history = const []}) =>
+      template(AiTask.assistant).promptFor(excerpts, question: question, history: history, maxText: contextChars + 2000);
+
+  /// The prompt of [converseNotes].
+  AiPrompt converseNotesPrompt(String passages, String question, {List<AiTurn> history = const []}) => AiPrompt(
+        system: notesAssistantSystem,
+        user: 'Passages of the notes:\n${passages.trim().length > contextChars + 2000 ? passages.trim().substring(0, contextChars + 2000) : passages.trim()}\n\nQuestion: $question',
+        history: history,
+      );
+
   /// The answer to [question] in a conversation about a document: [excerpts]
   /// are the passages that matter for it, [history] what was said before.
   Future<String> converse(
@@ -97,7 +112,7 @@ class AiService extends ChangeNotifier {
     int maxTokens = 400,
   }) =>
       _need().complete(
-        template(AiTask.assistant).promptFor(excerpts, question: question, history: history, maxText: contextChars + 2000),
+        conversePrompt(excerpts, question, history: history),
         maxTokens: maxTokens,
         onPartial: onPartial,
         cancel: cancel,
@@ -113,11 +128,7 @@ class AiService extends ChangeNotifier {
     int maxTokens = 450,
   }) =>
       _need().complete(
-        AiPrompt(
-          system: notesAssistantSystem,
-          user: 'Passages of the notes:\n${passages.trim().length > contextChars + 2000 ? passages.trim().substring(0, contextChars + 2000) : passages.trim()}\n\nQuestion: $question',
-          history: history,
-        ),
+        converseNotesPrompt(passages, question, history: history),
         maxTokens: maxTokens,
         onPartial: onPartial,
         cancel: cancel,

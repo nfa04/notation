@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 57;
+const int schemaVersion = 58;
 
 const List<String> createStatements = [
   '''
@@ -575,6 +575,9 @@ const String _createInkReads = '''
     ids         TEXT NOT NULL DEFAULT '',
     text        TEXT,
     latex       TEXT,
+    page_index  INTEGER,                           -- where it lies (null: not known), see InkPlace
+    top         REAL,
+    left        REAL,
     PRIMARY KEY (note_id, key)
   )
   ''';
@@ -741,6 +744,12 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  // a formula read in the handwriting keeps its page and place, so that the assistant can be given it where it was written
+  57: [
+    'ALTER TABLE ink_reads ADD COLUMN page_index INTEGER',
+    'ALTER TABLE ink_reads ADD COLUMN top REAL',
+    'ALTER TABLE ink_reads ADD COLUMN left REAL',
+  ],
   // earlier pictures of a kept graph, for comparing and going back
   56: [_createGraphVersions, _createGraphVersionsIndex],
   // the handwriting reader says which words it was unsure of (they are underlined in yellow)

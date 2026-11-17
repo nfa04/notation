@@ -250,6 +250,8 @@ class OnnxChatProvider extends ModelFilesService implements TextModelProvider, S
                 }
               },
       );
+      // (an answer that filled all the room it had was cut, not finished)
+      if (ids.length >= maxTokens && !(cancel?.cancelled ?? false)) cancel?.cutOff = true;
       return tokenizer.decode(ids).trim();
     } catch (e) {
       await unload(); // start from scratch next time

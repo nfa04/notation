@@ -16,7 +16,7 @@ void main() {
     final repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
     final id = await repo.createNote(title: 'Statistics');
     await repo.text.saveInkText(id, [InkText(key: 'k1', page: 2, text: 'Var(Y)=1/4', bounds: const Rect.fromLTRB(1, 2, 30, 40), unsure: 'Var(Y)=1/4')], {'k1'});
-    await repo.text.saveInkReads(id, [(key: 'k2', ids: '', text: null, latex: r'\frac{1}{2}'), (key: 'k3', ids: 'a,b', text: 'hi', latex: null)]);
+    await repo.text.saveInkReads(id, [(key: 'k2', ids: '', text: null, latex: r'\frac{1}{2}', place: (page: 1, top: 20.0, left: 5.0)), (key: 'k3', ids: 'a,b', text: 'hi', latex: null, place: null)]);
 
     final dir = await Directory.systemTemp.createTemp('ink_readings_');
     addTearDown(() => dir.delete(recursive: true));
@@ -32,6 +32,10 @@ void main() {
     expect(texts.single.bounds, const Rect.fromLTRB(1, 2, 30, 40));
     final reads = {for (final r in await repo.text.inkReads(copy.noteId)) r.key: r};
     expect(reads['k2']!.latex, r'\frac{1}{2}');
+    expect(reads['k2']!.place, (page: 1, top: 20.0, left: 5.0), reason: 'where a formula was written travels too');
+    expect(reads['k3']!.place, isNull);
+    expect((await repo.text.inkFormulas(copy.noteId)).single.latex, r'\frac{1}{2}');
+    expect(await repo.text.noteText(copy.noteId), contains(r'$\frac{1}{2}$'));
     expect(reads['k3']!.ids, 'a,b');
     expect(reads['k3']!.text, 'hi');
 
@@ -59,7 +63,7 @@ void main() {
     final repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
     final from = await repo.createNote(title: 'Tablet');
     await repo.text.saveInkText(from, [InkText(key: 'shared', page: 0, text: 'tablet reading', bounds: const Rect.fromLTRB(0, 0, 1, 1))], {'shared'});
-    await repo.text.saveInkReads(from, [(key: 'f1', ids: '', text: null, latex: 'a+b')]);
+    await repo.text.saveInkReads(from, [(key: 'f1', ids: '', text: null, latex: 'a+b', place: null)]);
     final dir = await Directory.systemTemp.createTemp('ink_readings_');
     addTearDown(() => dir.delete(recursive: true));
     final files = NoteFileService(repo, supportDirectory: () async => dir);
@@ -70,7 +74,7 @@ void main() {
       InkText(key: 'shared', page: 0, text: 'laptop reading', bounds: const Rect.fromLTRB(0, 0, 1, 1)),
       InkText(key: 'mine', page: 1, text: 'only here', bounds: const Rect.fromLTRB(0, 0, 2, 2)),
     ], {'shared', 'mine'});
-    await repo.text.saveInkReads(here, [(key: 'f2', ids: '', text: null, latex: 'c+d')]);
+    await repo.text.saveInkReads(here, [(key: 'f2', ids: '', text: null, latex: 'c+d', place: null)]);
     await files.restoreInto(here, bytes);
 
     final texts = {for (final t in await repo.text.inkTexts(here)) t.key: t.text};

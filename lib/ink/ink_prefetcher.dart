@@ -502,7 +502,14 @@ class InkPrefetcher extends ChangeNotifier {
   /// What is to be kept of the readings now: the text of each block that has been read (by block, for the search; while the maths
   /// check reads by rows, a block whose rows are all read has their text, a line to a row) and the keys of all blocks; the
   /// formulas read and the conversions of selections whose strokes are all still there as they were.
-  ({List<({InkCluster block, String text})> texts, Set<String> blocks, Map<String, String> formulas, Map<String, String> unsure, Map<String, ({Set<String> ids, String? text, String? latex})> picked}) toKeep() {
+  ({
+    List<({InkCluster block, String text})> texts,
+    Set<String> blocks,
+    Map<String, String> formulas,
+    Map<String, ({int page, double top, double left})> places,
+    Map<String, String> unsure,
+    Map<String, ({Set<String> ids, String? text, String? latex})> picked,
+  }) toKeep() {
     final blocks = _blocks();
     final List<({InkCluster block, String text})> texts;
     final unsure = <String, String>{};
@@ -525,10 +532,13 @@ class InkPrefetcher extends ChangeNotifier {
       }
     }
     _forgetPicked();
+    final read = _rows ? _rowClusters() : blocks;
     return (
       texts: texts,
       blocks: {for (final b in blocks) b.key},
-      formulas: {for (final c in _rows ? _rowClusters() : blocks) c.key: ?_cache[c.key]?.latex},
+      formulas: {for (final c in read) c.key: ?_cache[c.key]?.latex},
+      // (where each formula is: the assistant is given it on its page, in the order it was written)
+      places: {for (final c in read) if (_cache[c.key]?.latex != null) c.key: (page: c.page, top: c.bounds.top, left: c.bounds.left)},
       unsure: unsure,
       picked: {
         for (final e in _picked.entries)

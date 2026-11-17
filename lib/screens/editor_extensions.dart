@@ -148,7 +148,7 @@ extension _EditorExtensions on _FixedPageNoteEditorState {
 }
 
 /// What an extension can do from the text of the editor: read the note, change the selection and the title.
-class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadApi, _EditorWideApi {
+class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadApi, ManageNotesApi, _EditorWideApi {
   @override
   final _FixedPageNoteEditorState _editor;
   final TextEditingController _controller;

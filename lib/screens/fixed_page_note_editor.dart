@@ -105,6 +105,7 @@ import '../data/note_repository.dart';
 import '../extensions/draw_result.dart';
 import '../extensions/extension_host.dart';
 import '../extensions/library_api.dart';
+import '../extensions/manage_notes_api.dart';
 import '../extensions/notes_read_api.dart';
 import '../extensions/extension_manifest.dart';
 import '../extensions/extension_service.dart';
@@ -113,6 +114,8 @@ import '../extensions/pdf_text.dart';
 import 'add_to_note.dart';
 import 'generated_panel.dart';
 import '../ai/note_agent.dart';
+import '../ai/note_knowledge.dart';
+import '../ai/note_lookup.dart';
 import '../extensions/shared_api.dart';
 import '../features/feature.dart';
 import '../features/toolbar_profiles.dart';
@@ -444,6 +447,10 @@ class FixedPageNoteEditor extends StatefulWidget {
   /// Writes summaries of highlighted text (the AI providers); null where unavailable.
   final AiService? ai;
 
+  /// What the notes say, read with the sentence model: the assistant finds passages of this note with it that say what was asked in
+  /// other words. Null: the words alone find them.
+  final NoteKnowledge? knowledge;
+
   /// Saving the note as a file; null hides the button.
   final NoteFileService? noteFiles;
 
@@ -556,6 +563,7 @@ class FixedPageNoteEditor extends StatefulWidget {
     this.onOpenNote,
     this.onPdfImported,
     this.ai,
+    this.knowledge,
     this.noteFiles,
     this.collab,
     this.history,
