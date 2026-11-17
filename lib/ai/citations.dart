@@ -37,7 +37,12 @@ class CitedSource {
 
   /// Whether those words were read from handwriting by the app (and so may be misread).
   final bool handwriting;
-  const CitedSource(this.mark, this.unsupported, this.better, {this.quote = '', this.handwriting = false});
+  /// What the passage says where the statements rest on it (a sentence or two, as written in the note), for the person to check.
+  final List<String> evidence;
+
+  /// Why it does not seem to say what is said (see [ClaimCheck.doubt]); null when it does.
+  final String? reason;
+  const CitedSource(this.mark, this.unsupported, this.better, {this.quote = '', this.handwriting = false, this.evidence = const [], this.reason});
 
   bool get supported => unsupported.isEmpty;
 }
@@ -74,7 +79,11 @@ class AnswerCheck {
 
   /// The statements of the answer one by one (those with something to say), with the passages each names.
   final List<ClaimCheck> claims;
-  const AnswerCheck(this.sources, this.unknown, {this.claims = const []});
+
+  /// The answer with each citation it makes written as the numbers of [sources] (`[1]`, `[2, 3]`): so that what stands on what is
+  /// seen where it is said.
+  final String display;
+  const AnswerCheck(this.sources, this.unknown, {this.claims = const [], this.display = ''});
 
   /// Whether the answer names a passage it was given.
   bool get cited => sources.isNotEmpty;
@@ -168,35 +177,46 @@ bool _looksLikeCitation(String text, List<KnownMark> known) {
 
 /// The stretch of [passage] a statement with [claimTerms] rests on: its sentence with most of the words, cut to six words around
 /// the best of them, and whether that sentence was read from handwriting.
-({String quote, bool handwriting}) _quoteOf(String passage, Set<String> claimTerms) {
+({String quote, bool handwriting, String sentence}) _quoteOf(String passage, Set<String> claimTerms) {
   var bestScore = 0;
   var bestWords = const <String>[];
+  var bestSentence = '';
   var bestInk = false;
   for (final line in passage.split('\n')) {
     final ink = line.trimLeft().startsWith(handwritingMark.trim());
-    for (final sentence in line.split(RegExp(r'(?<=[.!?])\s+'))) {
-      final words = sentence.replaceFirst(handwritingMark.trim(), '').trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    for (final raw in line.split(RegExp(r'(?<=[.!?])\s+'))) {
+      final sentence = raw.replaceFirst(handwritingMark.trim(), '').trim();
+      final words = sentence.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
       final score = searchTerms(words.join(' ')).where(claimTerms.contains).length;
       if (score > bestScore) {
         bestScore = score;
         bestWords = words;
+        bestSentence = sentence;
         bestInk = ink;
       }
     }
   }
-  if (bestScore == 0) return (quote: '', handwriting: false);
-  if (bestWords.any((w) => w.contains(r'$'))) return (quote: '', handwriting: bestInk);
+  if (bestScore == 0) return (quote: '', handwriting: false, sentence: '');
+  final sentence = bestSentence.length > 240 ? '${bestSentence.substring(0, 237)}...' : bestSentence;
+  // the words to find it by: a run of plain words (no formula, no Markdown), as the note has them
   const size = 6;
-  var from = 0, best = -1;
-  for (var i = 0;; i++) {
-    final n = searchTerms(bestWords.skip(i).take(size).join(' ')).where(claimTerms.contains).length;
+  var quote = '';
+  var best = 0;
+  for (var i = 0; i < bestWords.length; i++) {
+    final run = <String>[];
+    for (var j = i; j < bestWords.length && run.length < size; j++) {
+      final w = bestWords[j];
+      if (w.contains(r'$') || w.contains('*') || w.contains(r'\')) break;
+      run.add(w);
+    }
+    if (run.length < 2) continue;
+    final n = searchTerms(run.join(' ')).where(claimTerms.contains).length;
     if (n > best) {
       best = n;
-      from = i;
+      quote = run.join(' ');
     }
-    if (i + size >= bestWords.length) break;
   }
-  return (quote: bestWords.skip(from).take(size).join(' '), handwriting: bestInk);
+  return (quote: quote, handwriting: bestInk, sentence: sentence);
 }
 
 /// Which citations in [answer] name what the model was given ([known], with its text in [given]), and whether the passage named
@@ -217,8 +237,10 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
   final unknown = <String>[];
   // (the citations are lifted out first: "(p. 2)" must not end a sentence at its "p.")
   final groups = <String>[];
+  final groupMarks = <List<KnownMark>>[];
   final lifted = answer.replaceAllMapped(_group, (g) {
     groups.add(g[0]!);
+    groupMarks.add(const []);
     return '\u0001${groups.length - 1}\u0001';
   });
   final token = RegExp('\u0001(\\d+)\u0001');
@@ -228,6 +250,7 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
       final g = _group.firstMatch(groups[int.parse(t[1]!)])!;
       final inner = (g[1] ?? g[2])!;
       final found = _resolve(inner, known);
+      groupMarks[int.parse(t[1]!)] = found;
       if (found.isNotEmpty) {
         cites.addAll(found);
       } else if (g[1] != null && _looksLikeCitation(inner, known) && !unknown.contains(inner.trim())) {
@@ -248,7 +271,9 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
   final marks = <String, KnownMark>{};
   final doubts = <String, List<String>>{};
   final better = <String, KnownMark>{};
-  final quotes = <String, ({String quote, bool handwriting})>{};
+  final quotes = <String, ({String quote, bool handwriting, String sentence})>{};
+  final evidence = <String, List<String>>{};
+  final reasons = <String, String>{};
   final shown = <ClaimCheck>[];
   for (final claim in claims) {
     if (claim.cites.isEmpty) continue;
@@ -265,9 +290,11 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
       }
     }
     final withText = claim.cites.where(hasText).toList();
-    final claimQuotes = {for (final k in claim.cites.toSet()) _norm(k.mark): hasText(k) ? _quoteOf(passages[_norm(k.mark)]!, claimTerms) : (quote: '', handwriting: false)};
+    final claimQuotes = {for (final k in claim.cites.toSet()) _norm(k.mark): hasText(k) ? _quoteOf(passages[_norm(k.mark)]!, claimTerms) : (quote: '', handwriting: false, sentence: '')};
     for (final e in claimQuotes.entries) {
       quotes.putIfAbsent(e.key, () => e.value);
+      final list = evidence.putIfAbsent(e.key, () => []);
+      if (e.value.sentence.isNotEmpty && !list.contains(e.value.sentence) && list.length < 2) list.add(e.value.sentence);
     }
     ClaimCheck made({String? doubt, KnownMark? better}) => ClaimCheck(
         claim.text, [for (final k in claim.cites.toSet()) ClaimSource(k, claimQuotes[_norm(k.mark)]!.quote, claimQuotes[_norm(k.mark)]!.handwriting)],
@@ -288,6 +315,7 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
     }
     for (final k in withText) {
       doubts[_norm(k.mark)]!.add(claim.text);
+      reasons.putIfAbsent(_norm(k.mark), () => missing.isNotEmpty ? 'numbers:${missing.join(', ')}' : 'words');
     }
     // another passage that has it
     KnownMark? best;
@@ -317,7 +345,18 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
       all.add(ClaimCheck(claim.text, const []));
     }
   }
-  return AnswerCheck([for (final key in order) CitedSource(marks[key]!, doubts[key]!, better[key], quote: quotes[key]?.quote ?? '', handwriting: quotes[key]?.handwriting ?? false)], unknown, claims: all);
+  var at = 0;
+  final display = answer.replaceAllMapped(_group, (g) {
+    final found = groupMarks[at++];
+    if (found.isEmpty) return g[0]!;
+    final numbers = {for (final k in found) order.indexOf(_norm(k.mark)) + 1}.toList()..sort();
+    return '[${numbers.join(', ')}]';
+  });
+  return AnswerCheck([
+    for (final key in order)
+      CitedSource(marks[key]!, doubts[key]!, better[key],
+          quote: quotes[key]?.quote ?? '', handwriting: quotes[key]?.handwriting ?? false, evidence: evidence[key] ?? const [], reason: reasons[key])
+  ], unknown, claims: all, display: display);
 }
 
 /// The search that finds [quote] (a few words of a passage) where it is written, whatever lies between its words.

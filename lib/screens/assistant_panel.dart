@@ -390,7 +390,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
           if (m.text.isNotEmpty)
             m.failed
                 ? SelectableText(m.text, style: TextStyle(color: scheme.onErrorContainer))
-                : ChatText(m.text, key: ValueKey('assistant-text-$i'), color: scheme.onSurface),
+                : ChatText(done && (m.check?.cited ?? false) ? m.check!.display : m.text, key: ValueKey('assistant-text-$i'), color: scheme.onSurface),
           if (done && m.check != null) ..._sourcesOf(context, m, i, scheme),
           if (done && !m.failed && !(m.check?.cited ?? false) && m.pages.isNotEmpty && widget.onJumpToPage != null)
             Padding(
@@ -472,40 +472,50 @@ class _AssistantPanelState extends State<AssistantPanel> {
     );
   }
 
-  /// One statement of an answer with the passages it names, each opening its place; a warning, and why, when they do not seem to say it.
-  Widget _claimRow(ClaimCheck claim, int i, int c, ColorScheme scheme, TextStyle small, String Function(KnownMark) label, void Function(KnownMark, String) open) {
-    final doubt = claim.doubt;
-    final why = doubt == null
+  /// One source of an answer: its number (as in the text), where it is (opens the place with the words lit up), what it says there
+  /// as the note has it, and a warning, with why, when it does not seem to say what the answer says.
+  Widget _sourceRow(CitedSource src, int i, int n, ColorScheme scheme, TextStyle small, String Function(KnownMark) label, void Function(KnownMark, String) open) {
+    final reason = src.reason;
+    final why = reason == null
         ? null
-        : doubt.startsWith('numbers:')
-            ? '${tr('The passage does not have this number:')} ${doubt.substring(8)}'
-            : tr('The passage has few of these words: it may say it differently, or not at all.');
-    final text = claim.text.length > 110 ? '${claim.text.substring(0, 107)}...' : claim.text;
+        : reason.startsWith('numbers:')
+            ? '${tr('The passage does not have this number:')} ${reason.substring(8)}'
+            : tr('The passage has few of the words of the statement: it may say it differently, or not at all.');
     return Padding(
-      key: ValueKey('assistant-claim-$i-$c'),
-      padding: const EdgeInsets.only(top: 4),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text.verbatim(text, style: small.copyWith(fontStyle: FontStyle.italic)),
-        Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          if (claim.sources.isEmpty) Text(tr('no source named'), key: ValueKey('assistant-claim-nosource-$i-$c'), style: small),
-          if (doubt != null) Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-claim-doubt-$i-$c')),
-          for (var k = 0; k < claim.sources.length; k++)
-            ActionChip(
-              key: ValueKey('assistant-cite-$i-$c-$k'),
-              avatar: claim.sources[k].handwriting ? Icon(Icons.draw_outlined, size: 16, key: ValueKey('assistant-cite-ink-$i-$c-$k')) : null,
-              label: Text.verbatim(label(claim.sources[k].mark)),
-              tooltip: claim.sources[k].handwriting ? tr('Read from handwriting by the app: it can be misread.') : null,
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              onPressed: () => open(claim.sources[k].mark, claim.sources[k].quote),
-            ),
-        ]),
-        if (why != null)
-          Text(
-            '$why${claim.better == null ? '' : ' ${tr('Perhaps')}: ${label(claim.better!)}'}',
-            key: ValueKey('assistant-claim-why-$i-$c'),
-            style: TextStyle(fontSize: 12, color: scheme.error),
-          ),
+      key: ValueKey('assistant-source-row-$i-$n'),
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 22, child: Text.verbatim('${n + 1}', style: small.copyWith(fontWeight: FontWeight.w700))),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              ActionChip(
+                key: ValueKey('assistant-cite-$i-$n'),
+                avatar: why != null
+                    ? Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$n'))
+                    : src.handwriting
+                        ? Icon(Icons.draw_outlined, size: 16, key: ValueKey('assistant-cite-ink-$i-$n'))
+                        : null,
+                label: Text.verbatim(label(src.mark)),
+                tooltip: src.handwriting ? tr('Read from handwriting by the app: it can be misread.') : null,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                onPressed: () => open(src.mark, src.quote),
+              ),
+            ]),
+            for (final e in src.evidence)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: ChatText(e, color: scheme.onSurfaceVariant, fontSize: 12),
+              ),
+            if (why != null)
+              Text(
+                '$why${src.better == null ? '' : ' ${tr('Perhaps')}: ${label(src.better!)}'}',
+                key: ValueKey('assistant-source-why-$i-$n'),
+                style: TextStyle(fontSize: 12, color: scheme.error),
+              ),
+          ]),
+        ),
       ]),
     );
   }
@@ -535,7 +545,16 @@ class _AssistantPanelState extends State<AssistantPanel> {
           padding: const EdgeInsets.only(top: 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text.verbatim('${tr('Sources')}:', style: small.copyWith(fontWeight: FontWeight.w600)),
-            for (var c = 0; c < check.claims.length; c++) _claimRow(check.claims[c], i, c, scheme, small, label, open),
+            for (var n = 0; n < check.sources.length; n++) _sourceRow(check.sources[n], i, n, scheme, small, label, open),
+            if (check.claims.any((c) => c.sources.isEmpty))
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  tr('Statements with no source named: {n}', {'n': '${check.claims.where((c) => c.sources.isEmpty).length}'}),
+                  key: ValueKey('assistant-nosource-$i'),
+                  style: small,
+                ),
+              ),
           ]),
         )
       else if (m.known.isNotEmpty)

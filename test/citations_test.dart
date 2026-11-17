@@ -79,4 +79,20 @@ void main() {
     final wrong = checkAnswer('The exam is on 21 June [Page 3].', given, note).claims.single;
     expect(wrong.doubt, 'numbers:21');
   });
+
+  test('the answer shows its citations as the numbers of its sources, and each source shows what the note says there', () {
+    final c = checkAnswer('Chlorophyll absorbs red and blue light [Page 1]. Glycolysis yields two ATP [Page 2]. The exam is on 20 June [Page 3]; light matters [Page 1, 3].', given, note);
+    expect(c.display, 'Chlorophyll absorbs red and blue light [1]. Glycolysis yields two ATP [2]. The exam is on 20 June [3]; light matters [1, 3].');
+    expect(c.sources[0].evidence.first, 'Chlorophyll absorbs red and blue light.');
+    expect(c.sources[2].evidence.first, 'The exam is on 20 June in room B12.');
+    // a citation that names nothing is left as written
+    expect(checkAnswer('It is so [Page 40].', given, note).display, 'It is so [Page 40].');
+  });
+
+  test('words to find a passage by are plain words, not formulas or Markdown', () {
+    const text = '[Page 1]\nBinomial **distributed** with \$n\$ trials and \$p\$ success chance in every single trial of the experiment.';
+    final c = checkAnswer('Success chance in every single trial [Page 1].', text, note);
+    expect(c.sources.single.quote, 'success chance in every single trial');
+    expect(c.sources.single.evidence.single, contains(r'$n$'));
+  });
 }
