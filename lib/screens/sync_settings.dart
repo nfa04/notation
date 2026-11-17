@@ -76,7 +76,10 @@ class _SyncSettingsState extends State<SyncSettings> {
   void initState() {
     super.initState();
     // while this is in front, who is online is asked again every half minute
-    widget.service.refreshStatus();
+    // (it tells the listeners of the service, which may be built already: not while this is built)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.service.refreshStatus();
+    });
     _refresh = Timer.periodic(const Duration(seconds: 30), (_) => widget.service.refreshStatus());
   }
 
