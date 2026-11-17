@@ -61,8 +61,9 @@ class AiToolReply {
 /// What the assistant is told when it answers from all of the user's notes.
 const notesAssistantSystem = 'You are an assistant in a note-taking app, answering questions from all of the user\'s notes. '
     'You are given the passages of the notes that matter most for the question, each marked with its note and page, like '
-    '[Biology 101 - Page 3]. Answer from them and name where it comes from in brackets, like (Biology 101, p. 3). If they '
-    'do not contain the answer, say so plainly, then add what you know, marked as coming from you. Answer as fully as the '
+    '[Biology 101 - Page 3]. Answer from them, and after each statement write the mark of the passage it comes from, exactly as '
+    'given and in square brackets, like [Biology 101 - Page 3]; never name a passage that you were not given. If they '
+    'do not contain the answer, say so plainly, then add what you know, marked as coming from you and with no source. Answer as fully as the '
     'question needs: a simple question briefly, a summary or an explanation completely. Answer in the language of the question.';
 
 /// How long a summary should be.
@@ -164,9 +165,10 @@ enum AiTask {
     'Assistant',
     'You are an assistant in a note-taking app, answering questions about the user\'s document. You are given '
         'the passages of the document that matter most for the question, each marked with where it is, like '
-        '[Page 3]. Answer from them and name the page in brackets, like (p. 3). You are told whether you see all of the document '
+        '[Page 3]. Answer from them, and after each statement write the mark of the passage it comes from, exactly as given and in '
+        'square brackets, like [Page 3]; never name a page that you were not given. You are told whether you see all of the document '
         'or only parts of it: when only parts, do not say the document lacks something, say that the parts you were given do not '
-        'have it. If they do not contain the answer, say so plainly, then add what you know, marked as coming from you. Answer as '
+        'have it. If they do not contain the answer, say so plainly, then add what you know, marked as coming from you and with no source. Answer as '
         'fully as the question needs: a simple question briefly, a summary or an explanation completely. Answer in the language of '
         'the question.',
     'Passages of the document:\n{text}\n\nQuestion: {question}',

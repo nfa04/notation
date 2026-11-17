@@ -213,6 +213,23 @@ void main() {
       expect(chat.busy, isFalse);
     });
 
+    test('the answer is checked against the passages it names', () async {
+      final cited = _Provider(answer: 'The final exam takes place on 20 June [Page 41].');
+      final one = AssistantChat(ai: AiService(providers: [cited]), index: () async => longDocument());
+      await one.ask('When is the final exam?');
+      final check = one.messages.last.check!;
+      expect(check.sources.map((s) => (s.mark.mark, s.mark.page, s.supported)), [('Page 41', 40, true)]);
+      // a made-up page, and a statement the page does not make
+      final wrong = _Provider(answer: 'Mitochondria produce energy inside every living cell [Page 41]. See [Page 999].');
+      final two = AssistantChat(ai: AiService(providers: [wrong]), index: () async => longDocument());
+      await two.ask('When is the final exam?');
+      final bad = two.messages.last.check!;
+      expect(bad.sources.single.supported, isFalse);
+      expect(bad.unknown, ['Page 999']);
+      // and the model is told to name them
+      expect(wrong.prompts.single.system, contains('after each statement'));
+    });
+
     test('what was said before is given along, and a short follow-up still finds the passage', () async {
       await chat.ask('When is the final exam?');
       await chat.ask('and where?');
@@ -438,7 +455,10 @@ void main() {
     expect(sent.user, contains('\$\\Delta S \\geq 0\$\nHeat flows from hot to cold.')); // the handwriting, the formula first as it is higher up
     expect(sent.user, contains('The note is called "Physics"'));
     expect(sent.user, contains('You are given all of its text.'));
-    expect(find.byKey(const ValueKey('assistant-page-1')), findsOneWidget);
+    // the answer names page 1 and the page says it: a source to go to, with no doubt
+    expect(find.byKey(const ValueKey('assistant-cite-1-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-cite-doubt-1-0')), findsNothing);
+    expect(find.byKey(const ValueKey('assistant-uncited-1')), findsNothing);
     // what the model read can be looked at
     await tester.tap(find.byKey(const ValueKey('assistant-given-1')));
     await tester.pumpAndSettle();

@@ -13,6 +13,7 @@ import 'note_lookup.dart';
 import 'flashcards.dart';
 import 'text_provider.dart';
 import '../extensions/extension_host.dart';
+import 'citations.dart';
 import '../extensions/extension_manifest.dart';
 import '../l10n/language.dart';
 
@@ -43,6 +44,23 @@ class ChatMessage {
   /// The prompt this answer was written to (to ask for the rest of it).
   AiPrompt? prompt;
 
+  /// The passages the model was given, as they were marked: what its citations can name.
+  List<KnownMark> known = const [];
+
+  AnswerCheck? _check;
+  String? _checked;
+
+  /// Which of those the answer names, and whether they say what it says (see [checkAnswer]); null until the answer is there.
+  AnswerCheck? get check {
+    if (fromUser || failed || known.isEmpty || text.isEmpty) return null;
+    final key = '${text.length}:${given.length}:${known.length}:${text.hashCode}';
+    if (_checked != key) {
+      _checked = key;
+      _check = checkAnswer(text, given, known);
+    }
+    return _check;
+  }
+
   ChatMessage(this.fromUser, this.text, {this.pages = const [], this.sources = const [], this.failed = false});
 }
 
@@ -62,9 +80,12 @@ class NoteContext {
 class _Read {
   final Excerpts excerpts;
 
+  /// The places the passages are marked with.
+  final List<KnownMark> marks;
+
   /// What the model is given: a few lines about the note and what of it this is, then the passages.
   final String text;
-  const _Read(this.excerpts, this.text);
+  const _Read(this.excerpts, this.text, this.marks);
 }
 
 /// A note (and the page in it, zero-based) that an answer drew on.
@@ -341,6 +362,7 @@ class AssistantChat extends ChangeNotifier {
       final read = await _read(q, previous, budget);
       answer.pages = read.excerpts.pages;
       answer.given = read.text;
+      answer.known = read.marks;
       status = tr('Writing...');
       notifyListeners();
       final prompt = answer.prompt = ai.conversePrompt(read.excerpts.text.isEmpty ? '${read.text}\n(The document has no text.)' : read.text, q, history: history);
@@ -477,6 +499,7 @@ class AssistantChat extends ChangeNotifier {
       final read = await _read(request, previous, budget);
       answer.pages = read.excerpts.pages;
       answer.given = read.text;
+      answer.known = read.marks;
       // (what is selected is in what was read, when there is a [whereAmI] to say it)
       user0 = readOnly ? ai.conversePrompt(read.text, request).user : agentRequest(read.text, request, whereAmI == null ? agent.selected?.call()?.trim() : null);
       if (readOnly) answer.prompt = ai.conversePrompt(read.text, request, history: history);
@@ -681,6 +704,11 @@ class AssistantChat extends ChangeNotifier {
       for (final p in found.passages) ChatSource(p.noteId, p.title, p.page),
     ].fold<List<ChatSource>>([], (list, s) => list.any((o) => o.noteId == s.noteId && o.page == s.page) ? list : (list..add(s)));
     // (each note with its id, so that the model can read the rest of one, or file it)
+    final seenMarks = <String>{};
+    answer.known = [
+      for (final p in found.passages)
+        if (seenMarks.add('${p.noteId}|${p.label}')) KnownMark('${p.title} - ${p.label}', title: p.title, page: p.page, noteId: p.noteId),
+    ];
     final ids = {for (final p in found.passages) p.title: p.noteId};
     final notes = ids.isEmpty ? '' : '\n\nThe notes, with their ids: ${ids.entries.map((e) => '"${e.key}" (id ${e.value})').join('; ')}.';
     final mention = _mention.isEmpty ? '' : '\n\n$_mention';
@@ -849,7 +877,12 @@ class AssistantChat extends ChangeNotifier {
       if (selected.isNotEmpty) 'Selected by the user:\n${selected.length > 3000 ? '${selected.substring(0, 3000)}...' : selected}',
       if (excerpts.text.isNotEmpty) excerpts.text,
     ].join('\n\n');
-    return _Read(excerpts, text);
+    final seen = <String>{};
+    final marks = [
+      for (final c in doc.chunks)
+        if (seen.add(c.where)) KnownMark(c.where, page: c.page),
+    ];
+    return _Read(excerpts, text, marks);
   }
 
   /// The vector of each chunk of [doc] that is known: those kept from before, those read earlier in the conversation, and up to

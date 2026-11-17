@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../ai/ai_service.dart';
 import '../ai/assistant_chat.dart';
+import '../ai/citations.dart';
 import '../ai/flashcards.dart' show Flashcard;
 import '../ai/line_diff.dart';
 import '../ai/note_agent.dart';
@@ -386,7 +387,8 @@ class _AssistantPanelState extends State<AssistantPanel> {
             m.failed
                 ? SelectableText(m.text, style: TextStyle(color: scheme.onErrorContainer))
                 : ChatText(m.text, key: ValueKey('assistant-text-$i'), color: scheme.onSurface),
-          if (done && !m.failed && m.pages.isNotEmpty && widget.onJumpToPage != null)
+          if (done && m.check != null) ..._sourcesOf(context, m, i, scheme),
+          if (done && !m.failed && !(m.check?.cited ?? false) && m.pages.isNotEmpty && widget.onJumpToPage != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Wrap(spacing: 6, runSpacing: 0, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -401,7 +403,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   ),
               ]),
             ),
-          if (done && !m.failed && m.sources.isNotEmpty && widget.onOpenSource != null)
+          if (done && !m.failed && !(m.check?.cited ?? false) && m.sources.isNotEmpty && widget.onOpenSource != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Wrap(spacing: 6, runSpacing: 0, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -464,6 +466,61 @@ class _AssistantPanelState extends State<AssistantPanel> {
         ]),
       ),
     );
+  }
+
+  /// Where the answer says it comes from: the passages it names, each opening its place, marked when the passage does not seem to
+  /// say what the answer says there; and a word when it names nothing, or something it was not given.
+  List<Widget> _sourcesOf(BuildContext context, ChatMessage m, int i, ColorScheme scheme) {
+    final check = m.check!;
+    final small = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
+    void open(KnownMark k) {
+      if (k.noteId.isNotEmpty && widget.onOpenSource != null) {
+        widget.onOpenSource!(k.noteId, k.page);
+      } else if (k.page != null && widget.onJumpToPage != null) {
+        widget.onJumpToPage!(k.page!);
+      }
+    }
+
+    String label(KnownMark k) => k.title.isEmpty
+        ? (k.page == null ? k.mark : '${tr('p.')} ${k.page! + 1}')
+        : (k.page == null ? k.title : '${k.title}, ${tr('p.')} ${k.page! + 1}');
+
+    return [
+      if (check.cited)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Wrap(spacing: 6, runSpacing: 0, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Text.verbatim('${tr('Sources')}:', style: small),
+            for (var j = 0; j < check.sources.length; j++)
+              Builder(builder: (context) {
+                final s = check.sources[j];
+                final doubt = s.supported
+                    ? null
+                    : '${tr('This passage does not seem to say:')} ${s.unsupported.first}'
+                        '${s.better == null ? '' : '\n${tr('Perhaps')}: ${label(s.better!)}'}';
+                return ActionChip(
+                  key: ValueKey('assistant-cite-$i-$j'),
+                  avatar: doubt == null ? null : Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$j')),
+                  label: Text.verbatim(label(s.mark)),
+                  tooltip: doubt,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => open(s.mark),
+                );
+              }),
+          ]),
+        )
+      else if (m.known.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(tr('This answer names no passage of your notes: it may come from the model, not from them.'), key: ValueKey('assistant-uncited-$i'), style: small),
+        ),
+      if (check.unknown.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text('${tr('Named, but not among what was read')}: ${check.unknown.join(', ')}', key: ValueKey('assistant-unknown-cite-$i'), style: TextStyle(fontSize: 12, color: scheme.error)),
+        ),
+    ];
   }
 
   /// What the model was given for an answer: the person can see why it said what it said (or why it missed something).

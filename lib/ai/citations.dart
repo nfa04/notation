@@ -1,0 +1,217 @@
+import 'document_index.dart' show searchTerms;
+
+/// A passage the model was given, as it was marked: `[Biology 101 - Page 3]` (all notes) or `[Page 3]` (one note).
+class KnownMark {
+  /// The mark as written between the brackets, without the date a passage may be marked with.
+  final String mark;
+
+  /// The note's title ('' when the question is about one note, which the person has open).
+  final String title;
+
+  /// Zero-based; null for the title of a note.
+  final int? page;
+
+  /// The note it is in ('' for the open note).
+  final String noteId;
+  const KnownMark(this.mark, {this.title = '', this.page, this.noteId = ''});
+}
+
+/// A source the answer names, and whether the passage it names says what the answer says there.
+class CitedSource {
+  final KnownMark mark;
+
+  /// The statements that cite it and that the passage does not seem to support (words or numbers it lacks).
+  final List<String> unsupported;
+
+  /// A mark that fits an unsupported statement better, when the model named the wrong page.
+  final KnownMark? better;
+  const CitedSource(this.mark, this.unsupported, this.better);
+
+  bool get supported => unsupported.isEmpty;
+}
+
+/// What an answer says about where it comes from, checked against what the model was given.
+class AnswerCheck {
+  /// The passages the answer names, in the order it first names them.
+  final List<CitedSource> sources;
+
+  /// Citations that look like one but name nothing the model was given (made up, or from before).
+  final List<String> unknown;
+  const AnswerCheck(this.sources, this.unknown);
+
+  /// Whether the answer names a passage it was given.
+  bool get cited => sources.isNotEmpty;
+
+  bool get hasProblems => unknown.isNotEmpty || sources.any((s) => !s.supported);
+}
+
+String _norm(String s) {
+  var t = s.toLowerCase().replaceAll(RegExp(r'\s*-\s*changed\s+\d{4}-\d\d-\d\d'), '');
+  t = t.replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ').trim();
+  return t;
+}
+
+/// The text given for each mark, by its normalised mark: the lines of [given] that are a known mark (alone on a line, in brackets,
+/// possibly with the date it changed) start its passage, which lasts to the next one.
+Map<String, String> passagesOf(String given, Iterable<KnownMark> known) {
+  final byNorm = {for (final k in known) _norm(k.mark): k};
+  final out = <String, StringBuffer>{};
+  StringBuffer? current;
+  for (final line in given.split('\n')) {
+    final t = line.trim();
+    if (t.length > 2 && t.startsWith('[') && t.endsWith(']')) {
+      final k = byNorm[_norm(t.substring(1, t.length - 1))];
+      if (k != null) {
+        current = out.putIfAbsent(_norm(k.mark), () => StringBuffer());
+        current.write('\n');
+        continue;
+      }
+    }
+    current?.write('$line\n');
+  }
+  return {for (final e in out.entries) e.key: e.value.toString()};
+}
+
+final _group = RegExp(r'\[([^\[\]\n]{1,100})\](?!\()|\(([^()\n]{1,100})\)');
+final _pageWord = RegExp(r'^(?:pages?|pp?\.?|seiten?|s\.|pages?|pag(?:e|ina)s?)\s*(\d+(?:\s*(?:,|-|–|&|and|und)\s*\d+)*)$', caseSensitive: false);
+final _number = RegExp(r'\d+(?:[.,]\d+)?');
+
+/// The marks that citation [text] (what stands in the brackets) names, none when it names nothing known.
+List<KnownMark> _resolve(String text, List<KnownMark> known) {
+  final c = _norm(text);
+  if (c.isEmpty) return const [];
+  for (final k in known) {
+    if (_norm(k.mark) == c) return [k];
+  }
+  // several in one: "Page 3; Page 5"
+  final parts = text.split(RegExp(r'\s*;\s*'));
+  if (parts.length > 1) {
+    final all = [for (final p in parts) ..._resolve(p, known)];
+    if (all.isNotEmpty) return all;
+  }
+  // the title and a page, written another way: "Biology 101, p. 3"
+  final pages = {for (final m in RegExp(r'\d+').allMatches(text)) int.parse(m[0]!) - 1};
+  final titled = known.where((k) => k.title.isNotEmpty && c.contains(_norm(k.title))).toList();
+  if (titled.isNotEmpty) {
+    final hit = titled.where((k) => k.page != null && pages.contains(k.page)).toList();
+    if (hit.isNotEmpty) return hit;
+    final title = titled.where((k) => k.page == null).toList();
+    if (title.isNotEmpty && pages.isEmpty) return title;
+    return const [];
+  }
+  // just the page ("p. 3", "Seiten 3-5"), where the note is the open one
+  final m = _pageWord.firstMatch(text.trim());
+  if (m != null) {
+    final numbers = <int>{};
+    final spec = m[1]!;
+    final range = RegExp(r'^(\d+)\s*[-–]\s*(\d+)$').firstMatch(spec.trim());
+    if (range != null) {
+      final a = int.parse(range[1]!), b = int.parse(range[2]!);
+      if (b >= a && b - a <= 40) numbers.addAll([for (var n = a; n <= b; n++) n]);
+    } else {
+      numbers.addAll(RegExp(r'\d+').allMatches(spec).map((x) => int.parse(x[0]!)));
+    }
+    final byPage = known.where((k) => k.title.isEmpty && k.page != null && numbers.contains(k.page! + 1)).toList();
+    if (byPage.isNotEmpty) return byPage;
+  }
+  return const [];
+}
+
+/// Whether [text] looks like the name of a source, so that one that matches nothing given is told to the person ("[Page 40]").
+bool _looksLikeCitation(String text, List<KnownMark> known) {
+  final t = text.trim();
+  if (_pageWord.hasMatch(t)) return true;
+  final c = _norm(t);
+  if (known.any((k) => k.title.isNotEmpty && c.contains(_norm(k.title)))) return true;
+  return known.isNotEmpty && RegExp(r'^[^\d]{2,60}\s*[-,]\s*(?:page|p\.?|seite|s\.)\s*\d+$', caseSensitive: false).hasMatch(t);
+}
+
+/// Which citations in [answer] name what the model was given ([known], with its text in [given]), and whether the passage named
+/// says what the statement that names it says. A statement is doubted when many of its words are not in the passage, or a number
+/// in it is not; that is a hint for the person, not a verdict, so the bar is low.
+AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
+  if (known.isEmpty || answer.trim().isEmpty) return const AnswerCheck([], []);
+  final passages = passagesOf(given, known);
+  final termsOf = <String, Set<String>>{};
+  final numbersOf = <String, Set<String>>{};
+  Set<String> terms(KnownMark k) => termsOf.putIfAbsent(_norm(k.mark), () => searchTerms(passages[_norm(k.mark)] ?? '').toSet());
+  Set<String> numbers(KnownMark k) =>
+      numbersOf.putIfAbsent(_norm(k.mark), () => {for (final m in _number.allMatches(passages[_norm(k.mark)] ?? '')) m[0]!.replaceAll(',', '.')});
+  bool hasText(KnownMark k) => (passages[_norm(k.mark)] ?? '').trim().isNotEmpty;
+
+  // statements and the citations in them (a citation on a line of its own belongs to the statement before)
+  final claims = <({String text, List<KnownMark> cites})>[];
+  final unknown = <String>[];
+  // (the citations are lifted out first: "(p. 2)" must not end a sentence at its "p.")
+  final groups = <String>[];
+  final lifted = answer.replaceAllMapped(_group, (g) {
+    groups.add(g[0]!);
+    return '\u0001${groups.length - 1}\u0001';
+  });
+  final token = RegExp('\u0001(\\d+)\u0001');
+  for (final segment in lifted.split(RegExp(r'(?<=[.!?:])\s+|\n+'))) {
+    final cites = <KnownMark>[];
+    for (final t in token.allMatches(segment)) {
+      final g = _group.firstMatch(groups[int.parse(t[1]!)])!;
+      final inner = (g[1] ?? g[2])!;
+      final found = _resolve(inner, known);
+      if (found.isNotEmpty) {
+        cites.addAll(found);
+      } else if (g[1] != null && _looksLikeCitation(inner, known) && !unknown.contains(inner.trim())) {
+        unknown.add(inner.trim());
+      } else if (g[2] != null && _pageWord.hasMatch(inner.trim()) && !unknown.contains(inner.trim())) {
+        unknown.add(inner.trim());
+      }
+    }
+    final text = segment.replaceAll(token, '').replaceFirst(RegExp(r'^\s*(?:[-*]|\d+[.)])\s+'), '').trim();
+    if (text.length < 3 && cites.isNotEmpty && claims.isNotEmpty) {
+      claims.last.cites.addAll(cites);
+    } else if (cites.isNotEmpty || text.isNotEmpty) {
+      claims.add((text: text, cites: cites));
+    }
+  }
+
+  final order = <String>[];
+  final marks = <String, KnownMark>{};
+  final doubts = <String, List<String>>{};
+  final better = <String, KnownMark>{};
+  for (final claim in claims) {
+    if (claim.cites.isEmpty) continue;
+    final claimTerms = searchTerms(claim.text).toSet();
+    final claimNumbers = {for (final m in _number.allMatches(claim.text)) m[0]!.replaceAll(',', '.')};
+    for (final k in claim.cites.toSet()) {
+      final key = _norm(k.mark);
+      if (!marks.containsKey(key)) {
+        marks[key] = k;
+        order.add(key);
+        doubts[key] = [];
+      }
+    }
+    final withText = claim.cites.where(hasText).toList();
+    if (withText.isEmpty) continue; // (read by a tool, or a title: nothing here to check it against)
+    final have = {for (final k in withText) ...terms(k)};
+    final haveNumbers = {for (final k in withText) ...numbers(k)};
+    final overlap = claimTerms.isEmpty ? 1.0 : claimTerms.where(have.contains).length / claimTerms.length;
+    final missing = claimNumbers.where((n) => !haveNumbers.contains(n) && !claim.cites.any((k) => k.page != null && '${k.page! + 1}' == n)).toList();
+    final weak = (claimTerms.length >= 3 && overlap < 0.3) || missing.isNotEmpty && claimTerms.length >= 2;
+    if (!weak) continue;
+    for (final k in withText) {
+      doubts[_norm(k.mark)]!.add(claim.text);
+    }
+    // another passage that has it
+    KnownMark? best;
+    var bestScore = overlap < 0.3 ? 0.5 : overlap + 0.2;
+    for (final other in known) {
+      if (!hasText(other) || withText.contains(other)) continue;
+      final t = terms(other);
+      if (claimTerms.isEmpty || missing.any((n) => !numbers(other).contains(n))) continue;
+      final score = claimTerms.where(t.contains).length / claimTerms.length;
+      if (score >= bestScore) {
+        best = other;
+        bestScore = score;
+      }
+    }
+    if (best != null) better[_norm(withText.first.mark)] = best;
+  }
+  return AnswerCheck([for (final key in order) CitedSource(marks[key]!, doubts[key]!, better[key])], unknown);
+}

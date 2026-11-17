@@ -427,7 +427,7 @@ possible". A service that takes no tools answers from the passages as before.
   there is one) and gives their dates; the number of passages grows with the room of the model (8 to 40).
 
 Answers may be up to 1 500 tokens with a service and 700 with the model on the device. An answer that reaches the limit says so, with a *continue* button that asks for
-the rest in the same message. The last answer can be asked again, and the book icon of an answer shows what the assistant read for it. The conversation carries the newest
+the rest in the same message. The last answer can be asked again, and the book icon of an answer shows what the assistant read for it. The model is asked to write the mark of the passage after each statement (`[Page 3]`, or `[Note - Page 3]` for all notes); the answer is then checked against what it was given (`lib/ai/citations.dart`): the passages it names are chips that open their place, a chip carries a warning when the passage lacks words or numbers of the statement (with the page that fits better, if any), a name that was not given is told, and an answer that names no passage says that it may come from the model. The conversation carries the newest
 answers whole as far as a quarter of the room allows, and up to ten turns. `test/assistant_bench_test.dart` measures what reaches the model for questions of each kind.
 
 ## Automations
