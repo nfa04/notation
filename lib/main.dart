@@ -277,7 +277,7 @@ Future<void> _start() async {
   final llm = LlmService();
   final embeddings = EmbeddingService(settings: settings);
   final summaryModel = OnnxChatProvider(settings: settings);
-  final cloudModel = OpenAiProvider(settings: settings, secret: const KeystoreSecretStore(appSecureStorage, 'ai_openai_key'));
+  final cloudModel = OpenAiProvider(settings: settings, secret: const KeystoreSecretStore(appSecureStorage, 'ai_openai_key'), secretFor: (id) => KeystoreSecretStore(appSecureStorage, 'ai_openai_key_$id'));
   final aiSwitch = AiSwitch(settings);
   // what each of these keeps (settings, model files, the keystore) is read at the same time: none of them needs another to start
   await Future.wait([

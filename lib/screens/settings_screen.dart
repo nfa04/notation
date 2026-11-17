@@ -2,7 +2,7 @@
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart' show OrtProvider;
-import 'package:flutter/services.dart' show Clipboard, ClipboardData, FilteringTextInputFormatter;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../speech/speech_to_text.dart';
 import '../mcp/mcp_service.dart';
 import '../l10n/language.dart';
@@ -40,6 +40,7 @@ import '../data/note_file_service.dart';
 import '../llm/embedding_service.dart';
 import 'note_file_actions.dart';
 import 'share_storage_settings.dart';
+import 'openai_providers_settings.dart';
 import 'shortcut_settings.dart';
 import '../shortcuts/shortcut_service.dart';
 import 'share_people.dart';

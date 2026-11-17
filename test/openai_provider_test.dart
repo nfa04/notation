@@ -224,9 +224,12 @@ void main() {
     final ai = AiService(settings: SettingsRepository(db!), providers: [provider]);
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), ai: ai)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('openai-url')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('openai-add-service')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('openai-add-service')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('ai-unavailable')), findsOneWidget);
     expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('openai-test'))).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('openai-save'))).onPressed, isNull);
 
     await tester.enterText(find.byKey(const ValueKey('openai-url')), 'http://localhost:1234/v1');
     await tester.enterText(find.byKey(const ValueKey('openai-model')), 'qwen');
@@ -239,6 +242,9 @@ void main() {
     }
     expect(find.byKey(const ValueKey('openai-result')), findsOneWidget);
     expect(find.textContaining('Connected: It works.'), findsOneWidget);
+    expect(secret.value, isNull, reason: 'trying does not save');
+    await tester.tap(find.byKey(const ValueKey('openai-save')));
+    await tester.pumpAndSettle();
     expect(provider.config.model, 'qwen');
     expect(secret.value, 'sk-abc');
     expect(provider.state, ProviderState.ready);
@@ -256,20 +262,19 @@ void main() {
     final ai = AiService(settings: SettingsRepository(db!), providers: [provider]);
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), ai: ai)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('openai-url')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('openai-add-service')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('openai-add-service')));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('openai-url')), 'http://localhost:1234/v1');
     await tester.enterText(find.byKey(const ValueKey('openai-model')), 'qwen');
     await tester.enterText(find.byKey(const ValueKey('openai-key')), 'sk-abc');
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('openai-test')));
-    for (var i = 0; i < 20 && find.byKey(const ValueKey('openai-result')).evaluate().isEmpty; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-      await tester.pump();
-    }
+    await tester.tap(find.byKey(const ValueKey('openai-save')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('the keystore is locked'), findsOneWidget);
     expect(sent, isEmpty, reason: 'nothing was asked of the service');
-    // and the button is usable again
-    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('openai-test'))).onPressed, isNotNull);
+    // and the dialog stays, with the button usable again
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('openai-save'))).onPressed, isNotNull);
   });
 
   testWidgets('settings: leaving the screen while the test is running does not fail', (tester) async {
@@ -282,7 +287,9 @@ void main() {
     final ai = AiService(settings: SettingsRepository(db!), providers: [provider]);
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), ai: ai)));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('openai-url')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('openai-add-service')), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('openai-add-service')));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('openai-url')), 'http://localhost:1234/v1');
     await tester.enterText(find.byKey(const ValueKey('openai-model')), 'qwen');
     await tester.pump();
@@ -410,5 +417,47 @@ void main() {
       expect(provider.config.pauseSeconds, 3);
       expect(provider.hasKey, isTrue);
     });
+  });
+
+  test('several providers: each keeps its address, model and key; one answers', () async {
+    final db = await AppDatabase.open(path: inMemoryDatabasePath);
+    await db.delete('settings', where: "key LIKE 'ai_%'");
+    final settings = SettingsRepository(db);
+    final keys = <String, _Secret>{};
+    OpenAiProvider open() => OpenAiProvider(
+          settings: settings,
+          secret: secret,
+          secretFor: (id) => keys.putIfAbsent(id, _Secret.new),
+          transport: (_, _, _, _) => const Stream.empty(),
+        );
+    final a = open();
+    await a.save(const OpenAiConfig(baseUrl: 'http://one/v1', model: 'm1'), 'k1', name: 'One');
+    final two = await a.addProfile('Two');
+    await a.save(const OpenAiConfig(baseUrl: 'http://two/v1', model: 'm2'), 'k2', name: 'Two');
+    expect(a.profiles.map((p) => p.title), ['One', 'Two']);
+    expect((a.config.model, a.activeProfile.id), ('m2', two.id));
+    await a.selectProfile(OpenAiProvider.firstProfileId);
+    await a.selectModel('m1b');
+
+    final b = open();
+    await b.load();
+    expect((b.config.baseUrl, b.config.model, b.currentKey), ('http://one/v1', 'm1b', 'k1'));
+    await b.selectProfile(two.id);
+    expect((b.config.baseUrl, b.currentKey), ('http://two/v1', 'k2'));
+    expect(secret.value, 'k1');
+    await b.removeProfile(two.id);
+    expect((b.profiles.length, b.activeProfile.id), (1, OpenAiProvider.firstProfileId));
+    expect(keys[two.id]!.value, isNull);
+  });
+
+  test('the settings of before there were several become the first provider', () async {
+    final db = await AppDatabase.open(path: inMemoryDatabasePath);
+    await db.delete('settings', where: "key LIKE 'ai_%'");
+    final settings = SettingsRepository(db);
+    await settings.set('ai_openai_config', const OpenAiConfig(baseUrl: 'http://old/v1', model: 'm').encode());
+    secret.value = 'old-key';
+    final p = OpenAiProvider(settings: settings, secret: secret);
+    await p.load();
+    expect((p.profiles.length, p.config.baseUrl, p.currentKey, p.activeProfile.title), (1, 'http://old/v1', 'old-key', 'old'));
   });
 }

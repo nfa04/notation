@@ -24,7 +24,8 @@ class OpenAiModelSwitcher extends StatelessWidget {
       listenable: p,
       builder: (context, _) {
         final model = p.config.model;
-        final label = model.isEmpty ? tr('Choose a model') : model;
+        final many = p.profiles.length > 1;
+        final label = model.isEmpty ? tr('Choose a model') : (many ? '${p.activeProfile.title} · $model' : model);
         void open() => showDialog<void>(context: context, builder: (_) => _ModelList(provider: p));
         if (compact) {
           return IconButton(
@@ -55,7 +56,9 @@ class _ModelList extends StatefulWidget {
 }
 
 class _ModelListState extends State<_ModelList> {
-  late Future<List<String>> _models = widget.provider.listModels();
+  late Future<List<String>> _models = _load();
+
+  Future<List<String>> _load({bool refresh = false}) => widget.provider.listModels(refresh: refresh);
   String _filter = '';
 
   @override
@@ -65,8 +68,26 @@ class _ModelListState extends State<_ModelList> {
       title: Text(tr('Switch model')),
       content: SizedBox(
         width: 420,
-        height: 420,
-        child: FutureBuilder<List<String>>(
+        height: 460,
+        child: Column(children: [
+          if (widget.provider.profiles.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: DropdownButtonFormField<String>(
+                key: const ValueKey('openai-switch-provider'),
+                initialValue: widget.provider.activeProfile.id,
+                decoration: InputDecoration(labelText: tr('Provider'), border: const OutlineInputBorder(), isDense: true),
+                items: [
+                  for (final p in widget.provider.profiles) DropdownMenuItem(value: p.id, child: Text.verbatim(p.title, overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: (id) async {
+                  if (id == null) return;
+                  await widget.provider.selectProfile(id);
+                  if (mounted) setState(() { _models = _load(); });
+                },
+              ),
+            ),
+          Expanded(child: FutureBuilder<List<String>>(
           future: _models,
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
@@ -75,7 +96,7 @@ class _ModelListState extends State<_ModelList> {
                 Text.verbatim('${snap.error}'.replaceFirst('Bad state: ', '')),
                 const SizedBox(height: 8),
                 Text(tr('Not every service lists its models. You can still type the name in the Settings.')),
-                TextButton(onPressed: () => setState(() => _models = widget.provider.listModels(refresh: true)), child: Text(tr('Try again'))),
+                TextButton(onPressed: () => setState(() { _models = _load(refresh: true); }), child: Text(tr('Try again'))),
               ]);
             }
             final all = snap.data!;
@@ -102,10 +123,11 @@ class _ModelListState extends State<_ModelList> {
               ),
             ]);
           },
-        ),
+        )),
+        ]),
       ),
       actions: [
-        TextButton(onPressed: () => setState(() => _models = widget.provider.listModels(refresh: true)), child: Text(tr('Refresh'))),
+        TextButton(onPressed: () => setState(() { _models = _load(refresh: true); }), child: Text(tr('Refresh'))),
         TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Close'))),
       ],
     );

@@ -55,6 +55,42 @@ class OpenAiConfig {
   }
 }
 
+/// One of the services the person has set up: a name to pick it by, and where it is and what it is asked for. The key is in the keystore
+/// under the id.
+class OpenAiProfile {
+  final String id;
+  final String name;
+  final OpenAiConfig config;
+
+  const OpenAiProfile(this.id, this.name, this.config);
+
+  /// The name, or the host of the address when none was given.
+  String get title {
+    if (name.trim().isNotEmpty) return name.trim();
+    final host = Uri.tryParse(config.baseUrl.trim())?.host ?? '';
+    return host.isEmpty ? 'New provider' : host;
+  }
+
+  OpenAiProfile copyWith({String? name, OpenAiConfig? config}) => OpenAiProfile(id, name ?? this.name, config ?? this.config);
+
+  Map<String, Object?> toJson() => {'id': id, 'name': name, ...jsonDecode(config.encode()) as Map<String, dynamic>};
+
+  static OpenAiProfile? fromJson(Object? m) {
+    if (m is! Map || m['id'] is! String) return null;
+    return OpenAiProfile(m['id'] as String, m['name'] as String? ?? '', OpenAiConfig.decode(jsonEncode(m)));
+  }
+}
+
+class _MemorySecret implements SecretStore {
+  String? _v;
+  @override
+  Future<String?> read() async => _v;
+  @override
+  Future<void> write(String value) async => _v = value;
+  @override
+  Future<void> delete() async => _v = null;
+}
+
 /// Sends a request and gives the body of the answer as it arrives. Throws on an
 /// answer that is not a success, with what the server said. Tests pass a fake.
 typedef OpenAiTransport = Stream<String> Function(Uri url, Map<String, String> headers, String body, AiCancel? cancel);
@@ -63,17 +99,25 @@ typedef OpenAiTransport = Stream<String> Function(Uri url, Map<String, String> h
 /// itself, OpenRouter, Groq, or a server of your own such as Ollama, LM Studio or
 /// vLLM. The text to summarize goes to the address set here and nowhere else.
 class OpenAiProvider extends ChangeNotifier implements TextModelProvider, ContextSized, ToolCalling {
-  static const _configKey = 'ai_openai_config';
+  static const _configKey = 'ai_openai_config'; // before there were several: becomes the first profile
+  static const _profilesKey = 'ai_openai_profiles';
+
+  /// The id of the profile that was the only one before there were several (its key is [_secret]).
+  static const firstProfileId = 'default';
 
   final SettingsRepository? _settings;
   final SecretStore _secret;
   final OpenAiTransport _send;
   final Future<void> Function(Duration) _sleep;
   final Future<String> Function(Uri url, Map<String, String> headers) _get;
+  final SecretStore Function(String profileId) _secretFor;
+  final Map<String, SecretStore> _secrets = {};
 
+  /// [secretFor] gives the place of the key of any profile but the first (the keystore, in the app).
   /// [sleep] waits (it is told to wait and nothing else; tests pass one that does not take the time).
-  OpenAiProvider({SettingsRepository? settings, required SecretStore secret, OpenAiTransport? transport, Future<void> Function(Duration)? sleep, Future<String> Function(Uri url, Map<String, String> headers)? get})
+  OpenAiProvider({SettingsRepository? settings, required SecretStore secret, OpenAiTransport? transport, Future<void> Function(Duration)? sleep, Future<String> Function(Uri url, Map<String, String> headers)? get, SecretStore Function(String profileId)? secretFor})
       : _get = get ?? _dioGet,
+        _secretFor = secretFor ?? ((_) => _MemorySecret()),
         _settings = settings,
         _secret = secret,
         _send = transport ?? _dioTransport,
@@ -94,7 +138,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
     _gate = mine.future;
     try {
       await before;
-      final pause = Duration(seconds: _config.pauseSeconds);
+      final pause = Duration(seconds: config.pauseSeconds);
       final last = _lastStart;
       if (last != null && pause > Duration.zero) {
         final wait = pause - DateTime.now().difference(last);
@@ -116,33 +160,114 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
     }
   }
 
-  OpenAiConfig _config = const OpenAiConfig();
-  String _key = '';
+  List<OpenAiProfile> _profiles = [const OpenAiProfile(firstProfileId, '', OpenAiConfig())];
+  String _activeId = firstProfileId;
+  final Map<String, String> _keys = {};
 
-  OpenAiConfig get config => _config;
+  OpenAiProfile get _active => _profiles.firstWhere((p) => p.id == _activeId, orElse: () => _profiles.first);
+
+  /// Every service that is set up, and the one that answers.
+  List<OpenAiProfile> get profiles => List.unmodifiable(_profiles);
+  OpenAiProfile get activeProfile => _active;
+
+  /// The address, model and pause of the service that answers.
+  OpenAiConfig get config => _active.config;
+  String get _key => _keys[_active.id] ?? '';
   bool get hasKey => _key.isNotEmpty;
+  bool profileHasKey(String id) => (_keys[id] ?? '').isNotEmpty;
 
   /// For the form: a key left empty there keeps this one.
   String get currentKey => _key;
 
+  SecretStore _secretOf(String id) => id == firstProfileId ? _secret : _secrets.putIfAbsent(id, () => _secretFor(id));
+
   Future<void> load() async {
-    _config = OpenAiConfig.decode(await _settings?.get(_configKey));
-    _key = await _secret.read() ?? '';
+    _keys.clear();
+    final saved = await _settings?.get(_profilesKey);
+    final list = <OpenAiProfile>[];
+    var active = '';
+    try {
+      final m = jsonDecode(saved ?? '') as Map<String, dynamic>;
+      active = m['active'] as String? ?? '';
+      for (final j in (m['profiles'] as List? ?? const [])) {
+        final p = OpenAiProfile.fromJson(j);
+        if (p != null && list.every((q) => q.id != p.id)) list.add(p);
+      }
+    } catch (_) {}
+    if (list.isEmpty) {
+      // what was saved before there were several
+      list.add(OpenAiProfile(firstProfileId, '', OpenAiConfig.decode(await _settings?.get(_configKey))));
+    }
+    _profiles = list;
+    _activeId = list.any((p) => p.id == active) ? active : list.first.id;
+    for (final p in _profiles) {
+      _keys[p.id] = await _secretOf(p.id).read() ?? '';
+    }
     notifyListeners();
   }
 
+  Future<void> _persist() => _settings?.set(_profilesKey, jsonEncode({'active': _activeId, 'profiles': [for (final p in _profiles) p.toJson()]})) ?? Future.value();
+
+  Future<void> _writeKey(String id, String key) => key.isEmpty ? _secretOf(id).delete() : _secretOf(id).write(key);
+
   /// Saves the address and model, and the key (an empty one is deleted; many
-  /// servers on your own machine need none).
-  Future<void> save(OpenAiConfig config, String key) async {
-    _config = OpenAiConfig(baseUrl: config.baseUrl.trim(), model: config.model.trim(), pauseSeconds: config.pauseSeconds.clamp(0, OpenAiConfig.maxPauseSeconds));
-    _key = key.trim();
+  /// servers on your own machine need none), of the service that answers. [name] renames it.
+  Future<void> save(OpenAiConfig config, String key, {String? name, String? id}) async {
+    id ??= _active.id;
+    if (_profiles.every((p) => p.id != id)) return;
+    final clean = OpenAiConfig(baseUrl: config.baseUrl.trim(), model: config.model.trim(), pauseSeconds: config.pauseSeconds.clamp(0, OpenAiConfig.maxPauseSeconds));
+    _profiles = [for (final p in _profiles) p.id == id ? p.copyWith(name: name?.trim(), config: clean) : p];
+    _keys[id] = key.trim();
     notifyListeners();
-    await _settings?.set(_configKey, _config.encode());
-    if (_key.isEmpty) {
-      await _secret.delete();
-    } else {
-      await _secret.write(_key);
+    await _persist();
+    await _writeKey(id, _keys[id]!);
+  }
+
+  /// Makes [id] the service that answers.
+  Future<void> selectProfile(String id) async {
+    if (id == _activeId || _profiles.every((p) => p.id != id)) return;
+    _activeId = id;
+    notifyListeners();
+    await _persist();
+  }
+
+  String keyOf(String id) => _keys[id] ?? '';
+
+  /// A new, empty service, which answers from now on (it is filled in at once).
+  /// (The one empty service that exists before anything is set up is filled in instead of being left empty beside the new one.)
+  Future<OpenAiProfile> addProfile([String name = '']) async {
+    final only = _profiles.length == 1 ? _profiles.first : null;
+    if (only != null && only.name.isEmpty && only.config.model.isEmpty && !profileHasKey(only.id)) {
+      _activeId = only.id;
+      return only;
     }
+    var id = 'p${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+    while (_profiles.any((p) => p.id == id)) {
+      id += 'x';
+    }
+    final profile = OpenAiProfile(id, name.trim(), const OpenAiConfig());
+    _profiles = [..._profiles, profile];
+    _keys[id] = '';
+    _activeId = id;
+    notifyListeners();
+    await _persist();
+    return profile;
+  }
+
+  /// Removes a service and its key. The last one is not removed but emptied.
+  Future<void> removeProfile(String id) async {
+    if (_profiles.every((p) => p.id != id)) return;
+    await _writeKey(id, '');
+    _keys.remove(id);
+    if (_profiles.length == 1) {
+      _profiles = [OpenAiProfile(id, '', const OpenAiConfig())];
+      _keys[id] = '';
+    } else {
+      _profiles = [for (final p in _profiles) if (p.id != id) p];
+      if (_activeId == id) _activeId = _profiles.first.id;
+    }
+    notifyListeners();
+    await _persist();
   }
 
   List<String>? _models;
@@ -151,32 +276,44 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
   /// Every model the service offers (`GET <address>/models`), the last list kept until the address or key changes
   /// ([refresh]: ask again). Throws with what went wrong.
   Future<List<String>> listModels({bool refresh = false}) async {
-    final stamp = '${_config.baseUrl.trim()}|$_key';
+    final stamp = '${config.baseUrl.trim()}|$_key';
     if (!refresh && _models != null && _modelsFor == stamp) return _models!;
-    var base = _config.baseUrl.trim();
+    final ids = await listModelsAt(config.baseUrl, _key);
+    _models = ids;
+    _modelsFor = stamp;
+    return ids;
+  }
+
+  /// The models of any address with any key (the form that is not saved yet).
+  Future<List<String>> listModelsAt(String baseUrl, String key) async {
+    var base = baseUrl.trim();
     while (base.endsWith('/')) {
       base = base.substring(0, base.length - 1);
     }
     if (base.endsWith('/chat/completions')) base = base.substring(0, base.length - '/chat/completions'.length);
     final body = await _get(Uri.parse('$base/models'), {
       'Accept': 'application/json',
-      if (_key.isNotEmpty) 'Authorization': 'Bearer $_key',
+      if (key.trim().isNotEmpty) 'Authorization': 'Bearer ${key.trim()}',
     });
     final json = jsonDecode(body);
     final list = json is Map ? (json['data'] ?? json['models']) : json;
-    final ids = <String>{
+    return <String>{
       for (final m in (list as List? ?? const []))
         if (m is Map && (m['id'] ?? m['name']) is String) ((m['id'] ?? m['name']) as String).replaceFirst(RegExp(r'^models/'), '') else if (m is String) m,
     }.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    _models = ids;
-    _modelsFor = stamp;
-    return ids;
+  }
+
+  /// Asks a short question with a form that is not saved (nothing is kept), and gives the answer; throws what went wrong.
+  Future<String> tryOut(OpenAiConfig config, String key) async {
+    final probe = OpenAiProvider(secret: _MemorySecret(), transport: _send, sleep: _sleep, get: _get);
+    await probe.save(config, key);
+    return probe.complete(const AiPrompt(system: 'Answer in one short sentence.', user: 'Say that the connection works.'), maxTokens: 30);
   }
 
   /// Switches to [model] and keeps everything else as it is.
   Future<void> selectModel(String model) =>
-      save(OpenAiConfig(baseUrl: _config.baseUrl, model: model, pauseSeconds: _config.pauseSeconds), _key);
+      save(OpenAiConfig(baseUrl: config.baseUrl, model: model, pauseSeconds: config.pauseSeconds), _key);
 
   static Future<String> _dioGet(Uri url, Map<String, String> headers) async {
     try {
@@ -206,10 +343,10 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
   int get contextChars => 48000;
 
   @override
-  ProviderState get state => _config.complete ? ProviderState.ready : ProviderState.unavailable;
+  ProviderState get state => config.complete ? ProviderState.ready : ProviderState.unavailable;
 
   @override
-  String? get reason => _config.complete ? null : 'Set the address and the model name below.';
+  String? get reason => config.complete ? null : 'Set the address and the model name below.';
 
   @override
   Future<void> prepare() async {}
@@ -235,7 +372,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
       _complete(prompt, tools, maxTokens, onPartial, cancel);
 
   Future<AiToolReply> _complete(AiPrompt prompt, List<AiToolSpec> tools, int maxTokens, void Function(String)? onPartial, AiCancel? cancel) async {
-    if (!_config.complete) throw StateError(reason!);
+    if (!config.complete) throw StateError(reason!);
     if (cancel?.cancelled ?? false) return const AiToolReply('');
     try {
       return await _paced(prompt, tools, 'max_tokens', maxTokens, onPartial, cancel);
@@ -300,9 +437,9 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
 
   Future<AiToolReply> _ask(AiPrompt prompt, List<AiToolSpec> tools, String limitName, int maxTokens, void Function(String)? onPartial, AiCancel? cancel) async {
     // Google AI Studio: Gemini thinks before it answers (unseen, and nothing comes meanwhile), so it is asked to think little
-    final gemini = _config.chatUrl.host == 'generativelanguage.googleapis.com';
+    final gemini = config.chatUrl.host == 'generativelanguage.googleapis.com';
     final body = jsonEncode({
-      'model': _config.model,
+      'model': config.model,
       'stream': true,
       limitName: gemini ? maxTokens + _geminiThinking : maxTokens,
       if (gemini) 'reasoning_effort': 'low',
@@ -358,7 +495,7 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
     }
 
     try {
-      await for (final chunk in _send(_config.chatUrl, headers, body, cancel)) {
+      await for (final chunk in _send(config.chatUrl, headers, body, cancel)) {
         if (cancel?.cancelled ?? false) break;
         pending += chunk;
         final lines = pending.split('\n');
@@ -366,14 +503,15 @@ class OpenAiProvider extends ChangeNotifier implements TextModelProvider, Contex
         lines.map((l) => l.trimRight()).where((l) => l.isNotEmpty).forEach(line);
       }
     } on DioException catch (e) {
-      throw _Refused(tr('Could not reach {host}: {error}', {'host': _config.chatUrl.host, 'error': e.message ?? e.error ?? e.type.name}));
+      throw _Refused(tr('Could not reach {host}: {error}', {'host': config.chatUrl.host, 'error': e.message ?? e.error ?? e.type.name}));
     }
     if (pending.trim().isNotEmpty) line(pending.trim());
 
     if (text.isEmpty && other.isNotEmpty) {
       try {
         final json = jsonDecode(other.toString()) as Map<String, dynamic>;
-        final message = ((json['choices'] as List).first as Map)['message'] as Map;
+        final choice = (json['choices'] as List).first as Map;
+        final message = choice['message'] as Map;
         final content = message['content'];
         if (content is String) text.write(content);
         if (message['tool_calls'] is List) collect(message['tool_calls'] as List);
