@@ -40,6 +40,7 @@ import 'graph_view.dart';
 import '../graph/graph_service.dart';
 import '../previews/note_preview.dart';
 import '../ai/assistant_chat.dart';
+import '../ai/citations.dart' show quoteQuery;
 import '../ai/note_agent.dart';
 import '../ai/note_knowledge.dart';
 import '../ai/note_lookup.dart';
@@ -247,8 +248,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   ({String note, SearchQuery? query, int page})? _openWithFind;
 
   /// Opens a note at a page (an answer of the assistant points at it).
-  Future<void> _openAtPage(String id, int? page) async {
-    _openWithFind = page == null ? null : (note: id, query: null, page: page);
+  Future<void> _openAtPage(String id, int? page, {String? quote}) async {
+    _openWithFind = page == null ? null : (note: id, query: quote == null ? null : quoteQuery(quote), page: page);
     if (page != null) _forgetKept(id);
     await _go(index: 3, note: id);
   }

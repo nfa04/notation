@@ -63,7 +63,7 @@ const notesAssistantSystem = 'You are an assistant in a note-taking app, answeri
     'You are given the passages of the notes that matter most for the question, each marked with its note and page, like '
     '[Biology 101 - Page 3]. Answer from them, and after each statement write the mark of the passage it comes from, exactly as '
     'given and in square brackets, like [Biology 101 - Page 3]; never name a passage that you were not given. If they '
-    'do not contain the answer, say so plainly, then add what you know, marked as coming from you and with no source. Answer as fully as the '
+    'do not contain the answer, say so plainly, then add what you know, marked as coming from you and with no source. A line that starts with ✎ was read from handwriting by the app and can have a wrong word or digit: when an answer rests on one, say it was read from handwriting. Answer as fully as the '
     'question needs: a simple question briefly, a summary or an explanation completely. Answer in the language of the question.';
 
 /// How long a summary should be.
@@ -168,7 +168,7 @@ enum AiTask {
         '[Page 3]. Answer from them, and after each statement write the mark of the passage it comes from, exactly as given and in '
         'square brackets, like [Page 3]; never name a page that you were not given. You are told whether you see all of the document '
         'or only parts of it: when only parts, do not say the document lacks something, say that the parts you were given do not '
-        'have it. If they do not contain the answer, say so plainly, then add what you know, marked as coming from you and with no source. Answer as '
+        'have it. If they do not contain the answer, say so plainly, then add what you know, marked as coming from you and with no source. A line that starts with ✎ was read from handwriting by the app and can have a wrong word or digit: when an answer rests on one, say it was read from handwriting. Answer as '
         'fully as the question needs: a simple question briefly, a summary or an explanation completely. Answer in the language of '
         'the question.',
     'Passages of the document:\n{text}\n\nQuestion: {question}',

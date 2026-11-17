@@ -1,4 +1,9 @@
+import '../search/search_query.dart' show SearchQuery;
 import 'document_index.dart' show searchTerms;
+
+/// What starts a line that was read out of handwriting (or a formula in it) by the app, in the text the model is given: that reading
+/// can be wrong, and the model is told to say so when an answer rests on it.
+const handwritingMark = '✎ ';
 
 /// A passage the model was given, as it was marked: `[Biology 101 - Page 3]` (all notes) or `[Page 3]` (one note).
 class KnownMark {
@@ -25,7 +30,14 @@ class CitedSource {
 
   /// A mark that fits an unsupported statement better, when the model named the wrong page.
   final KnownMark? better;
-  const CitedSource(this.mark, this.unsupported, this.better);
+
+  /// A few words of the passage that the statement rests on, as they are written in the note (to find and light up there); empty
+  /// when there is nothing to find by (a formula, or no words in common).
+  final String quote;
+
+  /// Whether those words were read from handwriting by the app (and so may be misread).
+  final bool handwriting;
+  const CitedSource(this.mark, this.unsupported, this.better, {this.quote = '', this.handwriting = false});
 
   bool get supported => unsupported.isEmpty;
 }
@@ -41,6 +53,9 @@ class AnswerCheck {
 
   /// Whether the answer names a passage it was given.
   bool get cited => sources.isNotEmpty;
+
+  /// Whether an answer rests on something read from handwriting.
+  bool get usesHandwriting => sources.any((s) => s.handwriting);
 
   bool get hasProblems => unknown.isNotEmpty || sources.any((s) => !s.supported);
 }
@@ -126,6 +141,39 @@ bool _looksLikeCitation(String text, List<KnownMark> known) {
   return known.isNotEmpty && RegExp(r'^[^\d]{2,60}\s*[-,]\s*(?:page|p\.?|seite|s\.)\s*\d+$', caseSensitive: false).hasMatch(t);
 }
 
+/// The stretch of [passage] a statement with [claimTerms] rests on: its sentence with most of the words, cut to six words around
+/// the best of them, and whether that sentence was read from handwriting.
+({String quote, bool handwriting}) _quoteOf(String passage, Set<String> claimTerms) {
+  var bestScore = 0;
+  var bestWords = const <String>[];
+  var bestInk = false;
+  for (final line in passage.split('\n')) {
+    final ink = line.trimLeft().startsWith(handwritingMark.trim());
+    for (final sentence in line.split(RegExp(r'(?<=[.!?])\s+'))) {
+      final words = sentence.replaceFirst(handwritingMark.trim(), '').trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+      final score = searchTerms(words.join(' ')).where(claimTerms.contains).length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestWords = words;
+        bestInk = ink;
+      }
+    }
+  }
+  if (bestScore == 0) return (quote: '', handwriting: false);
+  if (bestWords.any((w) => w.contains(r'$'))) return (quote: '', handwriting: bestInk);
+  const size = 6;
+  var from = 0, best = -1;
+  for (var i = 0;; i++) {
+    final n = searchTerms(bestWords.skip(i).take(size).join(' ')).where(claimTerms.contains).length;
+    if (n > best) {
+      best = n;
+      from = i;
+    }
+    if (i + size >= bestWords.length) break;
+  }
+  return (quote: bestWords.skip(from).take(size).join(' '), handwriting: bestInk);
+}
+
 /// Which citations in [answer] name what the model was given ([known], with its text in [given]), and whether the passage named
 /// says what the statement that names it says. A statement is doubted when many of its words are not in the passage, or a number
 /// in it is not; that is a hint for the person, not a verdict, so the bar is low.
@@ -175,6 +223,7 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
   final marks = <String, KnownMark>{};
   final doubts = <String, List<String>>{};
   final better = <String, KnownMark>{};
+  final quotes = <String, ({String quote, bool handwriting})>{};
   for (final claim in claims) {
     if (claim.cites.isEmpty) continue;
     final claimTerms = searchTerms(claim.text).toSet();
@@ -188,6 +237,9 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
       }
     }
     final withText = claim.cites.where(hasText).toList();
+    for (final k in withText) {
+      quotes.putIfAbsent(_norm(k.mark), () => _quoteOf(passages[_norm(k.mark)]!, claimTerms));
+    }
     if (withText.isEmpty) continue; // (read by a tool, or a title: nothing here to check it against)
     final have = {for (final k in withText) ...terms(k)};
     final haveNumbers = {for (final k in withText) ...numbers(k)};
@@ -213,5 +265,8 @@ AnswerCheck checkAnswer(String answer, String given, List<KnownMark> known) {
     }
     if (best != null) better[_norm(withText.first.mark)] = best;
   }
-  return AnswerCheck([for (final key in order) CitedSource(marks[key]!, doubts[key]!, better[key])], unknown);
+  return AnswerCheck([for (final key in order) CitedSource(marks[key]!, doubts[key]!, better[key], quote: quotes[key]?.quote ?? '', handwriting: quotes[key]?.handwriting ?? false)], unknown);
 }
+
+/// The search that finds [quote] (a few words of a passage) where it is written, whatever lies between its words.
+SearchQuery quoteQuery(String quote) => SearchQuery(quote.trim().split(RegExp(r'\s+')).map(RegExp.escape).join(r'\s+'), regex: true);

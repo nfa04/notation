@@ -157,7 +157,10 @@ class _LockSetupDialog extends StatefulWidget {
 
   /// Set when the way of locking stays and only the secret is changed.
   final LockMode? only;
-  const _LockSetupDialog({required this.device, this.only});
+
+  /// Set when a passcode note is made an encrypted one (the title and the button say so).
+  final bool upgrade;
+  const _LockSetupDialog({required this.device, this.only, this.upgrade = false});
 
   @override
   State<_LockSetupDialog> createState() => _LockSetupDialogState();
@@ -202,7 +205,7 @@ class _LockSetupDialogState extends State<_LockSetupDialog> {
   Widget build(BuildContext context) {
     final encrypted = _mode == LockMode.encrypted;
     return PlatformAlertDialog(
-      title: Text(widget.only == null ? 'Lock this note' : (encrypted ? 'New passphrase' : 'New passcode')),
+      title: Text(widget.upgrade ? 'Encrypt this note' : widget.only == null ? 'Lock this note' : (encrypted ? 'New passphrase' : 'New passcode')),
       content: SizedBox(
         width: 440,
         child: SingleChildScrollView(
@@ -219,6 +222,8 @@ class _LockSetupDialogState extends State<_LockSetupDialog> {
                   _option(LockMode.encrypted, Icons.lock_outline, 'Encrypted', 'Encrypts the whole note, its title too, with a passphrase. Nothing of it is stored in plain, except while it is open. If you forget the passphrase, the note is lost for good.'),
                 ]),
               ),
+            if (widget.upgrade)
+              Text('Encrypts the whole note, its title too, with a passphrase. Nothing of it is stored in plain, except while it is open. If you forget the passphrase, the note is lost for good.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 8),
             TextField(
               key: const ValueKey('lock-secret'),
@@ -256,10 +261,32 @@ class _LockSetupDialogState extends State<_LockSetupDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(key: const ValueKey('lock-go'), onPressed: _go, child: const Text('Lock')),
+        FilledButton(key: const ValueKey('lock-go'), onPressed: _go, child: Text(widget.upgrade ? 'Encrypt' : 'Lock')),
       ],
     );
   }
+}
+
+/// Asks for a passphrase and turns the open passcode note into an encrypted one (see [NoteLockService.upgradeToEncrypted]).
+/// [beforeEncrypting] and [afterEncrypting] are as for [lockNoteDialog]. Returns whether it was done.
+Future<bool> encryptNoteDialog(
+  BuildContext context,
+  NoteLockService locks,
+  String noteId, {
+  Future<void> Function()? beforeEncrypting,
+  VoidCallback? afterEncrypting,
+}) async {
+  final device = await locks.deviceCanUnlock();
+  if (!context.mounted) return false;
+  final choice = await showDialog<({LockMode mode, String secret, bool device})>(
+    context: context,
+    builder: (_) => _LockSetupDialog(device: device, only: LockMode.encrypted, upgrade: true),
+  );
+  if (choice == null) return false;
+  await beforeEncrypting?.call();
+  await locks.upgradeToEncrypted(noteId, choice.secret, allowDevice: choice.device);
+  afterEncrypting?.call();
+  return true;
 }
 
 /// Asks for a new passcode or passphrase for an open locked note.

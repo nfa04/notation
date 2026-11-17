@@ -452,7 +452,7 @@ void main() {
     final sent = provider.prompts.single;
     expect(sent.user, contains('[Title]\nPhysics'));
     expect(sent.user, contains('[Page 1]\nEntropy never decreases in an isolated system.'));
-    expect(sent.user, contains('\$\\Delta S \\geq 0\$\nHeat flows from hot to cold.')); // the handwriting, the formula first as it is higher up
+    expect(sent.user, contains('✎ \$\\Delta S \\geq 0\$\n✎ Heat flows from hot to cold.')); // the handwriting, the formula first as it is higher up
     expect(sent.user, contains('The note is called "Physics"'));
     expect(sent.user, contains('You are given all of its text.'));
     // the answer names page 1 and the page says it: a source to go to, with no doubt
@@ -490,6 +490,50 @@ void main() {
     }
     final kept = await tester.runAsync(() => repo.settings.get('assistant_chat:$id'));
     expect(kept, contains('What does entropy do?'));
+  });
+
+  testWidgets('a source chip lights up the words of the passage in the note, and the assistant stays open', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    late String id;
+    await tester.runAsync(() async {
+      final db = await AppDatabase.open(path: inMemoryDatabasePath);
+      repo = NoteRepository(db);
+      id = await repo.createNote();
+      final note = (await repo.loadNote(id))!;
+      note.textBoxes[0] = [TextBoxWidgetModel(id: 'b', position: const Offset(100, 100), initialText: 'Entropy never decreases in an isolated system.')];
+      await repo.saveNote(note);
+      await repo.text.saveInkText(id, [const InkText(key: 'k1', page: 0, text: 'Heat flows from hot to cold.', bounds: Rect.fromLTRB(100, 300, 400, 340))], {'k1'});
+    });
+    final provider = _Provider(answer: 'Entropy never decreases in an isolated system [Page 1]. Heat flows from hot to cold [Page 1].');
+    await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo, ai: AiService(providers: [provider]))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('assistant-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('assistant-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('assistant-input')), 'What does entropy do?');
+    await tester.tap(find.byKey(const ValueKey('assistant-send')));
+    for (var i = 0; i < 40 && find.byKey(const ValueKey('assistant-answer-1')).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    // page 1 holds the text box and the handwriting: the first statement rests on the box, the second on handwriting read by the app
+    expect(provider.prompts.single.user, contains('✎ Heat flows from hot to cold.'));
+    expect(provider.prompts.single.system, contains('✎'));
+    expect(find.byKey(const ValueKey('assistant-cite-1-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-cite-ink-1-0')), findsNothing); // (one chip for the page: the first statement decides)
+    await tester.tap(find.byKey(const ValueKey('assistant-cite-1-0')));
+    await tester.pumpAndSettle();
+    expect((tester.widget<TextField>(find.byKey(const ValueKey('find-field')))).controller!.text, contains(r'Entropy\s+never'));
+    expect(find.byKey(const ValueKey('assistant-panel')), findsOneWidget);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
   });
 
   testWidgets('typing @ offers notes; the picked one goes with the question', (tester) async {

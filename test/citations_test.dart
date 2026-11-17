@@ -49,4 +49,19 @@ void main() {
     // a page number alone does not say which note
     expect(checkAnswer('Four phases [Page 3].', text, notes).cited, isFalse);
   });
+
+  test('the words a statement rests on are named, to be found in the note, and handwriting is told', () {
+    const text = '[Page 1]\nThe professor repeated that the slides are online. Chlorophyll absorbs mostly red and blue light in the leaf.\n\n[Page 2]\n✎ Glycolysis yields two ATP in the cytoplasm.\n✎ \$x^2\$';
+    final c = checkAnswer('Chlorophyll absorbs red and blue light [Page 1]. Glycolysis yields two ATP [Page 2].', text, note);
+    final one = c.sources[0], two = c.sources[1];
+    expect(one.quote, 'Chlorophyll absorbs mostly red and blue');
+    expect(one.handwriting, isFalse);
+    expect(two.handwriting, isTrue);
+    expect(two.quote, 'Glycolysis yields two ATP in the');
+    expect(c.usesHandwriting, isTrue);
+    // the search for them finds them with anything between the words
+    final q = quoteQuery(one.quote);
+    expect(q.find('Chlorophyll absorbs mostly\nred and blue light'), hasLength(1));
+    expect(q.find('Chlorophyll absorbs red'), isEmpty);
+  });
 }

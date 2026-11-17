@@ -17,8 +17,8 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
         await _reader.saveReadings();
         final pieces = <({int page, double top, double left, String text})>[
           for (final t in await widget.repository.text.inkTexts(widget.noteId))
-            if (t.text.trim().isNotEmpty) (page: t.page, top: t.bounds.top, left: t.bounds.left, text: t.text.trim()),
-          for (final f in await widget.repository.text.inkFormulas(widget.noteId)) (page: f.page, top: f.top, left: f.left, text: '\$${f.latex.trim()}\$'),
+            if (t.text.trim().isNotEmpty) (page: t.page, top: t.bounds.top, left: t.bounds.left, text: '$handwritingMark${t.text.trim()}'),
+          for (final f in await widget.repository.text.inkFormulas(widget.noteId)) (page: f.page, top: f.top, left: f.left, text: '$handwritingMark\$${f.latex.trim()}\$'),
         ]..sort((a, b) => a.page != b.page ? a.page.compareTo(b.page) : (a.top != b.top ? a.top.compareTo(b.top) : a.left.compareTo(b.left)));
         for (final p in pieces) {
           ink.putIfAbsent(p.page, () => []).add(p.text);
@@ -271,6 +271,12 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
         onClose: onClose,
       );
 
+  /// Goes to [page] and lights up [quote], a few words of an answer's source, there (the assistant stays open).
+  void _showPassage(int page, String quote) {
+    _jumpToPage(page);
+    _openFind(query: quoteQuery(quote), page: page, keepPanels: true);
+  }
+
   void _toggleAssistant() {
     final chat = _assistant;
     if (chat == null) return;
@@ -289,6 +295,10 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
             onJumpToPage: (p) {
               Navigator.pop(context);
               _jumpToPage(p);
+            },
+            onShowPassage: (p, quote) {
+              Navigator.pop(context);
+              _showPassage(p, quote);
             },
             onAddToNote: (text, target, {title}) {
               Navigator.pop(context);

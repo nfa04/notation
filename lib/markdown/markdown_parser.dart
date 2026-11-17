@@ -2,6 +2,7 @@ import '../citations/citation_document.dart';
 import '../models/rich_text.dart';
 import 'code_highlight.dart';
 import 'markdown_table.dart';
+import 'table_formulas.dart';
 
 /// A small Markdown subset shared by the on-screen text boxes, the written document and the PDF
 /// export: `#`-`######` headings, `-`/`*`/`+` bullets (nested by the spaces before them), `- [ ]` tasks,
@@ -607,8 +608,17 @@ List<MdBlock> parseMarkdown(String source) {
     if (isTableRow(line) && n + 1 < lines.length && isTableRow(lines[n + 1]) && tableSeparator.hasMatch(lines[n + 1])) {
       final rows = <List<List<MdRun>>>[];
       var at = offset, end = n;
+      // (a cell that starts with `=` is a formula: it shows its result; the text stays as it is written)
+      final rowsOnly = <List<String>>[];
+      for (var k = n; k < lines.length && isTableRow(lines[k]); k++) {
+        if (k != n + 1) rowsOnly.add([for (final s in cellSpans(lines[k])) cellText(lines[k], s)]);
+      }
+      final shown = worked(rowsOnly);
+      var rowNumber = 0;
       for (var k = n; k < lines.length && isTableRow(lines[k]); k++) {
         if (k != n + 1) {
+          final r = rowNumber++;
+          var c = 0;
           rows.add([
             for (final (a, b) in cellSpans(lines[k]))
               () {
@@ -620,7 +630,12 @@ List<MdBlock> parseMarkdown(String source) {
                 while (to > from && lines[k][to - 1] == ' ') {
                   to--;
                 }
-                _inline(lines[k], from, to, at, cell, <MdMarkup>[]);
+                final column = c++;
+                if (isFormula(rowsOnly[r][column])) {
+                  cell.add(MdRun(shown[r][column], at + from));
+                } else {
+                  _inline(lines[k], from, to, at, cell, <MdMarkup>[]);
+                }
                 return cell;
               }(),
           ]);

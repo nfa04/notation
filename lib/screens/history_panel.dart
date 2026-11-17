@@ -13,6 +13,7 @@ import '../l10n/text.dart';
 import '../collab/replica.dart' show CollabOp, ElementKind;
 import '../markdown/markdown_view.dart';
 import '../models/authorship.dart' show Author;
+import '../models/brush_desc.dart' show CustomBrushes;
 import '../models/canvas_models.dart';
 import '../models/canvas_view.dart';
 import '../models/image_item.dart';
@@ -601,6 +602,10 @@ class _VersionViewState extends State<_VersionView> {
   Future<void> _load() async {
     try {
       final file = await widget.history.read(widget.version);
+      // the designed brushes an old version was drawn with (it may be one this device never saw: a version from before a sync)
+      for (final desc in file.brushes) {
+        CustomBrushes.learn(desc);
+      }
       final now = await widget.current();
       final before = widget.previous == null ? null : (await widget.history.read(widget.previous!, withPdf: false)).note;
       if (!mounted) return;

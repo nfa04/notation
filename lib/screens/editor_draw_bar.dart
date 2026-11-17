@@ -161,6 +161,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             chat: _assistant!,
             onClose: () => setState(() => _assistantOpen = false),
             onJumpToPage: _jumpToPage,
+            onShowPassage: _showPassage,
             onAddToNote: _addGenerated,
             flashcards: _on(Feature.flashcards),
             onMake: (kind) => _openNoteAi(kind),

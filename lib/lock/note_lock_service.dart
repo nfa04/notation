@@ -163,6 +163,14 @@ class NoteLockService extends ChangeNotifier {
     await seal(noteId);
   }
 
+  /// Turns the open passcode note [noteId] into an encrypted one under [passphrase]. The passcode's copy in the keystore is
+  /// dropped first (it is not the passphrase, so it must not open the note). Like [lockEncrypted] it puts the note away.
+  Future<void> upgradeToEncrypted(String noteId, String passphrase, {bool allowDevice = false}) async {
+    if (!repository.locks.unlocked.contains(noteId) || await modeOf(noteId) != LockMode.passcode) throw StateError('Only an open passcode note can be encrypted.');
+    await vault.delete(noteId);
+    await lockEncrypted(noteId, passphrase, allowDevice: allowDevice);
+  }
+
   // ---- opening
 
   /// Opens [noteId] with [secret] (the passcode or the passphrase). False if it is wrong.

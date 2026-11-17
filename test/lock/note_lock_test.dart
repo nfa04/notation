@@ -74,6 +74,22 @@ void main() {
   }
 
   group('encrypted', () {
+    test('a passcode note is made an encrypted one: the passphrase opens it, the old passcode no longer does', () async {
+      final (id, _) = await secretNote();
+      await locks.lockWithPasscode(id, '1234');
+      await locks.upgradeToEncrypted(id, 'correct horse');
+
+      expect(await repo.locks.lockModeOf(id), 2);
+      expect(locks.isOpen(id), isFalse);
+      expect(await locks.unlock(id, '1234'), isFalse);
+      expect(await locks.unlock(id, 'correct horse'), isTrue);
+    });
+
+    test('only an open passcode note can be encrypted that way', () async {
+      final (id, _) = await secretNote();
+      expect(() => locks.upgradeToEncrypted(id, 'correct horse'), throwsStateError); // not locked at all
+    });
+
     test('locking takes everything out of the database and the disk; opening brings it back', () async {
       final (id, pic) = await secretNote();
       await locks.lockEncrypted(id, 'correct horse');

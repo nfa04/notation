@@ -44,7 +44,7 @@ class _FindPainter extends CustomPainter {
 extension _EditorFind on _FixedPageNoteEditorState {
   /// Opens the bar for the search; [query] starts it (the search of all notes hands its words over), and the first match at or after
   /// [page] is the one shown.
-  void _openFind({SearchQuery? query, int page = 0, bool replace = false}) {
+  void _openFind({SearchQuery? query, int page = 0, bool replace = false, bool keepPanels = false}) {
     if (query != null) {
       _findQuery = query;
       _findField.text = query.text;
@@ -57,10 +57,15 @@ extension _EditorFind on _FixedPageNoteEditorState {
       }
     }
     setState(() {
-      if (_roomForSidePanel) _closeSidePanels();
+      if (_roomForSidePanel && !keepPanels) _closeSidePanels();
       _findOpen = true;
       if (replace) _replaceOpen = true;
     });
+    // (the person is reading an answer beside the note: the cursor stays where it was)
+    if (keepPanels) {
+      _runFind(fromPage: page);
+      return;
+    }
     // the words to replace them with are typed next once there is something to find
     if (replace && _findField.text.isNotEmpty) {
       _replaceFocus.requestFocus();

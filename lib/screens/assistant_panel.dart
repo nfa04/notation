@@ -32,6 +32,9 @@ class AssistantPanel extends StatefulWidget {
   /// Takes the reader to a page (zero-based) an answer points at.
   final ValueChanged<int>? onJumpToPage;
 
+  /// Goes to a page and lights up [quote] (a few words of it) there: where an answer's source is.
+  final void Function(int page, String quote)? onShowPassage;
+
   /// Puts an answer on the note.
   final AddToNote? onAddToNote;
 
@@ -42,7 +45,7 @@ class AssistantPanel extends StatefulWidget {
   final Future<int> Function(List<Flashcard> cards)? onKeepCards;
 
   /// For a conversation about all notes: takes the reader to the note (and page, zero-based) an answer drew on.
-  final void Function(String noteId, int? page)? onOpenSource;
+  final void Function(String noteId, int? page, {String? quote})? onOpenSource;
 
   /// Makes (or shows, when it was made before) something of the note: a summary, presentation, study guide, quiz or the tasks
   /// in it; with null, shows the list of all of them. Null: not offered.
@@ -59,6 +62,7 @@ class AssistantPanel extends StatefulWidget {
     required this.chat,
     this.onClose,
     this.onJumpToPage,
+    this.onShowPassage,
     this.onAddToNote,
     this.flashcards = true,
     this.onKeepCards,
@@ -473,9 +477,11 @@ class _AssistantPanelState extends State<AssistantPanel> {
   List<Widget> _sourcesOf(BuildContext context, ChatMessage m, int i, ColorScheme scheme) {
     final check = m.check!;
     final small = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
-    void open(KnownMark k) {
+    void open(KnownMark k, String quote) {
       if (k.noteId.isNotEmpty && widget.onOpenSource != null) {
-        widget.onOpenSource!(k.noteId, k.page);
+        widget.onOpenSource!(k.noteId, k.page, quote: quote.isEmpty ? null : quote);
+      } else if (k.page != null && quote.isNotEmpty && widget.onShowPassage != null) {
+        widget.onShowPassage!(k.page!, quote);
       } else if (k.page != null && widget.onJumpToPage != null) {
         widget.onJumpToPage!(k.page!);
       }
@@ -500,12 +506,16 @@ class _AssistantPanelState extends State<AssistantPanel> {
                         '${s.better == null ? '' : '\n${tr('Perhaps')}: ${label(s.better!)}'}';
                 return ActionChip(
                   key: ValueKey('assistant-cite-$i-$j'),
-                  avatar: doubt == null ? null : Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$j')),
+                  avatar: doubt != null
+                      ? Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$j'))
+                      : s.handwriting
+                          ? Icon(Icons.draw_outlined, size: 16, key: ValueKey('assistant-cite-ink-$i-$j'))
+                          : null,
                   label: Text.verbatim(label(s.mark)),
-                  tooltip: doubt,
+                  tooltip: doubt ?? (s.handwriting ? tr('Read from handwriting by the app: it can be misread.') : null),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  onPressed: () => open(s.mark),
+                  onPressed: () => open(s.mark, s.quote),
                 );
               }),
           ]),
@@ -514,6 +524,11 @@ class _AssistantPanelState extends State<AssistantPanel> {
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(tr('This answer names no passage of your notes: it may come from the model, not from them.'), key: ValueKey('assistant-uncited-$i'), style: small),
+        ),
+      if (check.usesHandwriting)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(tr('Part of this was read from handwriting by the app: it can contain a misread word or digit.'), key: ValueKey('assistant-handwriting-$i'), style: small),
         ),
       if (check.unknown.isNotEmpty)
         Padding(

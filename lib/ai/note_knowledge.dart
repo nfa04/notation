@@ -11,6 +11,7 @@ import '../l10n/language.dart';
 import '../llm/embedding_service.dart';
 import '../search/pdf_indexer.dart';
 import '../search/search_query.dart';
+import 'citations.dart' show handwritingMark;
 import 'document_index.dart';
 
 /// Stands in for the sentence model where there is none: the words alone decide then.
@@ -92,12 +93,13 @@ Future<List<DocChunk>> chunksOfNote(NoteRepository notes, String id) async {
     if (s.place == SearchPlace.pdfName || s.text.trim().isEmpty) continue;
     final page = s.page >= 0 ? s.page : null;
     final label = s.place == SearchPlace.title ? tr('Title') : tr('Page {n}', {'n': (page ?? 0) + 1});
-    chunks.addAll(chunkText(label, page, s.text));
+    // (what was read from handwriting is marked as such, for the model and the person)
+    chunks.addAll(chunkText(label, page, s.place == SearchPlace.handwriting ? '$handwritingMark${s.text.trim()}' : s.text));
   }
   // the formulas read in the handwriting, a page's together
   final formulas = <int, List<String>>{};
   for (final f in await notes.text.inkFormulas(id)) {
-    formulas.putIfAbsent(f.page, () => []).add('\$${f.latex.trim()}\$');
+    formulas.putIfAbsent(f.page, () => []).add('$handwritingMark\$${f.latex.trim()}\$');
   }
   for (final e in formulas.entries) {
     chunks.addAll(chunkText(tr('Page {n}', {'n': e.key + 1}), e.key, e.value.join('\n')));

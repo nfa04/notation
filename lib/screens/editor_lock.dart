@@ -13,6 +13,7 @@ extension _EditorLock on _FixedPageNoteEditorState {
         if (!locked) PopupMenuItem(value: 'lock', child: Text('Lock this note...')),
         if (locked) ...[
           PopupMenuItem(value: 'now', child: Text('Lock now')),
+          if (_lockMode == LockMode.passcode) PopupMenuItem(key: const ValueKey('lock-encrypt'), value: 'encrypt', child: Text('Encrypt this note...')),
           PopupMenuItem(value: 'change', child: Text(_lockMode == LockMode.encrypted ? 'Change the passphrase...' : 'Change the passcode...')),
           PopupMenuItem(value: 'remove', child: Text('Take the lock off')),
         ],
@@ -43,6 +44,21 @@ extension _EditorLock on _FixedPageNoteEditorState {
             afterEncrypting: () => widget.onLeave?.call(),
           );
           if (mode != null && mounted) setState(() => _lockMode = mode);
+        case 'encrypt':
+          if (_live != null) {
+            messenger.showSnackBar(SnackBar(content: Text('End the live session of this note before locking it.')));
+            return;
+          }
+          await encryptNoteDialog(
+            context,
+            locks,
+            widget.noteId,
+            beforeEncrypting: () async {
+              await _saveNow();
+              _sealedAway = true;
+            },
+            afterEncrypting: () => widget.onLeave?.call(),
+          );
         case 'now':
           widget.onLeave?.call();
         case 'change':

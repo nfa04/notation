@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'table_formulas.dart';
+
 /// Tables in Markdown: `| a | b |` rows, with a `|---|---|` line below the first
 /// one. A table made by the table tool is always in this form; the same text is
 /// what is saved, shown ([MarkdownView]) and exported.
@@ -57,13 +59,17 @@ List<List<String>>? parseTableText(String text) {
 
 bool isTableText(String text) => parseTableText(text) != null;
 
-/// Markdown for [rows] (the first is the head).
-String tableText(List<List<String>> rows) {
+/// The separator line of a table: `|---|:-:|`, with the alignment [aligns] says for each column ('left', 'center', 'right', else none).
+String tableSeparatorLine(int width, [List<String> aligns = const []]) =>
+    '|${[for (var c = 0; c < width; c++) switch (c < aligns.length ? aligns[c] : '') { 'center' => ' :-: ', 'right' => ' --: ', 'left' => ' :-- ', _ => ' --- ' }].join('|')}|';
+
+/// Markdown for [rows] (the first is the head), the columns aligned as [aligns] says (see [columnAligns]).
+String tableText(List<List<String>> rows, {List<String> aligns = const []}) {
   final width = rows.isEmpty ? 1 : rows.first.length;
   String line(List<String> r) => '| ${r.map(_escape).join(' | ')} |';
   return [
     line(rows.first),
-    '|${List.filled(width, ' --- ').join('|')}|',
+    tableSeparatorLine(width, aligns),
     for (final r in rows.skip(1)) line(r),
   ].join('\n');
 }
@@ -102,7 +108,79 @@ List<String> columnAligns(String separator) => [
     ];
 
 /// What can be done to the table the caret is in.
-enum TableAction { rowAbove, rowBelow, deleteRow, columnLeft, columnRight, deleteColumn, alignLeft, alignCenter, alignRight }
+enum TableAction { rowAbove, rowBelow, deleteRow, columnLeft, columnRight, deleteColumn, alignLeft, alignCenter, alignRight, sortAscending, sortDescending, totals }
+
+/// [rows] (the head first) with the rows under the head put in order of column [column] (zero-based): numbers by value, other text
+/// alphabetically without regard to case, empty cells last. Rows of equal key stay in their order. Rows at the end that hold a
+/// formula (a row of totals) stay at the end. A formula that names a cell of its own row (`=B3*C3`) follows its row to the new place.
+List<List<String>> sortedTable(List<List<String>> rows, int column, {bool descending = false}) {
+  if (rows.length < 3) return rows;
+  var end = rows.length;
+  while (end > 2 && rows[end - 1].any(isFormula)) {
+    end--;
+  }
+  final shown = worked(rows);
+  final order = [for (var r = 1; r < end; r++) r];
+  String text(int r) => column < shown[r].length ? shown[r][column] : '';
+  int compare(int a, int b) {
+    final ta = text(a).trim(), tb = text(b).trim();
+    // (empty cells are last whichever way it goes)
+    if (ta.isEmpty || tb.isEmpty) return ta.isEmpty && tb.isEmpty ? 0 : (ta.isEmpty ? 1 : -1);
+    final na = parseCellNumber(ta), nb = parseCellNumber(tb);
+    int c;
+    if (na != null && nb != null) {
+      c = na.compareTo(nb);
+    } else if (na != null || nb != null) {
+      c = na != null ? -1 : 1; // numbers before words
+    } else {
+      c = ta.toLowerCase().compareTo(tb.toLowerCase());
+    }
+    return descending ? -c : c;
+  }
+
+  order.sort((a, b) {
+    final c = compare(a, b);
+    return c != 0 ? c : a.compareTo(b);
+  });
+  final out = <List<String>>[rows.first];
+  for (var i = 0; i < order.length; i++) {
+    final from = order[i], to = i + 1;
+    out.add(from == to ? rows[from] : [for (final cell in rows[from]) isFormula(cell) ? _moveRow(cell, from + 1, to + 1) : cell]);
+  }
+  out.addAll(rows.sublist(end));
+  return out;
+}
+
+/// The formula [cell] with the cells named in row [from] named in row [to] instead (rows counted as the cell names count them).
+String _moveRow(String cell, int from, int to) => cell.replaceAllMapped(RegExp(r'\b([A-Za-z]{1,3})(\d{1,5})\b'), (m) {
+      final n = int.parse(m.group(2)!);
+      if (n != from) return m.group(0)!;
+      // (not a cell of a range: the range keeps its ends)
+      final after = cell.substring(m.end);
+      final before = cell.substring(0, m.start);
+      if (after.trimLeft().startsWith(':') || before.trimRight().endsWith(':')) return m.group(0)!;
+      return '${m.group(1)}$to';
+    });
+
+/// [rows] with a row of totals added: "Total" in the first column and the sum of every column that holds numbers only (a row of
+/// totals already there is not added again).
+List<List<String>> withTotals(List<List<String>> rows) {
+  if (rows.length < 2) return rows;
+  final width = rows.first.length;
+  if (rows.last.any(isFormula)) return rows;
+  final shown = worked(rows);
+  final last = rows.length; // the spreadsheet number of the last row
+  bool numbers(int c) {
+    final cells = [for (var r = 1; r < rows.length; r++) if (c < shown[r].length && shown[r][c].trim().isNotEmpty) shown[r][c]];
+    return cells.isNotEmpty && cells.every((t) => parseCellNumber(t) != null);
+  }
+
+  final total = <String>[
+    for (var c = 0; c < width; c++)
+      if (c == 0) 'Total' else if (numbers(c)) '=SUM(${columnName(c)}2:${columnName(c)}$last)' else '',
+  ];
+  return [...rows, total];
+}
 
 /// Where the table the caret is in is: its lines, the row and column of the caret (the head is row 0; on the separator line, the
 /// head). Null: the caret is not in a table.
@@ -194,12 +272,24 @@ TextEditingValue? editTable(TextEditingValue v, TableAction action) {
       }
       aligns.removeAt(column);
       column = column.clamp(0, width - 2);
+    case TableAction.sortAscending || TableAction.sortDescending:
+      if (rows.length < 3) return null;
+      final sorted = sortedTable(rows, column, descending: action == TableAction.sortDescending);
+      rows
+        ..clear()
+        ..addAll(sorted);
+      row = 0;
+    case TableAction.totals:
+      final more = withTotals(rows);
+      if (more.length == rows.length) return null;
+      rows.add(more.last);
+      row = rows.length - 1;
     case TableAction.alignLeft || TableAction.alignCenter || TableAction.alignRight:
       final want = switch (action) { TableAction.alignCenter => 'center', TableAction.alignRight => 'right', _ => 'left' };
       aligns[column] = aligns[column] == want ? '' : want;
   }
   String line(List<String> r) => '| ${r.map(_escape).join(' | ')} |';
-  final sep = '|${aligns.map((a) => switch (a) { 'center' => ' :-: ', 'right' => ' --: ', 'left' => ' :-- ', _ => ' --- ' }).join('|')}|';
+  final sep = tableSeparatorLine(width, aligns);
   final out = [line(rows.first), sep, for (final r in rows.skip(1)) line(r)];
   final table = out.join('\n');
   // the caret goes into the cell it is about

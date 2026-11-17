@@ -51,6 +51,7 @@ import '../citations/lookup.dart';
 import '../citations/source.dart';
 import '../ai/ai_service.dart';
 import '../ai/assistant_chat.dart';
+import '../ai/citations.dart' show handwritingMark, quoteQuery;
 import '../ai/document_index.dart';
 import '../ai/flashcards.dart' show Flashcard;
 import '../ai/note_ai.dart';
