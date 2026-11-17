@@ -130,7 +130,10 @@ void main() {
       onChanged: () => changed++,
     )..acting = true;
     final done = chat.ask('Star my biology note');
-    await pumpEventQueue(times: 400);
+    // (real database work is going on: wait until it asks, not for a number of turns)
+    for (var i = 0; i < 200 && !(chat.messages.last.steps.isNotEmpty && chat.messages.last.steps.last.state == AgentStepState.asking); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
     final steps = chat.messages.last.steps;
     expect(steps.map((s) => s.state), [AgentStepState.done, AgentStepState.failed, AgentStepState.asking], reason: 'reading is granted, the in-note tool does not exist, filing asks');
     expect(model.prompts.first.system, contains('no note is open'));
