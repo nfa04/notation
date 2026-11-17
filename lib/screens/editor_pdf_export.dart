@@ -535,7 +535,8 @@ extension _PdfExport on _FixedPageNoteEditorState {
       final comments = await _pdfComments();
 
       // 2. merge onto the original
-      final original = Uint8List.fromList(await File(_pdfFilePath!).readAsBytes());
+      // (a note with several PDFs: one PDF with their pages as the note shows them)
+      final original = _pdfTable != null ? await combinePdfFiles(_pdfTable!) : Uint8List.fromList(await File(_pdfFilePath!).readAsBytes());
       final Uint8List bytes = targets.isEmpty && comments.isEmpty
           ? original
           : mergeOverlay(original, targets.isEmpty ? null : await overlay.save(), targetPages: targets, comments: comments);

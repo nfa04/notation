@@ -3,6 +3,7 @@ import 'dart:ui' show Size;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes/data/note_pdfs.dart';
 import 'package:notes/pdf/pdf_content_editor.dart';
 import 'package:notes/pdf/pdf_pages.dart';
 import 'package:pdf/pdf.dart' as pdf;
@@ -88,6 +89,40 @@ void main() {
     test('a new page is as big as the one it is asked to be like, or as it is told', skip: skip, () async {
       final told = await arrangePdfFile(path, [0, null], fileName: 'c.pdf', blank: const Size(200, 300));
       expect(told.blank, const Size(200, 300));
+    });
+
+    test('puts the pages of several PDFs in the order a note shows them, blank pages too, and leaves the files as they were', skip: skip, () async {
+      Future<NotePdf> make(String name, List<String> words) async {
+        final doc = pw.Document();
+        for (final w in words) {
+          doc.addPage(pw.Page(pageFormat: pdf.PdfPageFormat.a4, build: (_) => pw.Text(w)));
+        }
+        final f = '${dir.path}/$name.pdf';
+        await File(f).writeAsBytes(await doc.save());
+        return NotePdf(name: '$name.pdf', path: f, sha256: '', pages: words.length);
+      }
+
+      final a = NotePdf(name: 'a.pdf', path: path, sha256: '', pages: 3);
+      final x = await make('x', ['x1', 'x2']);
+      final y = await make('y', ['y1']);
+      // y1, x2, (blank), one, x1, three  (two is hidden)
+      final table = NotePdfs([a, x, y], const [PdfPageRef(2, 0), PdfPageRef(1, 1), PdfPageRef.blank(), PdfPageRef(0, 0), PdfPageRef(1, 0), PdfPageRef(0, 2)]);
+      final bytes = await combinePdfFiles(table);
+      final out = '${dir.path}/combined.pdf';
+      await File(out).writeAsBytes(bytes);
+      expect(await texts(out, 6), ['y1', 'x2', '', 'one', 'x1', 'three']);
+      expect(await texts(path, 3), ['one', 'two', 'three'], reason: 'the files stay as they were');
+      expect(await texts(x.path, 2), ['x1', 'x2']);
+    });
+
+    test('a PDF that cannot be read stops it and the error names the file', skip: skip, () async {
+      final bad = '${dir.path}/bad.pdf';
+      await File(bad).writeAsString('not a pdf');
+      final table = NotePdfs.inOrder([
+        NotePdf(name: 'a.pdf', path: path, sha256: '', pages: 3),
+        NotePdf(name: 'bad.pdf', path: bad, sha256: '', pages: 1),
+      ]);
+      await expectLater(combinePdfFiles(table), throwsA(predicate((e) => e.toString().contains('bad.pdf'))));
     });
 
     test('refuses an order that is not one, and leaves no file', skip: skip, () async {

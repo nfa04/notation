@@ -23,6 +23,7 @@ import 'lock_repository.dart';
 import 'note_ai_repository.dart';
 import 'note_activity.dart';
 import 'note_data.dart';
+import 'note_pdfs.dart';
 import 'note_text_repository.dart';
 import 'settings_repository.dart';
 import 'template_repository.dart';
@@ -494,6 +495,7 @@ class NoteRepository {
       pdfPath: r['pdf_path'] as String?,
       pdfSha256: r['pdf_sha256'] as String?,
       pdfPageCount: r['pdf_page_count'] as int?,
+      pdfs: NotePdfs.fromJsonText(r['pdf_files'] as String?),
       nativePages: _decodePages(r['native_pages'] as String?),
       layers: LayerStack.fromJsonText(r['layers'] as String?),
     );
@@ -591,6 +593,7 @@ class NoteRepository {
   Future<void> saveNote(NoteData n) async {
     final written = <(DrawingStroke, _StoredStroke)>[];
     await _db.transaction((txn) async {
+      final filesBefore = (await txn.query('notes', columns: ['pdf_files'], where: 'id = ?', whereArgs: [n.id])).firstOrNull?['pdf_files'];
       final updated = await txn.update(
         'notes',
         {
@@ -610,6 +613,7 @@ class NoteRepository {
           'pdf_path': n.pdfPath,
           'pdf_sha256': n.pdfSha256,
           'pdf_page_count': n.pdfPageCount,
+          'pdf_files': n.pdfs?.toJsonText(),
           'native_pages': jsonEncode((n.nativePages.toList()..sort())),
           'updated_at': _now(),
         },
@@ -617,6 +621,8 @@ class NoteRepository {
         whereArgs: [n.id],
       );
       if (updated == 0) return; // deleted meanwhile: do not resurrect its rows
+      // (the text read from the pages of the PDFs is by page: when the files or the order of their pages changed it is read again)
+      if (filesBefore != n.pdfs?.toJsonText()) await txn.delete('pdf_text', where: 'note_id = ?', whereArgs: [n.id]);
 
       for (final table in const ['text_boxes', 'highlights', 'images']) {
         await txn.delete(table, where: 'note_id = ?', whereArgs: [n.id]);

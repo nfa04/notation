@@ -81,11 +81,17 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
   ///
   /// With [only] the picture is of one layer of the note alone, see-through (for the layers of an OpenRaster file): its lines, pictures
   /// and text boxes at full opacity, or with [_paperLayer] the paper, the PDF page, the written document and the highlights.
-  Future<Uint8List> _picturePage(int i, ImagePreset preset, {required bool seeThrough, String? only}) async {
+  Future<Uint8List> _picturePage(int i, ImagePreset preset, {required bool seeThrough, String? only, double? across}) async {
     final onPaper = only == _paperLayer, onLayer = only != null && !onPaper;
     final window = _infinite ? _canvasPicture() : null;
     final size = window?.size ?? Size(_paperWidth, _heightOf(i));
-    final plan = planImage(preset, size);
+    var plan = planImage(preset, size);
+    if (across != null) {
+      // (a small picture for a list of pages: [across] pixels wide)
+      final scale = across / size.width;
+      final w = across.round(), h = math.max(1, (size.height * scale).round());
+      plan = ImagePlan(w, h, Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), scale);
+    }
 
     final boxes = [
       for (final b in _textBoxesPerPage[i] ?? const <TextBoxWidgetModel>[])

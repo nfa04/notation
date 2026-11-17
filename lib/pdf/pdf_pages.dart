@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Size;
 
 import 'package:path/path.dart' as p;
 
 import '../data/file_digest.dart';
+import '../data/note_pdfs.dart';
 import 'pdf_content_editor.dart';
 
 /// Which pages a PDF has after pages were moved, added or deleted: [order] is the new list, each the number of the page it was (zero-based,
@@ -43,6 +45,30 @@ class PageArrangement {
       list.add(i);
     }
     return PageArrangement(list, from, Size(w.toDouble(), h.toDouble()));
+  }
+}
+
+/// One PDF with the pages of a note that has several PDFs, in the order the note shows them (a blank page of the note is a new blank page
+/// as big as the first). The files of [table] are not changed. A file that cannot be read stops it, and the error names the file.
+Future<Uint8List> combinePdfFiles(NotePdfs table) async {
+  final editor = await PdfContentEditor.open(await File(table.files.first.path).readAsBytes());
+  try {
+    final offsets = <int>[0];
+    var next = table.files.first.pages;
+    for (final file in table.files.skip(1)) {
+      offsets.add(next);
+      try {
+        next += await editor.insertPdf(await File(file.path).readAsBytes(), next);
+      } on PdfEditException catch (e) {
+        throw PdfEditException('${file.name}: ${e.message}');
+      }
+    }
+    final order = <int?>[for (final r in table.layout) r.isBlank ? null : offsets[r.file] + r.page];
+    final first = order.firstWhere((i) => i != null, orElse: () => 0)!;
+    await editor.arrange(order, await editor.pageSize(first));
+    return await editor.save();
+  } finally {
+    await editor.close().catchError((Object _) {});
   }
 }
 

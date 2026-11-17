@@ -484,6 +484,9 @@ class DocumentToolbar extends StatelessWidget {
               (TableAction.alignLeft, Icons.format_align_left, 'Align the column left'),
               (TableAction.alignCenter, Icons.format_align_center, 'Centre the column'),
               (TableAction.alignRight, Icons.format_align_right, 'Align the column right'),
+              (TableAction.sortAscending, Icons.arrow_upward, 'Sort by this column, lowest first'),
+              (TableAction.sortDescending, Icons.arrow_downward, 'Sort by this column, highest first'),
+              (TableAction.totals, Icons.functions, 'Add a row of totals'),
             ])
               PopupMenuItem(key: ValueKey('doc-table-${action.name}'), value: action, child: _item(icon, label)),
           ],

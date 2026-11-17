@@ -13,6 +13,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../collab/note_delta.dart';
 import '../collab/replica.dart';
 import '../data/note_data.dart';
+import '../data/note_pdfs.dart';
 import '../data/file_digest.dart';
 import '../data/note_file.dart';
 import '../data/note_repository.dart';
@@ -364,7 +365,7 @@ class NoteHistory extends ChangeNotifier {
   static String fingerprint(NoteData note) {
     final digests = NoteDelta.digests(note);
     final keys = digests.keys.toList()..sort();
-    return sha1.convert(utf8.encode(jsonEncode([for (final k in keys) '$k=${digests[k]}', note.pdfSha256 ?? '']))).toString();
+    return sha1.convert(utf8.encode(jsonEncode([for (final k in keys) '$k=${digests[k]}', note.pdfSha256 ?? '', if (note.pdfs != null) ...[for (final f in note.pdfs!.files) f.sha256, for (final r in note.pdfs!.layout) '$r']]))).toString();
   }
 
   /// Keeps the note as it is now as a version. A version the app makes is not made when the note is the same as in
@@ -397,16 +398,21 @@ class NoteHistory extends ChangeNotifier {
     final hasPdf = note.pdfName != null && note.pdfPath != null;
     final times = await _notes.noteTimes(noteId);
     final entries = noteFileEntries(NoteFileParts(note,
-        createdAt: times?.created, updatedAt: times?.edited, pdf: hasPdf ? Uint8List(0) : null, images: images, imageExtensions: extensions));
+        createdAt: times?.created, updatedAt: times?.edited, pdf: hasPdf ? Uint8List(0) : null,
+        morePdfs: [for (final _ in note.pdfs?.files.skip(1) ?? const <NotePdf>[]) Uint8List(0)], images: images, imageExtensions: extensions));
     final kept = <NoteFileEntry>[];
     final refs = <String, String>{}; // name in the file -> checksum
     for (final e in entries) {
       final (name, bytes, _) = e;
-      if (name == 'source.pdf') {
-        final pdf = note.pdfSha256 != null && File(p.join(blobs.path, note.pdfSha256!)).existsSync() ? null : await _read(note.pdfPath);
-        final sum = note.pdfSha256 ?? (pdf == null ? null : await sha256Of(pdf));
+      if (name == 'source.pdf' || name.startsWith('pdfs/')) {
+        // (the first file, or file number n of a note with several: its blob is kept once under its checksum)
+        final n = name == 'source.pdf' ? 0 : int.tryParse(name.substring(5, name.length - 4)) ?? -1;
+        final file = n == 0 ? (path: note.pdfPath, sha: note.pdfSha256) : (n > 0 && note.pdfs != null && n < note.pdfs!.files.length ? (path: note.pdfs!.files[n].path, sha: note.pdfs!.files[n].sha256) : (path: null, sha: null));
+        final known = file.sha != null && file.sha!.isNotEmpty && File(p.join(blobs.path, file.sha!)).existsSync();
+        final pdf = known ? null : await _read(file.path);
+        final sum = (file.sha?.isNotEmpty ?? false) ? file.sha : (pdf == null ? null : await sha256Of(pdf));
         if (sum == null) continue;
-        await _putBlob(blobs, sum, pdf ?? await _read(note.pdfPath));
+        await _putBlob(blobs, sum, pdf);
         refs[name] = sum;
       } else if (name.startsWith('media/')) {
         final sum = await sha256Of(bytes); // (a photograph is megabytes of Dart hashing: not on this isolate when it is big)
@@ -471,7 +477,7 @@ class NoteHistory extends ChangeNotifier {
         if (f.isFile && f.name != 'blobs.json') (f.name, f.content, false),
     ];
     for (final e in names.entries) {
-      if (!withPdf && e.key == 'source.pdf') continue;
+      if (!withPdf && (e.key == 'source.pdf' || e.key.startsWith('pdfs/'))) continue;
       final bytes = await _read(p.join(blobs.path, e.value as String));
       if (bytes != null) entries.add((e.key, bytes, false));
     }

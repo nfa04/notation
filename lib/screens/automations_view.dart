@@ -57,14 +57,25 @@ class AutomationsView extends StatelessWidget {
       listenable: service,
       builder: (context, _) {
         final all = service.all;
+        final narrow = MediaQuery.sizeOf(context).width < 600;
         return Scaffold(
           appBar: AppBar(
             title: const Text('Automations'),
             actions: [
               if (ai != null && ai!.provider != null)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: OutlinedButton.icon(
+                  padding: EdgeInsets.only(right: narrow ? 0 : 8),
+                  child: narrow
+                      ? IconButton(
+                          key: const ValueKey('describe-rule'),
+                          tooltip: 'Describe a rule',
+                          onPressed: () async {
+                            final folders = await repository.listFolders();
+                            if (context.mounted) await showRuleWriter(context, service: service, folders: folders);
+                          },
+                          icon: const Icon(Icons.edit_note),
+                        )
+                      : OutlinedButton.icon(
                     key: const ValueKey('describe-rule'),
                     onPressed: () async {
                       final folders = await repository.listFolders();
@@ -76,8 +87,18 @@ class AutomationsView extends StatelessWidget {
                 ),
               if (ai != null && ai!.provider != null && extensions != null)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: OutlinedButton.icon(
+                  padding: EdgeInsets.only(right: narrow ? 0 : 8),
+                  child: narrow
+                      ? IconButton(
+                          key: const ValueKey('magic-automation'),
+                          tooltip: 'Create with AI',
+                          onPressed: () async {
+                            final made = await showMagicExtension(context, ai: ai!, extensions: extensions!, automations: service);
+                            if (made != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(made.message), duration: const Duration(seconds: 8)));
+                          },
+                          icon: const Icon(Icons.auto_fix_high),
+                        )
+                      : OutlinedButton.icon(
                     key: const ValueKey('magic-automation'),
                     onPressed: () async {
                       final made = await showMagicExtension(context, ai: ai!, extensions: extensions!, automations: service);
@@ -89,7 +110,14 @@ class AutomationsView extends StatelessWidget {
                 ),
               Padding(
                 padding: const EdgeInsets.only(right: 12),
-                child: FilledButton.icon(
+                child: narrow
+                    ? IconButton.filled(
+                        key: const ValueKey('new-automation'),
+                        tooltip: 'New automation',
+                        onPressed: () => _edit(context),
+                        icon: const Icon(Icons.add),
+                      )
+                    : FilledButton.icon(
                   key: const ValueKey('new-automation'),
                   onPressed: () => _edit(context),
                   icon: const Icon(Icons.add),

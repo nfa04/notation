@@ -47,7 +47,8 @@ String formatCellNumber(double v) {
   if (v == v.roundToDouble() && v.abs() < 1e15) return v.toInt().toString();
   final s = double.parse(v.toStringAsPrecision(10));
   var t = s.abs() >= 1e-4 && s.abs() < 1e15 ? s.toString() : s.toStringAsPrecision(6);
-  if (t.contains('.') && !t.contains('e')) t = t.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  if (t.contains('e')) return t.replaceFirst(RegExp(r'\.?0+e'), 'e');
+  if (t.contains('.')) t = t.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
   return t;
 }
 

@@ -87,12 +87,16 @@ class NotePreviews {
     ui.Image? pdfImage;
     late double aspect;
     final pdfPath = note.pdfPath;
-    if (pdfPath != null && await File(pdfPath).exists()) {
+    // (a note with several PDFs: the first page is the first of its table, which may be of any of them)
+    final first = note.pdfs?.layout.firstOrNull;
+    final shownPath = first == null || first.isBlank ? pdfPath : note.pdfs!.files[first.file].path;
+    if (shownPath != null && await File(shownPath).exists()) {
       PdfDocument? doc;
       try {
-        doc = await openPdfFile(pdfPath);
-        if (doc.pages.isNotEmpty) {
-          pdfImage = await renderPageImage(doc.pages.first, width);
+        doc = await openPdfFile(shownPath);
+        final pageNo = first == null || first.isBlank ? 0 : first.page;
+        if (pageNo < doc.pages.length) {
+          pdfImage = await renderPageImage(doc.pages[pageNo], width);
           aspect = pdfImage.height / pdfImage.width;
         }
       } finally {

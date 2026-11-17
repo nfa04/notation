@@ -1,6 +1,6 @@
 part of 'fixed_page_note_editor.dart';
 
-/// Translating the text of a note into another language, in place.
+/// Translating the text of a note into another language, in place or below the original.
 extension _EditorTranslate on _FixedPageNoteEditorState {
   Widget _translateButton() => IconButton(
         key: const ValueKey('translate-note'),
@@ -22,21 +22,30 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
     ];
     final withDocument = _hasDocument && worthTranslating(_documentController.text);
     final withPdf = _pdfEditable && _pdfFilePath != null && _totalPages > 0;
-    final code = await askTranslationLanguage(
+    final settings = widget.repository.settings;
+    final choice = await askTranslationLanguage(
       context,
       pieces: boxes.length + (withDocument ? 1 : 0),
       pdf: withPdf,
       ready: ai.provider?.state == ProviderState.ready,
+      initial: _translateLast,
+      glossary: _translateWords,
     );
-    if (code == null || !mounted) return;
-    final language = translationTargets[code]!;
+    if (choice == null || !mounted) return;
+    final language = translationTargets[choice.code]!;
+    final keepOriginal = choice.keepOriginal;
 
     final cancel = AiCancel();
     final progress = ValueNotifier<(int, int)>((0, boxes.length + (withDocument ? 1 : 0)));
     final navigator = Navigator.of(context, rootNavigator: true);
     unawaited(showDialog<void>(context: context, barrierDismissible: false, builder: (_) => TranslateProgress(progress: progress, cancel: cancel)));
+    // (what was asked for is what is offered the next time)
+    _translateLast = choice.code;
+    _translateWords = choice.keepWords.join(', ');
+    unawaited(settings.set(translateLanguageKey, choice.code));
+    unawaited(settings.set(translateGlossaryKey, _translateWords));
 
-    final translator = NoteTranslator((prompt, {cancel}) => ai.generate(prompt, cancel: cancel, maxTokens: (prompt.user.length ~/ 2).clamp(200, 2400)));
+    final translator = NoteTranslator((prompt, {cancel}) => ai.generate(prompt, cancel: cancel, maxTokens: (prompt.user.length ~/ 2).clamp(200, 2400)), keep: choice.keepWords);
     final results = <TextBoxWidgetModel, String>{};
     String? document;
     Object? failure;
@@ -53,7 +62,7 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
         document = await translator.translate(_documentController.text, language, cancel: cancel);
         progress.value = (progress.value.$1 + 1, progress.value.$2);
       }
-      if (withPdf && !cancel.cancelled) {
+      if (withPdf && !keepOriginal && !cancel.cancelled) {
         // the lines of each page, as the PDF draws them, then their translation a page at a time
         pdfEditor = await PdfContentEditor.open(await File(_pdfFilePath!).readAsBytes(), fallbackFonts: await _standInFontsOrNone());
         for (var page = 0; page < _totalPages && !cancel.cancelled; page++) {
@@ -105,11 +114,17 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
         ..addAll(spans);
     }
 
+    // (with the original kept, the translation goes below it and the original keeps its marks)
+    String shown(String was, String now) => keepOriginal ? '${was.trimRight()}\n\n$now' : now;
+    List<TextSpanAttribute> marks(List<TextSpanAttribute> was) => keepOriginal ? was : const [];
+
     void apply(bool forward) {
       for (final e in results.entries) {
-        forward ? set(e.key.controller, e.value, const []) : set(e.key.controller, oldBox[e.key]!.text, oldBox[e.key]!.spans);
+        forward ? set(e.key.controller, shown(oldBox[e.key]!.text, e.value), marks(oldBox[e.key]!.spans)) : set(e.key.controller, oldBox[e.key]!.text, oldBox[e.key]!.spans);
       }
-      if (document != null) forward ? set(_documentController, document, const []) : set(_documentController, oldDocument.text, oldDocument.spans);
+      if (document != null) {
+        forward ? set(_documentController, shown(oldDocument.text, document), marks(oldDocument.spans)) : set(_documentController, oldDocument.text, oldDocument.spans);
+      }
       setState(() {});
     }
 

@@ -3,10 +3,29 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 import '../data/settings_repository.dart';
+import 'french.dart';
 import 'german.dart';
+import 'italian.dart';
+import 'spanish.dart';
 
-/// The translation tables, by language code (English is the text in the code).
-const _tables = {'de': germanTexts};
+/// A language the app can come in: its code, its name in its own language and its translation table (English text -> text).
+class LanguageEntry {
+  final String code, name;
+  final Map<String, String> texts;
+  const LanguageEntry(this.code, this.name, this.texts);
+}
+
+/// The languages besides English. To add one: make `lib/l10n/<language>.dart` with its table and put it here (`docs/translating.md`).
+/// A language whose table is still empty is not offered, so a table can be started without showing an English app under another name.
+const languageEntries = [
+  LanguageEntry('de', 'Deutsch', germanTexts),
+  LanguageEntry('fr', 'Français', frenchTexts),
+  LanguageEntry('es', 'Español', spanishTexts),
+  LanguageEntry('it', 'Italiano', italianTexts),
+];
+
+/// The translation tables of the languages that are offered, by language code (English is the text in the code).
+final _tables = {for (final l in languageEntries) if (l.texts.isNotEmpty) l.code: l.texts};
 
 /// The language of the app: what the person chose in the settings, or the language of the device.
 ///
@@ -20,9 +39,9 @@ class AppLanguage extends ChangeNotifier {
   static AppLanguage instance = AppLanguage.inMemory();
 
   /// The languages the app comes in, by code, with their name in their own language.
-  static const names = {'en': 'English', 'de': 'Deutsch'};
+  static Map<String, String> get names => {'en': 'English', for (final l in languageEntries) if (l.texts.isNotEmpty) l.code: l.name};
 
-  static const supportedLocales = [Locale('en'), Locale('de')];
+  static List<Locale> get supportedLocales => [for (final code in names.keys) Locale(code)];
 
   final SettingsRepository? _settings;
 

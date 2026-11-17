@@ -22,7 +22,8 @@ class NotePagesView extends StatefulWidget {
 }
 
 class _NotePagesViewState extends State<NotePagesView> {
-  PdfDocument? _pdf;
+  NotePdfDocument? _pdf;
+  final List<PdfDocument> _docs = [];
   final Map<int, ui.Image> _rendered = {};
   final Map<int, Future<ui.Image?>> _rendering = {};
   late final RichInlineTextController _document = RichInlineTextController()
@@ -34,11 +35,16 @@ class _NotePagesViewState extends State<NotePagesView> {
     super.initState();
     final bytes = widget.file.pdf;
     if (bytes != null) {
-      PdfDocument.openData(bytes).then((doc) {
+      final table = widget.file.note.pdfs;
+      final all = [bytes, if (table != null && widget.file.morePdfs.length == table.files.length - 1) ...widget.file.morePdfs];
+      Future.wait([for (final b in all) PdfDocument.openData(b)]).then((docs) {
         if (mounted) {
-          setState(() => _pdf = doc);
+          _docs.addAll(docs);
+          setState(() => _pdf = table != null && docs.length == table.files.length ? NotePdfDocument.table(docs, table.layout) : NotePdfDocument.single(docs.first));
         } else {
-          doc.dispose();
+          for (final d in docs) {
+            d.dispose();
+          }
         }
       }, onError: (Object _) {});
     }
@@ -50,6 +56,9 @@ class _NotePagesViewState extends State<NotePagesView> {
       i.dispose();
     }
     _pdf?.dispose();
+    for (final d in _docs) {
+      d.dispose();
+    }
     _document.dispose();
     super.dispose();
   }

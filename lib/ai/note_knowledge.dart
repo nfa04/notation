@@ -174,6 +174,61 @@ class NoteKnowledge {
     }
   }
 
+  Map<String, Float32List>? _noteVectors;
+  DateTime? _noteVectorsAt;
+  String? _noteVectorsModel;
+
+  /// Reads the kept vectors again at the next [similarNotes] (a test, or after many notes were read).
+  void forgetVectors() => _noteVectors = null;
+
+  /// How close (cosine) a note has to be to what is being written to be named as saying something similar.
+  static const similarFrom = 0.5;
+
+  /// The notes (other than [exceptNote]) that say something like [text], the closest first: by the vectors kept for whole notes (the
+  /// sorting of notes and the assistant make them). Nothing is read here except [text] itself and, to fill the gaps over time, up to
+  /// [learn] notes that have no vector yet (the newest first) - a pause in writing is not the time to read a whole library. Empty
+  /// when there is no sentence model.
+  Future<List<({String noteId, double score})>> similarNotes(String text, {required String exceptNote, int max = 3, int learn = 2}) async {
+    if (!ready()) return const [];
+    final clean = text.trim();
+    if (clean.length < 40) return const [];
+    final Float32List qv;
+    try {
+      qv = await _embedder.embed(clean.length > 2000 ? clean.substring(0, 2000) : clean);
+    } catch (_) {
+      return const [];
+    }
+    final now = DateTime.now();
+    final model = _embedder.modelId;
+    if (_noteVectors == null || _noteVectorsModel != model || _noteVectorsAt == null || now.difference(_noteVectorsAt!) > const Duration(minutes: 2)) {
+      _noteVectors = Map.of(await _notes.knowledge.noteEmbeddings(model));
+      _noteVectorsAt = now;
+      _noteVectorsModel = model;
+    }
+    final vectors = _noteVectors!;
+    final open = <String>{};
+    final missing = <String>[];
+    for (final n in await _notes.listNotes()) {
+      if (n.locked) continue;
+      open.add(n.id);
+      if (n.id != exceptNote && !vectors.containsKey(n.id)) missing.add(n.id);
+    }
+    for (final id in missing.take(learn)) {
+      try {
+        final v = await _sorter.vectorOf(id);
+        if (v != null) vectors[id] = v;
+      } catch (_) {
+        break; // (the model went away)
+      }
+    }
+    final scored = [
+      for (final e in vectors.entries)
+        if (e.key != exceptNote && open.contains(e.key)) (noteId: e.key, score: cosine(qv, e.value)),
+    ].where((e) => e.score >= similarFrom).toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(max).toList();
+  }
+
   /// The vectors that were kept for the passages of note [id] the last time it was read (by the text of the passage), with the model
   /// that is in use now. Nothing is read here: a passage that changed since has none, and is read by the one who asks (see
   /// `AssistantChat`), which is far less than reading the whole note again for each change.

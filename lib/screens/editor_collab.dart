@@ -81,6 +81,12 @@ extension _EditorCollab on _FixedPageNoteEditorState {
   Future<SharedPdf?> _pdfForGuests() async {
     final path = _pdfFilePath;
     if (path == null) return null;
+    // (a note with several PDFs: the others get one PDF with the pages in the order they are shown)
+    final table = _pdfTable;
+    if (table != null) {
+      final bytes = await combinePdfFiles(table);
+      return SharedPdf(_importedPdfName ?? 'document.pdf', await sha256Of(bytes), table.pageCount, bytes);
+    }
     return SharedPdf(_importedPdfName ?? 'document.pdf', _pdfSha256 ?? '', _totalPages, await File(path).readAsBytes());
   }
 

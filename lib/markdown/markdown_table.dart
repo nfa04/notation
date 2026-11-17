@@ -111,12 +111,12 @@ List<String> columnAligns(String separator) => [
 enum TableAction { rowAbove, rowBelow, deleteRow, columnLeft, columnRight, deleteColumn, alignLeft, alignCenter, alignRight, sortAscending, sortDescending, totals }
 
 /// [rows] (the head first) with the rows under the head put in order of column [column] (zero-based): numbers by value, other text
-/// alphabetically without regard to case, empty cells last. Rows of equal key stay in their order. Rows at the end that hold a
-/// formula (a row of totals) stay at the end. A formula that names a cell of its own row (`=B3*C3`) follows its row to the new place.
+/// alphabetically without regard to case, empty cells last. Rows of equal key stay in their order. Rows at the end that add up a
+/// range (a row of totals) stay at the end. A formula that names a cell of its own row (`=B3*C3`) follows its row to the new place.
 List<List<String>> sortedTable(List<List<String>> rows, int column, {bool descending = false}) {
   if (rows.length < 3) return rows;
   var end = rows.length;
-  while (end > 2 && rows[end - 1].any(isFormula)) {
+  while (end > 2 && _addsUp(rows[end - 1])) {
     end--;
   }
   final shown = worked(rows);
@@ -151,6 +151,9 @@ List<List<String>> sortedTable(List<List<String>> rows, int column, {bool descen
   return out;
 }
 
+/// Whether [row] is a row of totals: a formula in it works on a range of cells (`=SUM(B2:B9)`).
+bool _addsUp(List<String> row) => row.any((c) => isFormula(c) && c.contains(':'));
+
 /// The formula [cell] with the cells named in row [from] named in row [to] instead (rows counted as the cell names count them).
 String _moveRow(String cell, int from, int to) => cell.replaceAllMapped(RegExp(r'\b([A-Za-z]{1,3})(\d{1,5})\b'), (m) {
       final n = int.parse(m.group(2)!);
@@ -167,7 +170,7 @@ String _moveRow(String cell, int from, int to) => cell.replaceAllMapped(RegExp(r
 List<List<String>> withTotals(List<List<String>> rows) {
   if (rows.length < 2) return rows;
   final width = rows.first.length;
-  if (rows.last.any(isFormula)) return rows;
+  if (_addsUp(rows.last)) return rows;
   final shown = worked(rows);
   final last = rows.length; // the spreadsheet number of the last row
   bool numbers(int c) {
@@ -289,7 +292,7 @@ TextEditingValue? editTable(TextEditingValue v, TableAction action) {
       aligns[column] = aligns[column] == want ? '' : want;
   }
   String line(List<String> r) => '| ${r.map(_escape).join(' | ')} |';
-  final sep = tableSeparatorLine(width, aligns);
+  final sep = tableSeparatorLine(rows.first.length, aligns);
   final out = [line(rows.first), sep, for (final r in rows.skip(1)) line(r)];
   final table = out.join('\n');
   // the caret goes into the cell it is about

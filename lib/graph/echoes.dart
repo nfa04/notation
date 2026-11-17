@@ -3,10 +3,15 @@ import '../data/note_data.dart';
 /// Another note that says something about what is being written: the terms that both have, and a page of that note where one of them is.
 class Echo {
   final String noteId;
+
+  /// The terms both have; empty for a note that says something similar in other words (see [similarity]).
   final List<String> terms;
   final int? page;
 
-  const Echo(this.noteId, this.terms, this.page);
+  /// How close the note is by meaning (0 to 1), for an echo that was found by what it says rather than by its words.
+  final double? similarity;
+
+  const Echo(this.noteId, this.terms, this.page, {this.similarity});
 }
 
 /// The terms of the facts the graph holds (their keywords and titles), to tell which other notes a piece of writing echoes: "you wrote about

@@ -47,18 +47,8 @@ extension _EditorOutline on _FixedPageNoteEditorState {
     final entries = <OutlineEntry>[];
     final doc = _pdfDocument;
     if (doc != null) {
-      try {
-        void add(List<PdfOutlineNode> nodes, int level) {
-          for (final n in nodes) {
-            final page = n.dest?.pageNumber;
-            if (page != null && n.title.trim().isNotEmpty) entries.add(OutlineEntry(n.title.trim(), level, (page - 1).clamp(0, _pageCount - 1)));
-            add(n.children, level + 1);
-          }
-        }
-
-        add(await doc.loadOutline(), 1);
-      } catch (_) {
-        // a file whose outline cannot be read has none
+      for (final e in await doc.outline()) {
+        entries.add(OutlineEntry(e.title, e.level, e.page.clamp(0, _pageCount - 1)));
       }
     }
     final written = buildOutline(

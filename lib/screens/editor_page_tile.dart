@@ -354,6 +354,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
             ),
             _inkFindOverlay(pageIndex),
             _followOverlay(pageIndex),
+            ?_pdfFileLabel(pageIndex),
 
             // Z-INDEX 2: Selectable Text Layer with Unrestricted Double-Tap Detection
             Listener(

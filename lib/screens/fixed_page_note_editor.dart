@@ -7,6 +7,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import '../data/file_digest.dart';
+import '../data/note_pdfs.dart';
+import '../pdf/note_pdf_document.dart';
 import 'package:archive/archive.dart' show Archive, ArchiveFile, CompressionType, ZipEncoder;
 import '../export/file_dialogs.dart';
 import '../export/image_export.dart';
@@ -117,6 +119,7 @@ import 'add_to_note.dart';
 import 'generated_panel.dart';
 import '../ai/note_agent.dart';
 import '../ai/note_knowledge.dart';
+import '../export/note_markdown.dart';
 import '../ai/note_lookup.dart';
 import '../extensions/shared_api.dart';
 import '../features/feature.dart';
@@ -201,6 +204,7 @@ import '../style/stylus_settings.dart';
 import 'ai_summary_dialog.dart';
 import 'ideas_dialog.dart';
 import 'image_export_dialog.dart';
+import 'page_arrange_dialog.dart';
 import 'label_dialog.dart';
 import 'assistant_panel.dart';
 import 'collab_ui.dart';
@@ -260,6 +264,7 @@ part 'editor_image_export.dart';
 part 'editor_svg_export.dart';
 part 'editor_lecture.dart';
 part 'editor_echoes.dart';
+part 'editor_markdown_export.dart';
 part 'editor_labels.dart';
 part 'editor_pdf_pages.dart';
 part 'editor_pdf_edit.dart';
@@ -775,6 +780,21 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     return File(path).existsSync() ? null : 'nothing was written';
   }
 
+  /// Saves the whole note as Markdown at [path] (a ZIP when it has pictures); null, or what went wrong.
+  Future<String?> exportMarkdownTo(String path) async {
+    await ready;
+    if (!mounted) return 'the note was closed';
+    _exportTo = path;
+    _exportError = null;
+    try {
+      await _exportNoteMarkdown();
+    } finally {
+      _exportTo = null;
+    }
+    if (_exportError != null) return _exportError;
+    return File(path).existsSync() ? null : 'nothing was written';
+  }
+
   /// Saves the page as an OpenRaster file with layers at [path] (a ZIP of them for several pages); null, or what went wrong.
   Future<String?> exportOraTo(String path, {bool allPages = false, bool seeThrough = false, ImagePreset preset = ImagePreset.web}) async {
     await ready;
@@ -1153,7 +1173,14 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   }
 
   /// The open PDF (renders pages, extracts their text). Same on all platforms.
-  PdfDocument? _pdfDocument;
+  NotePdfDocument? _pdfDocument;
+
+  /// A note with several PDFs: the files and which page of which each page is (null: one file, see [_pdfFilePath]). Then [_pdfFilePath], [_importedPdfName]
+  /// and [_pdfSha256] are the first file's.
+  NotePdfs? _pdfTable;
+
+  /// The files of [_pdfTable] that were opened, by path, kept open until the editor closes (a file taken out of the note can be taken back).
+  final Map<String, PdfDocument> _tableDocs = {};
   bool _isLoadingPdf = false;
 
   String? _currentSelectedText;
@@ -1599,6 +1626,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     widget.repository.settings.get('translate_to').then((v) {
       if (mounted && v != null && translateLanguages.containsKey(v)) setState(() => _translateTo = v);
     });
+    // (what was asked the last time a note was translated: the dialog starts from it)
+    widget.repository.settings.get(translateLanguageKey).then((v) => _translateLast = v);
+    widget.repository.settings.get(translateGlossaryKey).then((v) => _translateWords = v ?? '');
     widget.repository.settings.get(_EditorAssistant._agentModeSetting).then((v) {
       _agentMode = v == '1';
       if (mounted && _agentMode) _assistant?.acting = true;
@@ -1734,6 +1764,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   EchoIndex? _echoIndex;
   DateTime? _echoIndexAt;
   Timer? _echoTimer;
+  String? _translateLast;
+  String _translateWords = '';
   String Function()? _echoText;
   String? _echoLooked;
   Map<String, String> _echoTitles = const {};
@@ -1774,13 +1806,34 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
       var pdfPath = note.pdfPath;
       String? warning;
-      PdfDocument? doc;
-      if (pdfPath != null && !await File(pdfPath).exists()) {
+      NotePdfDocument? doc;
+      var table = note.pdfs;
+      final opened = <String, PdfDocument>{};
+      if (pdfPath != null && table != null) {
+        // a note with several PDFs: all of them must be there, as the pages are drawn from each
+        try {
+          for (final file in table.files) {
+            if (!await File(file.path).exists()) throw StateError(tr('The PDF of this note is missing ({name}); its annotations were kept.', {'name': file.name}));
+            final d = await openPdfFile(file.path);
+            opened[file.path] = d;
+            if (d.pages.length != file.pages) throw StateError('${file.name}: ${d.pages.length} pages, not ${file.pages}');
+          }
+          doc = NotePdfDocument.table([for (final file in table.files) opened[file.path]!], table.layout);
+        } catch (e) {
+          for (final d in opened.values) {
+            d.dispose();
+          }
+          opened.clear();
+          warning = '$e';
+          table = null;
+          pdfPath = null;
+        }
+      } else if (pdfPath != null && !await File(pdfPath).exists()) {
         warning = tr('The PDF of this note is missing ({name}); its annotations were kept.', {'name': note.pdfName});
         pdfPath = null;
       } else if (pdfPath != null) {
         try {
-          doc = await openPdfFile(pdfPath);
+          doc = NotePdfDocument.single(await openPdfFile(pdfPath));
         } catch (e) {
           warning = tr('The PDF of this note could not be opened: {error}', {'error': e});
           pdfPath = null;
@@ -1789,6 +1842,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
       if (!mounted) {
         doc?.dispose();
+        for (final d in opened.values) {
+          d.dispose();
+        }
         return;
       }
       setState(() {
@@ -1828,6 +1884,13 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         _pdfFilePath = pdfPath;
         _pdfSha256 = note.pdfSha256;
         _pdfDocument = doc;
+        _pdfTable = table;
+        for (final d in _tableDocs.values) {
+          d.dispose();
+        }
+        _tableDocs
+          ..clear()
+          ..addAll(opened);
         _totalPages = doc?.pages.length ?? 0;
         if (doc != null) _applyPageSizes(doc);
         _loaded = true;
@@ -1957,6 +2020,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     pdfPath: _pdfFilePath,
     pdfSha256: _pdfFilePath == null ? null : _pdfSha256,
     pdfPageCount: _pdfFilePath == null ? null : _totalPages,
+    pdfs: _pdfFilePath == null ? null : _pdfTable,
     nativePages: _pdfFilePath == null ? null : Set.of(_nativePages),
     strokes: _strokesPerPage,
     textBoxes: _textBoxesPerPage,
@@ -1981,6 +2045,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
       (a) => a.fingerprint
     ),
     _pdfFilePath,
+    _pdfTable?.toJsonText(),
     _totalPages,
     ..._nativePages,
     for (final e in _strokesPerPage.entries)
@@ -2132,7 +2197,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     // (the files the PDF was in before its edits and page changes go once the note is saved with the one it is in now: if that save
     // fails, the note still has a file to open)
     final keep = _pdfFilePath;
-    final superseded = [for (final (path, _) in _pdfEditUndo) path, ..._pdfShaped].where((path) => path != keep).toList();
+    final inUse = {for (final file in _pdfTable?.files ?? const <NotePdf>[]) file.path};
+    // (files that were added to the note and then taken back, or taken out of it, are not kept)
+    final superseded = [for (final (path, _) in _pdfEditUndo) path, ..._pdfShaped, ..._tableDocs.keys].where((path) => path != keep && !inUse.contains(path)).toList();
     _pdfEditUndo.clear();
     _pdfShaped.clear();
     _pdfEditBox.dispose();
@@ -2142,6 +2209,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     }
     _pagesRead.clear();
     _pdfDocument?.dispose();
+    for (final d in _tableDocs.values) {
+      d.dispose();
+    }
+    _tableDocs.clear();
     // flush, and only free the controllers once the save has read them
     _saveNow().whenComplete(() {
       if (_lastSavedSignature != null) {

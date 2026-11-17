@@ -1,0 +1,213 @@
+[
+ {
+  "lang": "python",
+  "lines": [
+   "def area(r):",
+   "    return 3.14159 * r ** 2"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "for i in range(10):",
+   "    if i % 2 == 0:",
+   "        print(i)"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "names = [\"ada\", \"bob\"]",
+   "ages = {\"ada\": 36, \"bob\": 41}"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "while n != 1:",
+   "    n = n // 2 if n % 2 == 0 else 3 * n + 1"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "import numpy as np",
+   "x = np.zeros((3, 4))"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "class Stack:",
+   "    def __init__(self):",
+   "        self.items = []"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "result = [x * x for x in data if x > 0]"
+  ]
+ },
+ {
+  "lang": "python",
+  "lines": [
+   "with open(\"data.txt\") as f:",
+   "    lines = f.readlines()"
+  ]
+ },
+ {
+  "lang": "dart",
+  "lines": [
+   "final total = items.fold<int>(0, (a, b) => a + b);"
+  ]
+ },
+ {
+  "lang": "dart",
+  "lines": [
+   "Future<void> load() async {",
+   "  final data = await fetch();",
+   "}"
+  ]
+ },
+ {
+  "lang": "dart",
+  "lines": [
+   "class Point {",
+   "  final double x, y;",
+   "  const Point(this.x, this.y);",
+   "}"
+  ]
+ },
+ {
+  "lang": "dart",
+  "lines": [
+   "if (list.isEmpty) return null;"
+  ]
+ },
+ {
+  "lang": "c",
+  "lines": [
+   "int main(void) {",
+   "    printf(\"%d\\n\", sum(a, n));",
+   "    return 0;",
+   "}"
+  ]
+ },
+ {
+  "lang": "c",
+  "lines": [
+   "for (int i = 0; i < n; i++) {",
+   "    s += a[i] * b[i];",
+   "}"
+  ]
+ },
+ {
+  "lang": "c",
+  "lines": [
+   "char *p = malloc(n * sizeof(char));"
+  ]
+ },
+ {
+  "lang": "c",
+  "lines": [
+   "#include <stdio.h>",
+   "#define MAX 100"
+  ]
+ },
+ {
+  "lang": "c",
+  "lines": [
+   "struct node *next = head->next;"
+  ]
+ },
+ {
+  "lang": "java",
+  "lines": [
+   "public static void main(String[] args) {",
+   "    System.out.println(\"Hello\");",
+   "}"
+  ]
+ },
+ {
+  "lang": "java",
+  "lines": [
+   "List<String> out = new ArrayList<>();"
+  ]
+ },
+ {
+  "lang": "java",
+  "lines": [
+   "if (x != null && x.length() > 0) {",
+   "    count++;",
+   "}"
+  ]
+ },
+ {
+  "lang": "javascript",
+  "lines": [
+   "const sq = (x) => x * x;"
+  ]
+ },
+ {
+  "lang": "javascript",
+  "lines": [
+   "items.map(i => i.id).filter(Boolean);"
+  ]
+ },
+ {
+  "lang": "javascript",
+  "lines": [
+   "document.getElementById(\"out\").innerHTML = msg;"
+  ]
+ },
+ {
+  "lang": "sql",
+  "lines": [
+   "SELECT name, COUNT(*) FROM users",
+   "WHERE age >= 18 GROUP BY name;"
+  ]
+ },
+ {
+  "lang": "sql",
+  "lines": [
+   "INSERT INTO t (id, v) VALUES (1, 'a');"
+  ]
+ },
+ {
+  "lang": "shell",
+  "lines": [
+   "for f in *.txt; do wc -l \"$f\"; done"
+  ]
+ },
+ {
+  "lang": "shell",
+  "lines": [
+   "grep -rn \"TODO\" src/ | sort > todo.txt"
+  ]
+ },
+ {
+  "lang": "shell",
+  "lines": [
+   "git commit -m \"fix\" && git push origin main"
+  ]
+ },
+ {
+  "lang": "json",
+  "lines": [
+   "{\"id\": 7, \"tags\": [\"a\", \"b\"], \"ok\": true}"
+  ]
+ },
+ {
+  "lang": "regex",
+  "lines": [
+   "^[A-Za-z_][A-Za-z0-9_]*$"
+  ]
+ },
+ {
+  "lang": "latex",
+  "lines": [
+   "\\begin{itemize} \\item one \\end{itemize}"
+  ]
+ }
+]

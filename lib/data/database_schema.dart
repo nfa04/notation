@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 58;
+const int schemaVersion = 59;
 
 const List<String> createStatements = [
   '''
@@ -58,7 +58,8 @@ const List<String> createStatements = [
     pdf_name        TEXT,
     pdf_path        TEXT,
     pdf_sha256      TEXT,
-    pdf_page_count  INTEGER,
+    pdf_page_count  INTEGER,                      -- the pages of the note when it has several PDFs (see pdf_files); else of the one file
+    pdf_files       TEXT,                         -- a note with several PDFs: JSON {files: [{name, path, sha256, pages}], layout: [[file, page], ...]} (NULL: the one file above); pdf_name/pdf_path/pdf_sha256 are its first file
     native_pages    TEXT NOT NULL DEFAULT '[]',   -- JSON [page, ...]: pages of the PDF that are notebook pages (added ones: the paper shows, not the file)
 
     page_width      REAL NOT NULL DEFAULT 800,
@@ -744,6 +745,8 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  // a note can hold several PDFs, each kept as its own file, and shows their pages in any order
+  58: ['ALTER TABLE notes ADD COLUMN pdf_files TEXT'],
   // a formula read in the handwriting keeps its page and place, so that the assistant can be given it where it was written
   57: [
     'ALTER TABLE ink_reads ADD COLUMN page_index INTEGER',

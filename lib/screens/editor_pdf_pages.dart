@@ -144,14 +144,18 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
 
   Future<void> _pickAndLoadPdfFile() async {
     try {
-      final picked = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-      );
-
-      if (picked == null) return;
+      // (a note with no PDF yet may be given several: the first is its PDF, the pages of the others follow)
+      final several = _pdfFilePath == null;
+      final pickedAll = several
+          ? await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['pdf'])
+          : [?await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['pdf'])];
+      if (pickedAll.isEmpty) return;
+      final picked = pickedAll.first;
       final pickedFile = await pickedPath(picked);
       if (pickedFile == null) return;
+      final others = <String>[
+        for (final file in pickedAll.skip(1)) ?await pickedPath(file),
+      ];
 
       setState(() => _isLoadingPdf = true);
 
@@ -188,6 +192,10 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
       final pagesCount = doc.pages.length;
       final previousDoc = _pdfDocument;
       final previousFile = _pdfFilePath;
+      // (a note that had several PDFs has this one instead: the others go)
+      final previousFiles = [for (final f in _pdfTable?.files ?? const <NotePdf>[]) f.path];
+      final previousOpen = _tableDocs.values.toList();
+      _tableDocs.clear();
 
       _strokesPerPage.clear();
       _textBoxesPerPage.clear();
@@ -211,20 +219,28 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
         _importedPdfName = fileName;
         _pdfFilePath = filePath;
         _pdfSha256 = sha;
-        _pdfDocument = doc;
+        _pdfTable = null;
+        _pdfDocument = NotePdfDocument.single(doc);
         _totalPages = pagesCount;
-        _applyPageSizes(doc);
+        _applyPageSizes(_pdfDocument!);
         _isLoadingPdf = false;
         _currentSelectedText = null;
         _currentSelectedPageIndex = null;
       });
       previousDoc?.dispose();
+      for (final d in previousOpen) {
+        d.dispose();
+      }
+      for (final path in previousFiles) {
+        if (path != previousFile) File(path).delete().catchError((Object _) => File(path));
+      }
       if (previousFile != null) {
         File(
           previousFile,
         ).delete().catchError((Object _) => File(previousFile));
       }
       widget.onPdfImported?.call();
+      if (others.isNotEmpty) await _addPdfFiles(others);
     } catch (e) {
       setState(() => _isLoadingPdf = false);
       if (mounted) {
@@ -238,7 +254,7 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
   /// Every page's size is known as soon as the PDF is open, so the list has
   /// its final layout before any page image is ready. Otherwise pages would
   /// start as A4 placeholders and shrink or grow while the user scrolls.
-  void _applyPageSizes(PdfDocument doc) {
+  void _applyPageSizes(NotePdfDocument doc) {
     _schedulePrefetch();
     for (var i = 0; i < doc.pages.length; i++) {
       final page = doc.pages[i];

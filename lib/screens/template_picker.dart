@@ -75,24 +75,62 @@ class _TemplateDialog extends StatefulWidget {
 
 class _TemplateDialogState extends State<_TemplateDialog> {
   late List<SavedTemplate> _saved = widget.saved;
+  String _query = '';
+
+  bool _matches(BuiltInTemplate t) {
+    final q = _query.trim().toLowerCase();
+    return q.isEmpty || t.name.toLowerCase().contains(q) || t.about.toLowerCase().contains(q);
+  }
+
+  static String _groupName(TemplateGroup g) => switch (g) {
+        TemplateGroup.paper => tr('Paper'),
+        TemplateGroup.school => tr('School'),
+        TemplateGroup.work => tr('Work'),
+        TemplateGroup.personal => tr('Personal'),
+        TemplateGroup.creative => tr('Creative'),
+      };
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final shown = [for (final t in widget.templates.builtIn) if (_matches(t)) t];
+    Widget heading(String text) => Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text.verbatim(text, style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold)));
     return PlatformAlertDialog(
       title: const Text('New note from a template'),
       content: SizedBox(
         width: 460,
-        child: ListView(shrinkWrap: true, children: [
-          for (final t in widget.templates.builtIn)
-            ListTile(
-              key: ValueKey('template-${t.id}'),
-              leading: Icon(t.icon, color: scheme.primary),
-              title: Text.verbatim(t.name),
-              subtitle: Text.verbatim(t.about),
-              onTap: () => Navigator.pop(context, t),
-            ),
-          if (_saved.isNotEmpty) ...[
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            key: const ValueKey('template-search'),
+            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Search the templates'), isDense: true),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+          Flexible(
+            child: ListView(shrinkWrap: true, children: [
+              for (final g in TemplateGroup.values) ...[
+                if (shown.any((t) => t.group == g)) heading(_groupName(g)),
+                if (g == TemplateGroup.paper && shown.any((t) => t.group == g))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Wrap(spacing: 8, runSpacing: 4, children: [
+                      for (final t in shown.where((t) => t.group == g))
+                        Tooltip(
+                          message: t.about,
+                          child: ActionChip(key: ValueKey('template-${t.id}'), avatar: Icon(t.icon, size: 18), label: Text.verbatim(t.name), onPressed: () => Navigator.pop(context, t)),
+                        ),
+                    ]),
+                  )
+                else
+                  for (final t in shown.where((t) => t.group == g))
+                    ListTile(
+                      key: ValueKey('template-${t.id}'),
+                      leading: Icon(t.icon, color: scheme.primary),
+                      title: Text.verbatim(t.name),
+                      subtitle: Text.verbatim(t.about),
+                      onTap: () => Navigator.pop(context, t),
+                    ),
+              ],
+          if (_saved.isNotEmpty && _query.trim().isEmpty) ...[
             const Divider(),
             Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 4), child: Text('Your templates', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold))),
             for (final t in _saved)
@@ -112,6 +150,8 @@ class _TemplateDialogState extends State<_TemplateDialog> {
                 ),
               ),
           ],
+            ]),
+          ),
         ]),
       ),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))],

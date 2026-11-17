@@ -9,6 +9,8 @@ import 'package:notes/models/canvas_models.dart';
 import 'package:notes/models/page_background.dart';
 import 'package:notes/models/page_format.dart';
 import 'package:notes/screens/dashboard_view.dart';
+import 'package:notes/markdown/table_formulas.dart';
+import 'package:notes/templates/template_documents.dart';
 import 'package:notes/templates/templates.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -79,6 +81,39 @@ void main() {
     expect(await service.createFromSaved(saved.single.id), isNull);
   });
 
+  test('every template makes a note, with no ids repeated and nothing left unfilled', () async {
+    final all = service.builtIn;
+    expect(all.map((t) => t.id).toSet(), hasLength(all.length));
+    for (final t in all) {
+      final note = (await repo.loadNote(await service.createFrom(t)))!;
+      expect(note.documentText, isNot(contains('null')), reason: t.id);
+      if (t.id == 'weekly') expect(note.documentText, contains('Week 11'));
+    }
+    expect(all.where((t) => t.group != TemplateGroup.paper), hasLength(greaterThan(15)));
+    expect(all.map((t) => t.group).toSet(), TemplateGroup.values.toSet());
+  });
+
+  test('the sums in the budget, habit, exam and lab templates work themselves out', () {
+    List<List<String>> rows(String text) => [
+          for (final l in text.split('\n'))
+            if (l.startsWith('|') && !l.contains('---')) [for (final c in l.substring(1, l.length - 1).split('|')) c.trim()]
+        ];
+    final budget = rows(budgetText(DateTime(2026, 3, 9)));
+    expect(budget.where((r) => r.any(isFormula)), isNotEmpty);
+    final habits = worked([...rows(habitsText(DateTime(2026, 3, 9))).take(2).map((r) => [...r])]);
+    expect(habits[1].last, '0');
+    final lab = worked(rows(labText(DateTime(2026, 3, 9))).skip(0).take(5).toList());
+    expect(lab.every((r) => r.every((c) => !c.startsWith('='))), isTrue);
+    final exam = worked([for (final r in rows(examText()).take(2)) r]);
+    expect(exam.every((r) => r.every((c) => !isFormula(c))), isTrue);
+  });
+
+  test('the week number is the ISO one', () {
+    expect(templateWeek(DateTime(2026, 3, 9)), 11);
+    expect(templateWeek(DateTime(2026, 1, 1)), 1);
+    expect(templateWeek(DateTime(2027, 1, 1)), 53);
+  });
+
   testWidgets('the dashboard offers the pages and opens the new note', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
@@ -89,6 +124,8 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('new-from-template')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('template-search')), 'meeting');
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('template-meeting')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));

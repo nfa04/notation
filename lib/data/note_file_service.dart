@@ -11,6 +11,7 @@ import '../models/image_item.dart';
 import 'audio_repository.dart';
 import 'brush_library.dart';
 import 'note_data.dart';
+import 'note_pdfs.dart';
 import 'note_file.dart';
 import 'note_repository.dart';
 import '../l10n/language.dart';
@@ -99,6 +100,9 @@ class NoteFileService {
       createdAt: times?.created,
       updatedAt: times?.edited,
       pdf: await _read(note.pdfPath),
+      morePdfs: [
+        for (final f in note.pdfs?.files.skip(1) ?? const <NotePdf>[]) (await _read(f.path)) ?? Uint8List(0),
+      ],
       themeImage: await _read(note.themeImage),
       themeExtension: _extensionOf(note.themeImage ?? ''),
       images: images,
@@ -223,6 +227,32 @@ class NoteFileService {
           ..pdfPath = path
           ..pdfSha256 = note.pdfSha256
           ..pdfPageCount = note.pdfPageCount;
+        // a note with several PDFs: each is put in a file of its own, and the table is given their places
+        final table = note.pdfs;
+        if (table != null && parsed.morePdfs.length == table.files.length - 1) {
+          final files = <NotePdf>[table.files.first.copyWith(path: path)];
+          var ok2 = true;
+          for (var i = 1; i < table.files.length; i++) {
+            final bytes = parsed.morePdfs[i - 1];
+            final name = table.files[i].name;
+            if (table.files[i].sha256.isNotEmpty && sha256.convert(bytes).toString() != table.files[i].sha256) {
+              ok2 = false;
+              break;
+            }
+            final more = p.join(dir.path, '${stamp}_$i ${name.isEmpty ? 'document.pdf' : name}'.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_'));
+            await File(more).writeAsBytes(bytes, flush: true);
+            files.add(table.files[i].copyWith(path: more));
+          }
+          if (ok2) {
+            copy.pdfs = NotePdfs(files, table.layout);
+          } else {
+            warnings.add(tr('A PDF in the file does not match its checksum and was left out'));
+            copy.pdfName = null;
+            copy.pdfPath = null;
+            copy.pdfSha256 = null;
+            copy.pdfPageCount = null;
+          }
+        }
       } else {
         warnings.add(tr('The PDF in the file does not match its checksum and was left out'));
       }

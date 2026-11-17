@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../data/note_repository.dart';
 
 import 'package:caldav/caldav.dart';
+import 'package:dio/dio.dart' show Options, ResponseType;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -194,10 +195,24 @@ class CalDavService extends ChangeNotifier {
     _client = null;
   }
 
+  /// The address as compared: only the path, decoded, without a closing slash (a server may list the same calendar with another
+  /// host, another encoding or a slash more than it did when the choice was saved).
+  static String _hrefKey(String href) {
+    final path = Uri.tryParse(href)?.path ?? href;
+    final decoded = Uri.decodeComponent(path);
+    return decoded.endsWith('/') ? decoded.substring(0, decoded.length - 1) : decoded;
+  }
+
   Calendar? _find(List<Calendar> all, String? href) {
+    if (href == null) return null;
     for (final c in all) {
       if (c.href.toString() == href) return c;
     }
+    final key = _hrefKey(href);
+    for (final c in all) {
+      if (_hrefKey(c.href.toString()) == key) return c;
+    }
+    debugPrint('the calendar $href is not on the server any more; it has: ${[for (final c in all) c.href]}');
     return null;
   }
 
@@ -291,8 +306,7 @@ class CalDavService extends ChangeNotifier {
       for (final href in c.eventCalendars) {
         final calendar = _find(all, href);
         if (calendar == null) continue;
-        final found = await client.getEvents(calendar, start: from.toUtc(), end: to.toUtc());
-        result.addAll(found.map((e) => DayEvent.from(e, calendar)));
+        result.addAll(await _eventsOf(client, calendar, from, to));
       }
       result.sort((a, b) => a.start.compareTo(b.start));
       _tasks.cacheEvents(_cacheSource, _rangeKey(from, to), jsonEncode([for (final e in result) e.toJson()])).catchError((Object _) {});
@@ -301,6 +315,47 @@ class CalDavService extends ChangeNotifier {
       debugPrint('loading events failed: $e');
       return await cachedEvents(from, to) ?? const [];
     }
+  }
+
+  /// One calendar's events: the server's raw answer is read and repeated here ([expandServerEvents]). A server that
+  /// does not send the data in its answer is read through the package instead (no repeating events then).
+  Future<List<DayEvent>> _eventsOf(CalDavClient client, Calendar calendar, DateTime from, DateTime to) async {
+    try {
+      final c = _config!;
+      final password = await _secret.read();
+      if (password == null) throw StateError('no password');
+      final dio = calDavDio(c.serverUrl, c.username, password);
+      try {
+        // a day more on both sides: the server judges in UTC, the days shown are local
+        final start = from.toUtc().subtract(const Duration(days: 1)), end = to.toUtc().add(const Duration(days: 1));
+        String stamp(DateTime d) =>
+            '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}'
+            'T${d.hour.toString().padLeft(2, '0')}${d.minute.toString().padLeft(2, '0')}${d.second.toString().padLeft(2, '0')}Z';
+        final response = await dio.requestUri<String>(
+          Uri.parse(c.serverUrl).resolveUri(calendar.href),
+          data: '''<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT">
+    <C:time-range start="${stamp(start)}" end="${stamp(end)}"/>
+  </C:comp-filter></C:comp-filter></C:filter>
+</C:calendar-query>''',
+          options: Options(
+            method: 'REPORT',
+            headers: {'Depth': '1', 'Content-Type': 'application/xml; charset=utf-8'},
+            responseType: ResponseType.plain,
+          ),
+        );
+        final texts = calendarDataOf(response.data ?? '');
+        if (texts.isNotEmpty) return expandServerEvents(texts, from, to, calendar);
+      } finally {
+        dio.close();
+      }
+    } catch (e) {
+      debugPrint('reading the raw events of ${calendar.displayName} failed, using the package: $e');
+    }
+    final found = await client.getEvents(calendar, start: from.toUtc(), end: to.toUtc());
+    return [for (final e in found) DayEvent.from(e, calendar)];
   }
 
   // ---- writing events -------------------------------------------------------

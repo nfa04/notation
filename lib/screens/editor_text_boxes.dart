@@ -176,7 +176,9 @@ extension _EditorTextBoxes on _FixedPageNoteEditorState {
       child: Opacity(
         opacity: layer.opacity,
         child: IgnorePointer(
-        ignoring: _connecting || layer.locked,
+        // (in draw mode the pen draws over a box - a table too - that lies on a layer below the one it draws on, as the layers say; on
+        // its own layer a box is still moved by a drag, and a selected one always takes its touches)
+        ignoring: _connecting || layer.locked || (_mode == CanvasInteractionMode.draw && !isSelected && _layers.indexOf(_drawingLayer.id) > _layers.indexOf(box.layer)),
         child: ElementDragDetector(
         onTap: () => setState(() {
           // Shift adds the box to what is selected (or takes it out); on the box that is being edited and nothing else it is the

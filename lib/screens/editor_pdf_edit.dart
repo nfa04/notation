@@ -77,7 +77,8 @@ class _PdfEditPainter extends CustomPainter {
 
 /// Editing the PDF itself in document mode: its text, pictures and shapes, not an overlay.
 extension _PdfEdit on _FixedPageNoteEditorState {
-  bool get _pdfEditable => !_isBlank && pdfContentEditingSupported;
+  /// (the text of a PDF is edited in its file; a note with several PDFs has no one file to edit)
+  bool get _pdfEditable => !_isBlank && pdfContentEditingSupported && _pdfTable == null;
 
   /// Opens the PDF for editing (once; it stays open while the mode is on).
   Future<void> _openPdfEditor() async {
@@ -226,6 +227,14 @@ extension _PdfEdit on _FixedPageNoteEditorState {
   /// With [page] and its new [data] only that page changed: the others keep what was made of them, and the old picture of
   /// [page] stays on screen until [data] replaces it.
   void _showPdf(String path, String sha, PdfDocument doc, {int? page, PdfPageData? data}) {
+    _showDocument(NotePdfDocument.single(doc), page: page, data: data, also: () {
+      _pdfFilePath = path;
+      _pdfSha256 = sha;
+    });
+  }
+
+  /// Shows [doc] as the note's PDF (see [_showPdf]); [also] sets what else changes with it, in the same frame.
+  void _showDocument(NotePdfDocument doc, {int? page, PdfPageData? data, VoidCallback? also}) {
     final previous = _pdfDocument;
     final stale = <ui.Image>[];
     if (page != null && data != null) {
@@ -244,8 +253,7 @@ extension _PdfEdit on _FixedPageNoteEditorState {
     }
     _pdfPageTexts = null;
     setState(() {
-      _pdfFilePath = path;
-      _pdfSha256 = sha;
+      also?.call();
       _pdfDocument = doc;
       _totalPages = doc.pages.length;
       _applyPageSizes(doc);

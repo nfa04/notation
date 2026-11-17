@@ -13,6 +13,7 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final path = '${dir.path}/n.db';
     final old = await databaseFactory.openDatabase(path, options: OpenDatabaseOptions(version: 50, onCreate: (db, _) async {
+      await db.execute('CREATE TABLE notes (id TEXT PRIMARY KEY)'); // (every database has it; later steps alter it)
       await db.execute('CREATE TABLE sync_tombstones (kind TEXT NOT NULL, id TEXT NOT NULL, deleted_at INTEGER NOT NULL, PRIMARY KEY (kind, id))');
       await db.execute('CREATE TABLE graph_snapshots (mode TEXT PRIMARY KEY, built_at INTEGER NOT NULL, payload TEXT NOT NULL)');
       await db.insert('graph_snapshots', {'mode': 'facts', 'built_at': 1700000000000, 'payload': 'F'});
@@ -46,6 +47,7 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final path = '${dir.path}/n.db';
     final old = await databaseFactory.openDatabase(path, options: OpenDatabaseOptions(version: 51, onCreate: (db, _) async {
+      await db.execute('CREATE TABLE notes (id TEXT PRIMARY KEY)'); // (every database has it; later steps alter it)
       await db.execute('CREATE TABLE sync_tombstones (kind TEXT NOT NULL, id TEXT NOT NULL, deleted_at INTEGER NOT NULL, PRIMARY KEY (kind, id))');
       await db.execute('CREATE TABLE saved_graphs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, mode TEXT NOT NULL, folder_id TEXT, built_at INTEGER NOT NULL, payload TEXT NOT NULL)');
       await db.insert('saved_graphs', {'name': 'Facts', 'mode': 'facts', 'built_at': 1700000000000, 'payload': 'F'});

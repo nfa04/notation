@@ -229,6 +229,11 @@ a `Text` for each word inside a `SelectionArea`. When a page's words arrive, the
 main isolate in the jumps), and lays out, builds and later removes hundreds of paragraphs (36%); Linux also makes their semantics (18%). One
 render object for the whole layer, taking part in the selection as a `Selectable`, would remove that.
 
+### A note with several PDFs
+
+A note can hold more than one PDF, each kept as its own file (never merged). `NotePdfs` (`lib/data/note_pdfs.dart`) is the files plus a page table: page `n` of the note is `layout[n]`, a reference to page `p` of file `f` (or a blank notebook page). Moving, deleting or inserting pages in such a note only changes the table (`_reshapeTable`), so pages can be put in any order across files and nothing is rewritten; the file of a deleted page keeps it, hidden. A note with one PDF has no table and works as it always did; adding a second PDF turns it into one (and undo turns it back). `NotePdfDocument` composes the pages of the open files for the editor, so rendering, words, zoom and export read `pages[n]` as before. Stored in `notes.pdf_files` (the first file is also in `pdf_name`/`pdf_path`/`pdf_sha256`) and in `.uninote` as `source.pdf` plus `pdfs/<n>.pdf`. Export, live sessions and the like get one PDF made by `combinePdfFiles`. Editing the text inside a PDF (document mode) works only for one-file notes.
+
+
 ## The block editor
 
 A long document cannot be written in one `TextField`: it lays out all of its text at each key (44 ms at 120 KB on a fast desktop with no

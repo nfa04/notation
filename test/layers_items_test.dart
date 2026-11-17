@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show kPrimaryMouseButton;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/collab/replica.dart';
 import 'package:notes/data/app_database.dart';
@@ -12,6 +13,7 @@ import 'package:notes/images/picture_edit.dart';
 import 'package:notes/models/canvas_models.dart';
 import 'package:notes/models/image_item.dart';
 import 'package:notes/models/layers.dart';
+import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -153,6 +155,32 @@ void main() {
       await tapKey(tester, 'layers-close');
       expect(find.text('On the sky'), findsOneWidget);
       expect(find.byKey(const ValueKey('image-pic-psky')), findsOneWidget);
+      await settleSave(tester);
+    });
+
+    testWidgets('the pen draws over a box of a lower layer, and a box of its own layer is still taken by the drag', (tester) async {
+      await open(tester);
+      await openLayers(tester);
+      await tapKey(tester, 'layer-sky');
+      await tapKey(tester, 'layers-close');
+      int strokes() => {
+            for (final p in find.byWidgetPredicate((w) => w is CustomPaint && w.painter is InkLayerPainter).evaluate()) ...((p.widget as CustomPaint).painter as InkLayerPainter).strokes
+          }.length;
+      Future<void> drag(Finder over) async {
+        final g = await tester.startGesture(tester.getCenter(over), kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+        for (var i = 1; i <= 8; i++) {
+          await g.moveBy(const Offset(10, 4));
+        }
+        await g.up();
+        await tester.pumpAndSettle();
+      }
+
+      await drag(find.text('On the base'));
+      expect(strokes(), 1, reason: 'the base box lies below the sky layer');
+      final before = tester.getTopLeft(find.text('On the sky'));
+      await drag(find.text('On the sky'));
+      expect(strokes(), 1, reason: 'its own layer: the box is dragged');
+      expect(tester.getTopLeft(find.text('On the sky')), isNot(before));
       await settleSave(tester);
     });
 

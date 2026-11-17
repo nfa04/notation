@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text;
 import '../l10n/text.dart';
 
 import '../markdown/markdown_table.dart';
+import '../markdown/table_formulas.dart';
 import '../l10n/language.dart';
 import '../style/platform_dialog.dart';
 
@@ -86,12 +87,14 @@ class TableEditor extends StatefulWidget {
 class _TableEditorState extends State<TableEditor> {
   late List<List<TextEditingController>> _cells;
   late List<List<FocusNode>> _focus;
+  List<String> _aligns = const [];
   String _written = '';
   (int, int) _at = (0, 0);
 
   @override
   void initState() {
     super.initState();
+    _aligns = _alignsOf(widget.source.text);
     _build(parseTableText(widget.source.text) ?? [['']]);
     widget.source.addListener(_sourceChanged);
   }
@@ -124,6 +127,8 @@ class _TableEditorState extends State<TableEditor> {
           for (var c = 0; c < rows[r].length; c++)
             FocusNode()..addListener(() {
               if (_focusOf(r, c).hasFocus) _at = (r, c);
+              // (a formula shows its result while it is not being written)
+              if (mounted && isFormula(_cells[r][c].text)) setState(() {});
             })
         ],
     ];
@@ -137,6 +142,7 @@ class _TableEditorState extends State<TableEditor> {
     if (widget.source.text == _written) return;
     final rows = parseTableText(widget.source.text);
     if (rows == null) return;
+    _aligns = _alignsOf(widget.source.text);
     setState(() {
       _free();
       _build(rows);
@@ -145,8 +151,14 @@ class _TableEditorState extends State<TableEditor> {
 
   List<List<String>> get _rows => [for (final r in _cells) [for (final c in r) c.text]];
 
+  /// How the columns are aligned in [text] (the second line says), so that an edit does not undo it.
+  static List<String> _alignsOf(String text) {
+    final lines = text.split('\n');
+    return lines.length > 1 && tableSeparator.hasMatch(lines[1]) ? columnAligns(lines[1]) : const [];
+  }
+
   void _write() {
-    _written = tableText(_rows);
+    _written = tableText(_rows, aligns: _aligns);
     widget.source.value = TextEditingValue(text: _written, selection: TextSelection.collapsed(offset: _written.length));
   }
 
@@ -169,6 +181,18 @@ class _TableEditorState extends State<TableEditor> {
     _restructure(rows, focus: (at, _at.$2));
   }
 
+  void _sort(bool descending) {
+    final rows = _rows;
+    if (rows.length < 3) return;
+    _restructure(sortedTable(rows, _at.$2, descending: descending), focus: (0, _at.$2));
+  }
+
+  void _addTotals() {
+    final rows = _rows, more = withTotals(rows);
+    if (more.length == rows.length) return;
+    _restructure(more, focus: (more.length - 1, _at.$2));
+  }
+
   void _removeRow() {
     final rows = _rows;
     if (rows.length <= 1) return;
@@ -181,6 +205,7 @@ class _TableEditorState extends State<TableEditor> {
     for (final r in rows) {
       r.insert(at, '');
     }
+    if (at <= _aligns.length) _aligns = [..._aligns]..insert(at, '');
     _restructure(rows, focus: (_at.$1, at));
   }
 
@@ -190,6 +215,7 @@ class _TableEditorState extends State<TableEditor> {
     for (final r in rows) {
       r.removeAt(_at.$2);
     }
+    if (_at.$2 < _aligns.length) _aligns = [..._aligns]..removeAt(_at.$2);
     _restructure(rows, focus: (_at.$1, _at.$2.clamp(0, rows.first.length - 1)));
   }
 
@@ -202,8 +228,43 @@ class _TableEditorState extends State<TableEditor> {
         onPressed: enabled ? onTap : null,
       );
 
+  /// The cell as it shows: its result while it holds a formula that is not being written, else the field to write in.
+  Widget _cell(int r, int c, TextStyle style, List<List<String>>? shown) {
+    final field = TextField(
+      key: ValueKey('table-cell-$r-$c'),
+      controller: _cells[r][c],
+      focusNode: _focus[r][c],
+      maxLines: null,
+      textAlign: _textAlign(c),
+      style: r == 0 ? style.copyWith(fontWeight: FontWeight.bold) : style,
+      cursorColor: widget.textColor,
+      decoration: const InputDecoration(filled: false, border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+      onChanged: (_) {
+        _write();
+        if (_cells.any((row) => row.any((x) => isFormula(x.text)))) setState(() {}); // (the results follow)
+      },
+    );
+    if (shown == null || !isFormula(_cells[r][c].text) || _focus[r][c].hasFocus) return field;
+    return GestureDetector(
+      key: ValueKey('table-result-$r-$c'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _focus[r][c].requestFocus(),
+      child: SizedBox(
+        width: double.infinity,
+        child: Text.verbatim(shown[r][c], textAlign: _textAlign(c), style: r == 0 ? style.copyWith(fontWeight: FontWeight.bold) : style),
+      ),
+    );
+  }
+
+  TextAlign _textAlign(int c) => switch (c < _aligns.length ? _aligns[c] : '') {
+        'center' => TextAlign.center,
+        'right' => TextAlign.right,
+        _ => TextAlign.start,
+      };
+
   @override
   Widget build(BuildContext context) {
+    final shown = _cells.any((row) => row.any((x) => isFormula(x.text))) ? worked(_rows) : null;
     final line = BorderSide(color: widget.textColor.withValues(alpha: 0.4), width: 0.8);
     final style = TextStyle(fontSize: widget.fontSize, height: 1.3, color: widget.textColor);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -212,6 +273,9 @@ class _TableEditorState extends State<TableEditor> {
         _tool('table-remove-row', Icons.playlist_remove, 'Delete this row', _removeRow, enabled: _cells.length > 1),
         _tool('table-add-column', Icons.view_column_outlined, 'Add a column to the right', _addColumn),
         _tool('table-remove-column', Icons.remove_road_outlined, 'Delete this column', _removeColumn, enabled: _cells.first.length > 1),
+        _tool('table-sort-up', Icons.arrow_upward, 'Sort by this column, lowest first', () => _sort(false), enabled: _cells.length > 2),
+        _tool('table-sort-down', Icons.arrow_downward, 'Sort by this column, highest first', () => _sort(true), enabled: _cells.length > 2),
+        _tool('table-totals', Icons.functions, 'Add a row of totals', _addTotals, enabled: _cells.length > 1),
       ]),
       Table(
         border: TableBorder(top: line, bottom: line, left: line, right: line, horizontalInside: line, verticalInside: line),
@@ -224,16 +288,7 @@ class _TableEditorState extends State<TableEditor> {
                 for (var c = 0; c < _cells[r].length; c++)
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: widget.fontSize * 0.4, vertical: widget.fontSize * 0.2),
-                    child: TextField(
-                      key: ValueKey('table-cell-$r-$c'),
-                      controller: _cells[r][c],
-                      focusNode: _focus[r][c],
-                      maxLines: null,
-                      style: r == 0 ? style.copyWith(fontWeight: FontWeight.bold) : style,
-                      cursorColor: widget.textColor,
-                      decoration: const InputDecoration(filled: false, border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
-                      onChanged: (_) => _write(),
-                    ),
+                    child: _cell(r, c, style, shown),
                   ),
               ],
             ),

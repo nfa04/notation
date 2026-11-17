@@ -55,6 +55,8 @@ _Answer _run(_Call call) {
         return (s.fontInfo(args[0]! as int, args[1]! as PdfEditObject), null);
       case 'arrange':
         s.arrange((args[0]! as List).cast<int?>(), args[1]! as Size);
+      case 'insertPdf':
+        return (s.insertPdf(args[0]! as Uint8List, args[1]! as int), null);
       case 'save':
         return (s.save(), null);
       case 'close':
@@ -121,6 +123,9 @@ class PdfContentEditor {
   /// Gives the PDF the pages [order] says: each the number of a page it has (at most once; the others are deleted), or null for a
   /// new blank page of [blank] points.
   Future<void> arrange(List<int?> order, Size blank) => _send(_id, 'arrange', [order, blank]);
+
+  /// Puts the pages of the PDF [bytes] in, the first of them as page [at] (0: in front, the number of pages: at the end). Gives how many pages came.
+  Future<int> insertPdf(Uint8List bytes, int at) async => await _send(_id, 'insertPdf', [bytes, at]) as int;
 
   /// The edited PDF.
   Future<Uint8List> save() async => await _send(_id, 'save') as Uint8List;

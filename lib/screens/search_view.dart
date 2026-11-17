@@ -10,6 +10,8 @@ import '../l10n/text.dart';
 import '../search/pdf_indexer.dart';
 import '../search/search_filter.dart';
 import '../search/search_memory.dart';
+import '../ai/citations.dart' show quoteQuery;
+import '../ai/note_knowledge.dart';
 import '../search/search_query.dart';
 import '../style/platform_dialog.dart';
 
@@ -32,7 +34,10 @@ class SearchView extends StatefulWidget {
   /// The tags of notes, to filter by; null: no tags.
   final TagRepository? tags;
 
-  const SearchView({super.key, required this.repository, required this.onOpen, this.initial, this.onChanged, this.initialFilter, this.onFilterChanged, this.tags});
+  /// Finds notes by what they say (not by their words); null: that way of searching is not offered.
+  final NoteKnowledge? knowledge;
+
+  const SearchView({super.key, required this.repository, required this.onOpen, this.initial, this.onChanged, this.initialFilter, this.onFilterChanged, this.tags, this.knowledge});
 
   @override
   State<SearchView> createState() => _SearchViewState();
@@ -45,7 +50,7 @@ class _SearchViewState extends State<SearchView> {
   late bool _word = widget.initial?.wholeWord ?? false;
   late SearchFilter _filter = widget.initialFilter ?? SearchFilter();
   late bool _showFilters = !_filter.isDefault;
-  SearchOrder _order = SearchOrder.changed;
+  SearchOrder _order = SearchOrder.relevance;
   late final SearchMemory _memory = SearchMemory(widget.repository.settings);
   List<SavedSearch> _recent = const [];
   Map<String, Set<String>> _tagsOfNotes = {};
@@ -54,6 +59,14 @@ class _SearchViewState extends State<SearchView> {
   Timer? _debounce;
   RunningSearch? _running;
   SearchResults? _results;
+
+  /// Nothing was found as typed, so these are the matches of similar words (typos allowed).
+  bool get _similar => _results?.similar ?? false;
+
+  /// Search by meaning: what the notes say about the words, not the words themselves.
+  bool _meaning = false;
+  Retrieval? _found;
+  int _asked = 0;
   String? _failure;
   bool _busy = false;
 
@@ -127,7 +140,49 @@ class _SearchViewState extends State<SearchView> {
     setState(() {});
   }
 
+  /// The notes and passages that fit what was typed, by meaning.
+  Future<void> _searchMeaning() async {
+    final knowledge = widget.knowledge;
+    final text = _text.text.trim();
+    _running?.cancel();
+    final turn = ++_asked;
+    if (knowledge == null || text.isEmpty) {
+      setState(() {
+        _found = null;
+        _failure = null;
+        _busy = false;
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _failure = null;
+    });
+    try {
+      final allowed = {for (final s in _filter.apply(await _allSources(), _notes, _folders, tagsOfNotes: _tagsOfNotes)) s.noteId};
+      final r = await knowledge.retrieve(text, notes: 12, passages: 36);
+      if (_gone || turn != _asked) return;
+      // (it always names the closest notes, however far off: only those about as close as the best are shown)
+      final best = r.notes.where((n) => allowed.contains(n.id)).toList();
+      final top = best.isEmpty ? 0.0 : best.map((n) => n.score).reduce((a, b) => a > b ? a : b);
+      final shown = [for (final n in best) if (n.score >= 0.2 && n.score >= top * 0.5) n];
+      final ids = {for (final n in shown) n.id};
+      setState(() {
+        _found = Retrieval(shown, [for (final p in r.passages) if (ids.contains(p.noteId) && p.score >= 0.15) p]);
+        _busy = false;
+      });
+    } catch (e) {
+      if (_gone || turn != _asked) return;
+      setState(() {
+        _found = null;
+        _busy = false;
+        _failure = tr('The search failed.');
+      });
+    }
+  }
+
   Future<void> _search() async {
+    if (_meaning) return _searchMeaning();
     final query = _query;
     _running?.cancel();
     if (query.isEmpty || query.problem != null) {
@@ -248,6 +303,7 @@ class _SearchViewState extends State<SearchView> {
   }
 
   String _orderLabel(SearchOrder o) => switch (o) {
+        SearchOrder.relevance => tr('Best match'),
         SearchOrder.changed => tr('Recently changed'),
         SearchOrder.mostMatches => tr('Most matches'),
         SearchOrder.title => tr('Title'),
@@ -443,6 +499,14 @@ class _SearchViewState extends State<SearchView> {
         if (!_notes.containsKey(id)) id,
     ];
     switch (_order) {
+      case SearchOrder.relevance:
+        // (the notes come most recently changed first, and a note that is as good as another stays after it)
+        final rank = {for (var i = 0; i < order.length; i++) order[i]: i};
+        final score = {for (final id in order) id: relevanceOf(byNote[id]!, r!.countByNote[id] ?? 0)};
+        order.sort((a, b) {
+          final c = score[b]!.compareTo(score[a]!);
+          return c != 0 ? c : rank[a]!.compareTo(rank[b]!);
+        });
       case SearchOrder.changed:
         break; // (the notes come most recently changed first)
       case SearchOrder.mostMatches:
@@ -494,9 +558,29 @@ class _SearchViewState extends State<SearchView> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            _toggle('search-case', 'Aa', 'Match the case', _case, (v) => _case = v),
-            _toggle('search-word', 'ab', 'Whole words only', _word, (v) => _word = v),
-            _toggle('search-regex', '.*', 'Regular expression', _regex, (v) => _regex = v),
+            if (!_meaning) ...[
+              _toggle('search-case', 'Aa', 'Match the case', _case, (v) => _case = v),
+              _toggle('search-word', 'ab', 'Whole words only', _word, (v) => _word = v),
+              _toggle('search-regex', '.*', 'Regular expression', _regex, (v) => _regex = v),
+            ],
+            if (widget.knowledge != null)
+              FilterChip(
+                key: const ValueKey('search-meaning'),
+                avatar: const Icon(Icons.auto_awesome_outlined, size: 16),
+                label: Text.verbatim(tr('By meaning')),
+                tooltip: tr('Find notes by what they say about it, not by the words you typed'),
+                selected: _meaning,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (v) {
+                  setState(() {
+                    _meaning = v;
+                    _results = null;
+                    _found = null;
+                  });
+                  _search();
+                },
+              ),
             FilterChip(
               key: const ValueKey('search-filters-toggle'),
               avatar: const Icon(Icons.tune, size: 16),
@@ -519,7 +603,9 @@ class _SearchViewState extends State<SearchView> {
                 child: Text.verbatim(
                   r.total == 0
                       ? tr('No matches.')
-                      : tr('{n} matches in {notes} notes', {'n': r.total, 'notes': r.countByNote.length}) + (r.cutOff ? tr(' (the first ones are shown)') : ''),
+                      : (_similar ? tr('Nothing as typed. Similar words: ') : '') +
+                          tr('{n} matches in {notes} notes', {'n': r.total, 'notes': r.countByNote.length}) +
+                          (r.cutOff ? tr(' (the first ones are shown)') : ''),
                   style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ),
@@ -542,11 +628,70 @@ class _SearchViewState extends State<SearchView> {
         Expanded(
           child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
             if (_query.isEmpty && _recent.isNotEmpty) _recentList(),
-            for (final id in order) _noteCard(id, byNote[id]!, r!.countByNote[id] ?? 0),
+            if (_meaning) ..._meaningCards() else for (final id in order) _noteCard(id, byNote[id]!, r!.countByNote[id] ?? 0),
           ]),
         ),
       ]),
     );
+  }
+
+  /// The first words of a passage: enough to find it again in its note.
+  static String _lead(String text) => text.trim().split(RegExp(r'\s+')).take(6).join(' ');
+
+  /// The notes found by meaning, each with the passages that fit best.
+  List<Widget> _meaningCards() {
+    final found = _found;
+    final scheme = Theme.of(context).colorScheme;
+    final knowledge = widget.knowledge!;
+    if (found == null) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Text.verbatim(
+          found.notes.isEmpty
+              ? tr('Nothing about that.')
+              : (knowledge.ready() ? '' : tr('Only the words count: download the sentence model in the settings to find notes by what they mean. ')) +
+                  tr('{n} notes', {'n': found.notes.length}),
+          key: const ValueKey('search-meaning-count'),
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+      ),
+      for (final n in found.notes)
+        () {
+          final note = _notes[n.id];
+          final passages = ([for (final p in found.passages) if (p.noteId == n.id) p]..sort((a, b) => b.score.compareTo(a.score))).take(2).toList();
+          return Card(
+            key: ValueKey('search-meaning-${n.id}'),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ListTile(
+                leading: Icon(note?.isPdf ?? false ? Icons.picture_as_pdf_outlined : Icons.note_alt_outlined),
+                title: Text.verbatim(n.title.isEmpty ? tr('Untitled') : n.title),
+                subtitle: _where(note).isEmpty ? null : Text.verbatim(_where(note)),
+                onTap: () {
+                  _remember();
+                  widget.onOpen(n.id, const SearchQuery(''), passages.isEmpty ? -1 : (passages.first.page ?? -1));
+                },
+              ),
+              for (final p in passages)
+                InkWell(
+                  onTap: () {
+                    _remember();
+                    widget.onOpen(n.id, quoteQuery(_lead(p.text)), p.page ?? -1);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text.verbatim(p.label, style: TextStyle(fontSize: 11, color: scheme.primary)),
+                      Text.verbatim(p.text.replaceAll(RegExp(r'\s+'), ' ').trim(), maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                    ]),
+                  ),
+                ),
+              const SizedBox(height: 4),
+            ]),
+          );
+        }(),
+    ];
   }
 
   Widget _recentList() => Padding(
@@ -581,7 +726,7 @@ class _SearchViewState extends State<SearchView> {
     final note = _notes[id];
     final where = _where(note);
     final scheme = Theme.of(context).colorScheme;
-    final query = _query;
+    final query = _similar ? _query.withTypos : _query; // (a note opened from similar words finds them there too)
     return Card(
       key: ValueKey('search-note-$id'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

@@ -10,6 +10,8 @@ import '../data/note_data.dart';
 import '../data/safe_names.dart';
 import '../models/canvas_models.dart';
 import '../pdf/pdf_pages.dart';
+import '../data/note_pdfs.dart';
+import '../data/file_digest.dart';
 import '../data/brush_library.dart';
 import '../data/note_repository.dart';
 import 'cloud_share.dart';
@@ -490,6 +492,11 @@ class CollabService extends ChangeNotifier implements LiveSource {
       pdf: () async {
         final path = note.pdfPath;
         if (path == null || !File(path).existsSync()) return null;
+        final table = note.pdfs;
+        if (table != null) {
+          final bytes = await combinePdfFiles(table);
+          return SharedPdf(note.pdfName ?? 'document.pdf', await sha256Of(bytes), table.pageCount, bytes);
+        }
         return SharedPdf(note.pdfName ?? 'document.pdf', note.pdfSha256 ?? '', note.pdfPageCount ?? 0, await File(path).readAsBytes());
       },
       onPages: (arrangement) => _arrangePdfOf(note, arrangement),
@@ -649,6 +656,15 @@ class CollabService extends ChangeNotifier implements LiveSource {
   Future<void> _arrangePdfOf(NoteData note, PageArrangement arrangement) async {
     final path = note.pdfPath;
     if (path == null || (note.pdfPageCount ?? 0) != arrangement.from) return;
+    final table = note.pdfs;
+    if (table != null) {
+      // (several PDFs: only the table of their pages changes)
+      note
+        ..pdfs = table.withLayout([for (final i in arrangement.order) i == null ? const PdfPageRef.blank() : table.layout[i]])
+        ..pdfPageCount = arrangement.order.length;
+      await _notes.saveNote(note);
+      return;
+    }
     final moved = await arrangePdfFile(path, arrangement.order,
         fileName: '${note.id}-${DateTime.now().millisecondsSinceEpoch}.pdf', blank: arrangement.blank);
     note
@@ -663,6 +679,12 @@ class CollabService extends ChangeNotifier implements LiveSource {
   Future<void> _replacePdfOf(NoteData note, SharedPdf pdf) async {
     final path = note.pdfPath;
     if (path == null) return;
+    // (a note that had several PDFs has this one instead: the others go)
+    final others = [for (final f in note.pdfs?.files ?? const <NotePdf>[]) f.path];
+    note.pdfs = null;
+    for (final other in others) {
+      if (other != path) File(other).delete().catchError((Object _) => File(other));
+    }
     final fresh = p.join(p.dirname(path), '${note.id}-${DateTime.now().millisecondsSinceEpoch}.pdf');
     await File(fresh).writeAsBytes(pdf.bytes, flush: true);
     note

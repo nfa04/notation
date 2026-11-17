@@ -87,6 +87,21 @@ class FfiPdfiumBackend implements PdfiumBackend {
   }
 
   @override
+  bool importPages(int doc, int src, int index) {
+    final count = _p.FPDF_GetPageCount(_d(src));
+    if (count < 1) return false;
+    final buffer = malloc<ffi.Int>(count);
+    try {
+      for (var n = 0; n < count; n++) {
+        buffer[n] = n;
+      }
+      return _p.FPDF_ImportPagesByIndex(_d(doc), _d(src), buffer, count, index) != 0;
+    } finally {
+      malloc.free(buffer);
+    }
+  }
+
+  @override
   int newPage(int doc, int index, double width, double height) => _p.FPDFPage_New(_d(doc), index, width, height).address;
 
   @override

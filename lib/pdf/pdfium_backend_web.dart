@@ -130,6 +130,18 @@ class WebPdfiumBackend implements PdfiumBackend {
       });
 
   @override
+  bool importPages(int doc, int src, int index) {
+    final count = _i('FPDF_GetPageCount', [src]);
+    if (count < 1) return false;
+    return _with(count * 4, (p) {
+      for (var n = 0; n < count; n++) {
+        _mem.setInt32(p + n * 4, n, Endian.little);
+      }
+      return _i('FPDF_ImportPagesByIndex', [doc, src, p, count, index]) != 0;
+    });
+  }
+
+  @override
   int newPage(int doc, int index, double width, double height) => _i('FPDFPage_New', [doc, index, width, height]);
 
   @override

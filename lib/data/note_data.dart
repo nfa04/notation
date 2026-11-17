@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../l10n/language.dart';
+import 'note_pdfs.dart';
 import '../models/canvas_models.dart';
 import '../models/image_item.dart';
 import '../models/layers.dart';
@@ -140,6 +141,10 @@ class NoteData {
   String? pdfSha256;
   int? pdfPageCount;
 
+  /// A note with several PDFs: the files and the page of which each page is (see [NotePdfs]). Null for a note with one PDF or none; then
+  /// [pdfName], [pdfPath] and [pdfSha256] are its file. With it they are the first file's, and [pdfPageCount] is the pages of the note.
+  NotePdfs? pdfs;
+
   /// The pages (zero-based) of the PDF that are notebook pages: added ones, which show the note's paper instead of what the file has.
   Set<int> nativePages;
 
@@ -169,6 +174,7 @@ class NoteData {
     this.pdfPath,
     this.pdfSha256,
     this.pdfPageCount,
+    this.pdfs,
     Set<int>? nativePages,
     this.layers = LayerStack.plain,
     Map<int, List<DrawingStroke>>? strokes,

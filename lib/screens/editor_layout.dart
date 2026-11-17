@@ -432,7 +432,10 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       ?_citationsButton(),
       ?_bibliographyButton(),
       // the file: the PDF it is made from and the one it makes
-      if (_importedPdfName != null) ...[
+      if (_pdfTable != null) ...[
+        _pdfFilesMenu(),
+        const SizedBox(width: 8),
+      ] else if (_importedPdfName != null) ...[
         Chip(
           avatar: const Icon(Icons.picture_as_pdf, size: 16),
           label: Text(
@@ -458,6 +461,15 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         ),
       ),
       const SizedBox(width: 8),
+      if (_on(Feature.pdf) && !_infinite && _importedPdfName != null && _canShapePages) ...[
+        IconButton(
+          key: const ValueKey('add-pdfs-button'),
+          tooltip: tr('Add PDFs: their pages come after the last page'),
+          icon: const Icon(Icons.note_add_outlined, size: 20),
+          onPressed: _isLoadingPdf || _pdfEditBusy ? null : _addPdfs,
+        ),
+        const SizedBox(width: 8),
+      ],
       if (widget.noteFiles != null && _on(Feature.noteFiles)) ...[
         IconButton(
           key: const ValueKey('save-note-file'),
@@ -488,6 +500,12 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           icon: const Icon(Icons.layers_outlined, size: 20),
           onPressed: _isLoadingPdf ? null : _exportOra,
         ),
+      IconButton(
+        key: const ValueKey('export-markdown-button'),
+        tooltip: tr('Export the whole note as Markdown'),
+        icon: const Icon(Icons.article_outlined, size: 20),
+        onPressed: _isLoadingPdf ? null : _exportNoteMarkdown,
+      ),
       if (_hasDocument) _documentExportMenu(),
       // (a canvas has no pages to cut it into)
       if (_on(Feature.pdf) && !_infinite)
@@ -566,7 +584,8 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       },
       onPointerPanZoomStart: (_) => _panZoomStartZoom = _zoom,
       onPointerPanZoomUpdate: (e) {
-        if (_canZoom) {
+        // (only a trackpad sends these: it is no finger on the page, so it pinches in every mode, the pen tool's too)
+        if (!_zoomLocked && !_penDown) {
           _setZoom(
             _panZoomStartZoom * e.scale,
             _localInArea(e.position)

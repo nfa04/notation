@@ -4,6 +4,8 @@ import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import 'fuzzy.dart';
+
 /// What to look for: plain text or a regular expression, with the usual switches.
 class SearchQuery {
   final String text;
@@ -11,7 +13,13 @@ class SearchQuery {
   final bool caseSensitive;
   final bool wholeWord;
 
-  const SearchQuery(this.text, {this.regex = false, this.caseSensitive = false, this.wholeWord = false});
+  /// Words may have typos (see [fuzzyRanges]); not with a regular expression.
+  final bool fuzzy;
+
+  const SearchQuery(this.text, {this.regex = false, this.caseSensitive = false, this.wholeWord = false, this.fuzzy = false});
+
+  /// The same query with typos allowed.
+  SearchQuery get withTypos => SearchQuery(text, regex: regex, caseSensitive: caseSensitive, wholeWord: wholeWord, fuzzy: true);
 
   bool get isEmpty => text.isEmpty;
 
@@ -36,6 +44,7 @@ class SearchQuery {
 
   /// The places in [text] that match, without the empty ones, at most [limit].
   List<MatchRange> find(String text, {int limit = 1000}) {
+    if (fuzzy && !regex) return fuzzyRanges(text, this.text, caseSensitive: caseSensitive, limit: limit);
     final p = pattern;
     if (p == null) return const [];
     final found = <MatchRange>[];
@@ -70,10 +79,10 @@ class SearchQuery {
     });
   }
 
-  Map<String, Object?> toJson() => {'text': text, 'regex': regex, 'case': caseSensitive, 'word': wholeWord};
+  Map<String, Object?> toJson() => {'text': text, 'regex': regex, 'case': caseSensitive, 'word': wholeWord, if (fuzzy) 'fuzzy': true};
 
   static SearchQuery fromJson(Map<Object?, Object?> j) =>
-      SearchQuery('${j['text']}', regex: j['regex'] == true, caseSensitive: j['case'] == true, wholeWord: j['word'] == true);
+      SearchQuery('${j['text']}', regex: j['regex'] == true, caseSensitive: j['case'] == true, wholeWord: j['word'] == true, fuzzy: j['fuzzy'] == true);
 }
 
 /// A stretch of a text, [start] to [end].
@@ -137,7 +146,10 @@ class SearchResults {
   final List<SearchHit> hits;
   final Map<String, int> countByNote;
   final bool cutOff;
-  const SearchResults(this.hits, this.countByNote, {this.cutOff = false});
+
+  /// Nothing was found as typed, so these are the matches of similar words (typos allowed).
+  final bool similar;
+  const SearchResults(this.hits, this.countByNote, {this.cutOff = false, this.similar = false});
 
   int get total => countByNote.values.fold(0, (a, b) => a + b);
 }
@@ -176,6 +188,15 @@ SearchResults searchNow(SearchQuery query, Iterable<SearchSource> sources, {int 
   return SearchResults(hits, counts, cutOff: cut);
 }
 
+/// [searchNow], and when it finds nothing for words (not a pattern) of at least four letters, again allowing typos
+/// ([SearchResults.similar] says so).
+SearchResults searchWithTypos(SearchQuery query, Iterable<SearchSource> sources, {int perNote = 30}) {
+  final exact = searchNow(query, sources, perNote: perNote);
+  if (exact.total > 0 || query.regex || query.fuzzy || query.text.trim().length < 4) return exact;
+  final near = searchNow(query.withTypos, sources, perNote: perNote);
+  return near.total == 0 ? exact : SearchResults(near.hits, near.countByNote, cutOff: near.cutOff, similar: true);
+}
+
 /// Thrown when a search took longer than it was allowed to (a regular expression that backtracks without end).
 class SearchTooSlow implements Exception {
   const SearchTooSlow();
@@ -194,7 +215,7 @@ class RunningSearch {
       var cancelled = false;
       final results = Future<void>.delayed(Duration.zero).then((_) {
         if (cancelled) throw const _Cancelled();
-        return searchNow(query, sources, perNote: perNote);
+        return searchWithTypos(query, sources, perNote: perNote);
       });
       return RunningSearch(results, () => cancelled = true);
     }
@@ -222,9 +243,9 @@ class RunningSearch {
     });
     inbox.listen((m) {
       if (done.isCompleted) return;
-      if (m is List && m.length == 3) {
+      if (m is List && m.length == 4) {
         final hits = [for (final h in m[0] as List) SearchHit._unpack((h as List).cast<Object?>())];
-        done.complete(SearchResults(hits, (m[1] as Map).cast<String, int>(), cutOff: m[2] as bool));
+        done.complete(SearchResults(hits, (m[1] as Map).cast<String, int>(), cutOff: m[2] as bool, similar: m[3] as bool));
       } else {
         done.completeError(StateError('The search failed.'));
       }
@@ -255,8 +276,8 @@ void _work(List<Object?> request) {
     final sources = [
       for (final s in request[2] as List) SearchSource((s as List)[0] as String, SearchPlace.values[s[1] as int], s[3] as String, page: s[2] as int),
     ];
-    final r = searchNow(query, sources, perNote: request[3] as int);
-    out.send([[for (final h in r.hits) h._pack()], r.countByNote, r.cutOff]);
+    final r = searchWithTypos(query, sources, perNote: request[3] as int);
+    out.send([[for (final h in r.hits) h._pack()], r.countByNote, r.cutOff, r.similar]);
   } catch (e) {
     out.send('$e');
   }

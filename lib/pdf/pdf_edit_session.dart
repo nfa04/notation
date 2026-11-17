@@ -817,6 +817,28 @@ class PdfEditSession {
     }
   }
 
+  /// Puts the pages of the PDF [bytes] into this one, the first of them as page [at] (the pages from there on move up). Gives how many
+  /// pages came. Only for a session no text has been set in yet: closing the other PDF lets go of the fonts the backend holds.
+  int insertPdf(Uint8List bytes, int at) {
+    final count = pageCount;
+    if (at < 0 || at > count) throw const PdfEditException('The pages could not be added there.');
+    for (final pg in _pages.values) {
+      _b.closeTextPage(pg.text);
+      _b.closePage(pg.page);
+    }
+    _pages.clear();
+    _dirty.clear();
+    final src = _b.loadDocument(bytes);
+    if (src == 0) throw PdfEditException(_b.lastLoadNeededPassword ? 'That PDF needs a password.' : 'That PDF could not be read.');
+    try {
+      final added = _b.pageCount(src);
+      if (!_b.importPages(_doc, src, at)) throw const PdfEditException('The pages could not be added.');
+      return added;
+    } finally {
+      _b.closeDocument(src);
+    }
+  }
+
   static bool _isInOrder(List<int> indices) {
     for (var i = 0; i < indices.length; i++) {
       if (indices[i] != i) return false;

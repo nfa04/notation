@@ -98,7 +98,11 @@ class _CalendarViewState extends State<CalendarView> {
     widget.ics?.addListener(_loadEvents);
     widget.ics?.refreshStale(); // followed calendars that got old
     _style.addListener(_onStyleChanged);
-    if (_caldav?.isConnected == true) _caldav!.sync(); // catch up when the tab is opened
+    // catch up when the tab is opened; after this frame, because syncing tells its listeners at once and a listener may be
+    // building right now ("setState() called during build")
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _caldav?.isConnected == true) _caldav!.sync();
+    });
     _loadEvents(revalidate: true);
     widget.mirror?.addListener(_onStyleChanged);
     widget.mirror?.runSoon();

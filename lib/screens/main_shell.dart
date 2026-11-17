@@ -1321,6 +1321,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           initial: _searchQuery,
           onChanged: (q) => _searchQuery = q,
           tags: _app.tags,
+          knowledge: _aiOn ? _knowledge : null,
           initialFilter: _searchFilter,
           onFilterChanged: (f) => _searchFilter = f,
           onOpen: _openFromSearch,

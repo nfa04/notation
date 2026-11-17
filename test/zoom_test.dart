@@ -134,6 +134,30 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     });
 
+    testWidgets('a pinch on a trackpad zooms', (tester) async {
+      await open(tester);
+      final normal = pageWidth(tester);
+      final pad = TestPointer(2, PointerDeviceKind.trackpad);
+      await tester.sendEventToBinding(pad.panZoomStart(const Offset(800, 400)));
+      await tester.sendEventToBinding(pad.panZoomUpdate(const Offset(800, 400), scale: 1.5));
+      await tester.sendEventToBinding(pad.panZoomEnd());
+      await tester.pumpAndSettle();
+      expect(pageWidth(tester), greaterThan(normal * 1.3));
+    });
+
+    testWidgets('a pinch on a trackpad zooms with the pen tool too', (tester) async {
+      await open(tester);
+      await tester.tap(find.text('Draw'));
+      await tester.pumpAndSettle();
+      final normal = pageWidth(tester);
+      final pad = TestPointer(2, PointerDeviceKind.trackpad);
+      await tester.sendEventToBinding(pad.panZoomStart(const Offset(800, 400)));
+      await tester.sendEventToBinding(pad.panZoomUpdate(const Offset(800, 400), scale: 1.5));
+      await tester.sendEventToBinding(pad.panZoomEnd());
+      await tester.pumpAndSettle();
+      expect(pageWidth(tester), greaterThan(normal * 1.3));
+    });
+
     testWidgets('the wheel without Ctrl scrolls and does not zoom', (tester) async {
       await open(tester);
       final mouse = TestPointer(1, PointerDeviceKind.mouse);

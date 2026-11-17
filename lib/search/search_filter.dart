@@ -18,7 +18,32 @@ enum SearchAge {
 }
 
 /// How the notes that were found are put in order.
-enum SearchOrder { changed, mostMatches, title }
+enum SearchOrder { relevance, changed, mostMatches, title }
+
+/// How much a match in [place] says about the note: its name counts most, text somebody wrote more than text read out of a PDF.
+double placeWeight(SearchPlace place) => switch (place) {
+      SearchPlace.title => 6,
+      SearchPlace.pdfName => 4,
+      SearchPlace.document => 1.2,
+      SearchPlace.textBox => 1.2,
+      SearchPlace.handwriting => 1,
+      SearchPlace.pdfText => 0.7,
+    };
+
+/// How well a note answers a search, from the places of its [hits] and how many matches there are in all ([total]): the places add
+/// up, and each further match counts less than the one before (a word said ten times is not ten times as good).
+double relevanceOf(Iterable<SearchHit> hits, int total) {
+  var score = 0.0;
+  final seen = <SearchPlace, int>{};
+  for (final h in hits) {
+    final n = seen[h.place] = (seen[h.place] ?? 0) + 1;
+    score += placeWeight(h.place) / n;
+  }
+  // (hits past those kept still say something)
+  final kept = hits.length;
+  if (total > kept) score += 0.3 * (1 - 1 / (1 + (total - kept) / 10));
+  return score;
+}
 
 /// The groups of places the search can be limited to; the names (of the note and of its PDF) count as one.
 const searchPlaceGroups = <List<SearchPlace>>[

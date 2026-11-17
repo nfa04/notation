@@ -1,4 +1,8 @@
 import 'package:caldav/caldav.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:xml/xml.dart';
+
+import 'ics.dart';
 
 import 'task_sync.dart';
 
@@ -198,4 +202,28 @@ class DayEvent {
     }
     return !day.isBefore(first) && !day.isAfter(last);
   }
+}
+
+/// The iCalendar texts (`calendar-data`) in the answer of a calendar-query REPORT.
+List<String> calendarDataOf(String multistatus) => [
+      for (final e in XmlDocument.parse(multistatus).descendantElements.where((e) => e.name.local == 'calendar-data'))
+        if (e.innerText.trim().isNotEmpty) e.innerText,
+    ];
+
+/// The events of one server calendar between [from] and [to] out of the raw [texts] the server sent.
+///
+/// The `caldav` package reads only the first event of a file and does not repeat anything, so a weekly
+/// meeting showed once and a changed occurrence not at all. This reads every event, repeats them, and
+/// applies the changes and cancellations ([expandIcs]).
+List<DayEvent> expandServerEvents(List<String> texts, DateTime from, DateTime to, Calendar calendar) {
+  final events = <IcsEvent>[];
+  for (final text in texts) {
+    try {
+      events.addAll(parseIcs(text).events);
+    } catch (e) {
+      debugPrint('reading one event of ${calendar.displayName} failed: $e');
+    }
+  }
+  return expandIcs(IcsCalendar(events: events), from, to,
+      calendarName: calendar.displayName, key: calendar.href.toString(), color: calendar.color);
 }

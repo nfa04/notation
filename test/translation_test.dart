@@ -176,4 +176,12 @@ void main() {
       expect(progress.last, 10);
     });
   });
+
+  test('words to keep are marked whatever their case, and come back as they were written', () {
+    final p = protectMarkdown('Notation and notation, but not Notational; see \$x\$', keep: ['Notation']);
+    expect(p.masked, isNot(contains('otation and')));
+    expect(p.masked, contains('Notational'));
+    expect(p.pieces, containsAll(['Notation', 'notation', r'$x$']));
+    expect(restoreMarkdown(p.masked, p.pieces), 'Notation and notation, but not Notational; see \$x\$');
+  });
 }

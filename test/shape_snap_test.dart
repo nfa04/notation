@@ -48,6 +48,48 @@ void main() {
     });
   });
 
+  group('the other closed shapes of the tool', () {
+    for (final tool in [ShapeTool.roundedRectangle, ShapeTool.rightTriangle, ShapeTool.parallelogram, ShapeTool.pentagon, ShapeTool.hexagon, ShapeTool.star, ShapeTool.cross]) {
+      test(tool.label, () {
+        final r = snapToShape(byHand(outlineOf(tool, const Offset(100, 100), const Offset(340, 300))));
+        expect(r, isNotNull);
+        expect(r!.tool, tool);
+      });
+    }
+
+    test('a rectangle with a little roundness is still a rectangle, and a circle is not a hexagon', () {
+      final rect = outlineOf(ShapeTool.rectangle, const Offset(100, 100), const Offset(340, 260));
+      expect(snapToShape(byHand(rect, shake: 6))?.tool, ShapeTool.rectangle);
+      expect(snapToShape(byHand(outlineOf(ShapeTool.ellipse, const Offset(100, 100), const Offset(260, 260))))?.tool, ShapeTool.ellipse);
+    });
+  });
+
+  group('an arrow drawn in one go', () {
+    test('a line with a head at its end becomes the arrow of the tool, from where it began to its tip', () {
+      final r = snapToShape(byHand(outlineOf(ShapeTool.arrow, const Offset(100, 200), const Offset(400, 260))));
+      expect(r, isNotNull);
+      expect(r!.tool, ShapeTool.arrow);
+      expect(r.points.first.dx, closeTo(100, 4));
+      expect(r.points.first.dy, closeTo(200, 4));
+    });
+
+    test('the same in other directions', () {
+      for (final to in const [Offset(100, 400), Offset(-200, 200), Offset(300, -100)]) {
+        final from = const Offset(300, 300);
+        expect(snapToShape(byHand(outlineOf(ShapeTool.arrow, from, from + to)))?.tool, ShapeTool.arrow, reason: '$to');
+      }
+    });
+
+    test('a plain line, a bent line, a short arrow and a head with one side only stay as drawn', () {
+      expect(snapToArrow([for (var i = 0; i <= 30; i++) Offset(100 + i * 10.0, 200)]), isNull);
+      expect(snapToArrow([for (var i = 0; i <= 30; i++) Offset(100 + i * 10.0, 200 + 40 * math.sin(i / 6))]), isNull);
+      expect(snapToShape(byHand(outlineOf(ShapeTool.arrow, const Offset(100, 200), const Offset(140, 220)), shake: 0.5)), isNull); // (too short)
+      final line = [for (var i = 0; i <= 30; i++) Offset(100 + i * 10.0, 200)];
+      final oneSided = [...line, for (var i = 1; i <= 6; i++) Offset(400 - i * 3.0, 200 + i * 3.0), for (var i = 5; i >= 0; i--) Offset(400 - i * 3.0, 200 + i * 3.0)];
+      expect(snapToArrow(oneSided), isNull);
+    });
+  });
+
   group('everything else stays as drawn', () {
     test('a letter: a small circle', () {
       expect(snapToShape(byHand(outlineOf(ShapeTool.ellipse, const Offset(100, 100), const Offset(124, 124)), shake: 1)), isNull);

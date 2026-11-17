@@ -26,6 +26,18 @@ List<String> candidateEndpoints(String typed) {
   return [nextcloud, if (url != nextcloud) url];
 }
 
+/// The HTTP client for one CalDAV account: address, login and timeouts.
+Dio calDavDio(String endpoint, String username, String password) => Dio(BaseOptions(
+      baseUrl: endpoint,
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 30),
+      validateStatus: (status) => status != null && status < 400,
+      headers: {
+        'Authorization': 'Basic ${base64Encode(utf8.encode('$username:$password'))}',
+        ...userAgentHeader,
+      },
+    ));
+
 /// Opens [endpoint] and finds the user's calendars.
 ///
 /// For a Nextcloud address ([knownEndpoint]) the `/.well-known/caldav`
@@ -38,16 +50,7 @@ Future<CalDavClient> openCalDavClient(
   bool knownEndpoint = false,
   bool allowInsecure = false,
 }) async {
-  final dio = Dio(BaseOptions(
-    baseUrl: endpoint,
-    connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(seconds: 30),
-    validateStatus: (status) => status != null && status < 400,
-    headers: {
-      'Authorization': 'Basic ${base64Encode(utf8.encode('$username:$password'))}',
-        ...userAgentHeader,
-    },
-  ));
+  final dio = calDavDio(endpoint, username, password);
   if (knownEndpoint) {
     dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
       if (options.uri.path == '/.well-known/caldav') {

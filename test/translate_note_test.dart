@@ -103,6 +103,65 @@ void main() {
     expect({for (final b in undone.textBoxes[0]!) b.id: b.controller.text}['a'], 'Hello');
   });
 
+  testWidgets('the original can stay with the translation below it, words can be kept as they are, and the language is remembered', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    late String id;
+    final provider = _Translator();
+    await tester.runAsync(() async {
+      repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+      await repo.settings.remove('translate_language');
+      await repo.settings.remove('translate_glossary');
+      id = await repo.createNote();
+      final note = (await repo.loadNote(id))!;
+      note.textBoxes[0] = [TextBoxWidgetModel(id: 'a', position: const Offset(60, 60), initialText: 'Hello Notation')];
+      await repo.saveNote(note);
+    });
+    await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo, ai: AiService(providers: [provider]))));
+    Future<void> settle([int ms = 300]) async {
+      await tester.runAsync(() => Future<void>.delayed(Duration(milliseconds: ms)));
+      await tester.pumpAndSettle();
+    }
+
+    await settle();
+    await tester.tap(find.byKey(const ValueKey('translate-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('translate-keep-original')));
+    await tester.pump();
+    expect(find.textContaining('is put below it'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('translate-glossary')), 'Notation');
+    await tester.tap(find.byKey(const ValueKey('translate-start')));
+    await tester.pump();
+    await settle();
+    await tester.pump(const Duration(seconds: 1));
+
+    // the word was hidden from the model, and the original is still there above its translation
+    expect(provider.prompts.single.user, contains('§1§'));
+    expect(provider.prompts.single.user, isNot(contains('Notation')));
+    final after = (await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      return (await repo.loadNote(id))!;
+    }))!;
+    await tester.pump(const Duration(seconds: 2));
+    final text = after.textBoxes[0]!.single.controller.text;
+    expect(text, startsWith('Hello Notation\n\n'));
+    expect(text, contains('Notation'));
+    final kept = await tester.runAsync(() async => (await repo.settings.get('translate_glossary'), await repo.settings.get('translate_language')));
+    expect(kept!.$1, 'Notation');
+    expect(kept.$2, isNotNull);
+
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
+    await tester.pumpAndSettle();
+    final undone = (await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      return (await repo.loadNote(id))!;
+    }))!;
+    await tester.pump(const Duration(seconds: 2));
+    expect(undone.textBoxes[0]!.single.controller.text, 'Hello Notation');
+  });
+
   testWidgets('without a ready model the dialog says so and cannot start', (tester) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;

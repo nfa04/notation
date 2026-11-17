@@ -19,6 +19,7 @@ import '../models/stroke_label.dart';
 import '../models/layers.dart';
 import '../search/search_query.dart' show InkText;
 import 'note_data.dart';
+import 'note_pdfs.dart';
 import 'note_text_repository.dart' show InkRead;
 import 'safe_names.dart';
 import 'safe_zip.dart';
@@ -30,7 +31,8 @@ import '../l10n/language.dart';
 ///
 ///     manifest.json      what the note is (see below)
 ///     strokes.bin        the pen strokes, packed (see [encodeStrokes])
-///     source.pdf         the imported PDF, for a note made from one
+///     source.pdf         the imported PDF, for a note made from one (the first of them for a note with several)
+///     pdfs/<n>.pdf       the other PDFs of a note with several (the page table is in `pdf` of note.json)
 ///     media/<n>.<ext>    the pictures placed on pages, and the theme image
 ///     media/audio/<id>.wav   the sounds kept with the note (recordings, the note read aloud)
 ///     brushes/<id>.strokedesc   the designed brushes its lines are drawn with (JSON, see [BrushDesc.toJson]), so that they look the
@@ -84,6 +86,9 @@ class NoteFileParts {
   final NoteData note;
   final DateTime? createdAt, updatedAt;
   final Uint8List? pdf;
+
+  /// The PDFs after the first one, for a note with several (file number 1 first).
+  final List<Uint8List> morePdfs;
   final Uint8List? themeImage;
 
   /// Picture id -> its bytes.
@@ -110,6 +115,7 @@ class NoteFileParts {
     this.createdAt,
     this.updatedAt,
     this.pdf,
+    this.morePdfs = const [],
     this.themeImage,
     this.images = const {},
     this.imageExtensions = const {},
@@ -136,6 +142,9 @@ class ParsedNoteFile {
   final NoteData note;
   final DateTime? createdAt, updatedAt;
   final Uint8List? pdf;
+
+  /// The PDFs after the first one, for a note with several (the note's [NoteData.pdfs] has them with no path: the importer puts the files somewhere).
+  final List<Uint8List> morePdfs;
   final Uint8List? themeImage;
   final String themeExtension;
 
@@ -168,6 +177,7 @@ class ParsedNoteFile {
       this.createdAt,
       this.updatedAt,
       this.pdf,
+      this.morePdfs = const [],
       this.themeImage,
       this.themeExtension = 'png',
       this.images = const {},
@@ -397,7 +407,7 @@ typedef NoteBlob = ({String name, String hash, Uint8List bytes});
 
 /// Whether the file [name] of a note file is one of those that are big and do not change when the strokes do: the PDF, the pictures
 /// and the sounds.
-bool _isNoteAttachment(String name) => name == 'source.pdf' || name.startsWith('media/');
+bool _isNoteAttachment(String name) => name == 'source.pdf' || name.startsWith('pdfs/') || name.startsWith('media/');
 
 /// Takes the big files (at least [minBlob] bytes: the PDF, pictures and sounds) out of the note file [bytes]: what is left is the note
 /// without them ([slim], still a note file, which holds the strokes and the text), and [blobs] are the files. Null when there is no
@@ -505,6 +515,12 @@ List<NoteFileEntry> noteFileEntries(NoteFileParts parts, {DateTime? now}) {
   }
   final hasPdf = n.pdfName != null;
   if (hasPdf && parts.pdf != null) add('source.pdf', parts.pdf!, compress: false);
+  final many = hasPdf && parts.pdf != null ? n.pdfs : null;
+  if (many != null) {
+    for (var i = 0; i < parts.morePdfs.length; i++) {
+      add('pdfs/${i + 1}.pdf', parts.morePdfs[i], compress: false);
+    }
+  }
 
   final strokes = encodeStrokes(n.strokes);
   add('strokes.bin', strokes);
@@ -572,6 +588,13 @@ List<NoteFileEntry> noteFileEntries(NoteFileParts parts, {DateTime? now}) {
               'sha256': n.pdfSha256,
               'pages': n.pdfPageCount,
               'file': parts.pdf != null ? 'source.pdf' : null,
+              if (many != null) ...{
+                'files': [
+                  for (var i = 0; i < many.files.length; i++)
+                    {'name': many.files[i].name, 'sha256': many.files[i].sha256, 'pages': many.files[i].pages, 'file': i == 0 ? 'source.pdf' : 'pdfs/$i.pdf'},
+                ],
+                'layout': [for (final r in many.layout) [r.file, r.page]],
+              },
             }
           : null,
       'themeImage': theme,
@@ -828,6 +851,26 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
   final pdfBytes = pdf == null ? null : fileBytes(pdf['file']);
   if (pdf != null && pdfBytes == null) warnings.add(tr('The PDF "{name}" is not in the file; the note is opened without it', {'name': _str(pdf['name']) ?? ''}));
 
+  // a note with several PDFs: each file, and the table of their pages
+  final morePdfs = <Uint8List>[];
+  NotePdfs? table;
+  if (pdf != null && pdfBytes != null && pdf['files'] is List) {
+    final files = <NotePdf>[];
+    var complete = true;
+    for (final (i, entry) in _listOf(pdf['files']).indexed) {
+      final bytes = i == 0 ? pdfBytes : fileBytes(entry['file']);
+      if (bytes == null) {
+        complete = false;
+        warnings.add(tr('The PDF "{name}" is not in the file; the note is opened without it', {'name': _str(entry['name']) ?? ''}));
+        continue;
+      }
+      if (i > 0) morePdfs.add(bytes);
+      files.add(NotePdf(name: _str(entry['name']) ?? 'document.pdf', path: '', sha256: _str(entry['sha256']) ?? '', pages: _int(entry['pages']) ?? 0));
+    }
+    table = complete ? NotePdfs.fromJson({'files': [for (final f in files) f.toJson()], 'layout': pdf['layout']}) : null;
+    if (complete && table == null) warnings.add(tr('The pages of the PDFs in the file do not fit them; the note is opened without them'));
+    if (table == null) morePdfs.clear();
+  }
   final note = NoteData(
     id: _str(info['id']) ?? '',
     title: _str(info['title']) ?? '',
@@ -844,7 +887,8 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
     documentSpans: _spansFrom(doc['spans']),
     pdfName: pdfBytes == null ? null : _str(pdf!['name']),
     pdfSha256: pdfBytes == null ? null : _str(pdf!['sha256']),
-    pdfPageCount: pdfBytes == null ? null : _int(pdf!['pages']),
+    pdfPageCount: pdfBytes == null ? null : (table?.pageCount ?? _int(pdf!['pages'])),
+    pdfs: table,
   );
 
   final strokesInfo = _mapOf(m['strokes']);
@@ -1022,6 +1066,7 @@ ParsedNoteFile _decodeNoteFile(Archive archive) {
     createdAt: time(info['createdAt']),
     updatedAt: time(info['updatedAt']),
     pdf: pdfBytes,
+    morePdfs: morePdfs,
     themeImage: fileBytes(themeName),
     themeExtension: extensionOfEntry(themeName),
     images: images,

@@ -16,10 +16,13 @@ import 'package:notes/data/tag_repository.dart';
 import 'package:notes/search/search_filter.dart';
 import 'package:notes/search/search_memory.dart';
 import 'package:notes/search/search_query.dart';
+import 'package:notes/ai/note_knowledge.dart';
+import 'package:notes/automations/note_sorter.dart';
 import 'package:notes/data/note_data.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  meaningSearchTests();
   setUpAll(AppDatabase.initFfi);
 
   group('the query', () {
@@ -639,5 +642,53 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
+  });
+}
+
+void meaningSearchTests() {
+  testWidgets('"by meaning" finds the notes that fit what was asked, with the passage, and leaves the others out', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    late String bio, law;
+    await tester.runAsync(() async {
+      repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+      bio = await repo.createNote(title: 'Biology');
+      law = await repo.createNote(title: 'Law');
+      final b = (await repo.loadNote(bio))!..documentText = 'The nucleus keeps the DNA of the cell. Mitochondria make energy.';
+      await repo.saveNote(b);
+      final l = (await repo.loadNote(law))!..documentText = 'An acceptance of an offer makes a contract binding.';
+      await repo.saveNote(l);
+    });
+    final knowledge = NoteKnowledge(repo, const NoEmbedder(), NoteSorter(repo, const NoEmbedder(), ready: () => false), ready: () => false);
+    SearchQuery? opened;
+    await tester.pumpWidget(MaterialApp(home: SearchView(repository: repo, knowledge: knowledge, onOpen: (_, q, _) => opened = q)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('search-meaning')));
+    await tester.pump();
+    // (the exact-search switches make no sense here)
+    expect(find.byKey(const ValueKey('search-regex')), findsNothing);
+    await tester.enterText(find.byKey(const ValueKey('search-field')), 'Where does the nucleus keep the DNA?');
+    await tester.pump(const Duration(milliseconds: 400));
+    // (what runs there waits on timers of the fake clock now and then: real time and a turn of the screen, over and over)
+    for (var i = 0; i < 30 && find.byKey(ValueKey('search-meaning-$bio')).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byKey(ValueKey('search-meaning-$bio')), findsOneWidget);
+    expect(find.byKey(ValueKey('search-meaning-$law')), findsNothing);
+    expect(find.textContaining('nucleus keeps the DNA'), findsOneWidget);
+
+    await tester.tap(find.textContaining('nucleus keeps the DNA'));
+    await tester.pump();
+    expect(opened?.text, contains('nucleus'));
+
+    // back to the words
+    await tester.tap(find.byKey(const ValueKey('search-meaning')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('search-regex')), findsOneWidget);
   });
 }

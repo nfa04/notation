@@ -22,6 +22,7 @@ class PdfContentEditor {
   Future<void> formatText(int pageIndex, PdfEditObject line, {int? color, bool? bold, bool? italic, bool? underline, bool? strikethrough}) async {}
   Future<PdfFontInfo> fontInfo(int pageIndex, PdfEditObject line) async => const PdfFontInfo(name: '');
   Future<void> arrange(List<int?> order, Size blank) async {}
+  Future<int> insertPdf(Uint8List bytes, int at) async => 0;
   Future<Uint8List> save() async => Uint8List(0);
   Future<void> close() async {}
 }

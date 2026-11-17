@@ -64,6 +64,30 @@ void main() {
     expect((await repo.knowledge.chunksOf(bio)).any((c) => c.text.contains('Ribosomes')), isTrue);
   });
 
+  test('notes that say something like a text are found by their kept vectors; the note itself is left out; gaps fill in over time', () async {
+    final (repo, bio, law, trip) = await notes();
+    final embedder = FakeEmbedder();
+    final knowledge = NoteKnowledge(repo, embedder, NoteSorter(repo, embedder, ready: () => true), ready: () => true);
+    const text = 'Mitochondria produce the energy of the cell, they make ATP. The nucleus holds the DNA.';
+
+    // (the database is shared by the tests of this file: other notes are in it, and some have been read)
+    expect((await knowledge.similarNotes(text, exceptNote: trip, learn: 0)).any((f) => f.noteId == bio), isFalse); // not read yet: not found
+    final found = await knowledge.similarNotes(text, exceptNote: trip, learn: 50); // (the notes read now count at once)
+    expect(found.map((f) => f.noteId), contains(bio));
+    expect(found.any((f) => f.noteId == law), isFalse);
+    expect(found.any((f) => f.noteId == trip), isFalse);
+
+    // the note being written is never its own echo
+    knowledge.forgetVectors(); // (and what was kept in the database is found again)
+    final self = await knowledge.similarNotes(text, exceptNote: bio);
+    expect(self.any((f) => f.noteId == bio), isFalse);
+
+    // too short a text says nothing, and without the model there is nothing to read with
+    expect(await knowledge.similarNotes('ATP', exceptNote: trip), isEmpty);
+    final off = NoteKnowledge(repo, embedder, NoteSorter(repo, embedder, ready: () => false), ready: () => false);
+    expect(await off.similarNotes(text, exceptNote: trip), isEmpty);
+  });
+
   test('without a sentence model the words find the passages, and a locked note is not read', () async {
     final (repo, bio, _, _) = await notes();
     final knowledge = NoteKnowledge(repo, const NoEmbedder(), NoteSorter(repo, const NoEmbedder(), ready: () => false), ready: () => false);

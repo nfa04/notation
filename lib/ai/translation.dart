@@ -29,12 +29,22 @@ final _protected = RegExp(
 );
 
 /// [text] with the protected pieces replaced by marks (`§1§`) that the model is told to keep, and the pieces.
-({String masked, List<String> pieces}) protectMarkdown(String text) {
+///
+/// [keep] are words that stay as they are in the translation (names, terms): they are marked too, whatever their case.
+({String masked, List<String> pieces}) protectMarkdown(String text, {List<String> keep = const []}) {
   final pieces = <String>[];
-  final masked = text.replaceAllMapped(_protected, (m) {
+  var masked = text.replaceAllMapped(_protected, (m) {
     pieces.add(m.group(0)!);
     return '§${pieces.length}§';
   });
+  final terms = [for (final k in keep) if (k.trim().length >= 2 && !k.contains('§')) k.trim()]..sort((a, b) => b.length.compareTo(a.length));
+  if (terms.isNotEmpty) {
+    final word = RegExp('(?<![\\p{L}\\p{N}§])(?:${terms.map(RegExp.escape).join('|')})(?![\\p{L}\\p{N}§])', caseSensitive: false, unicode: true);
+    masked = masked.replaceAllMapped(word, (m) {
+      pieces.add(m.group(0)!);
+      return '§${pieces.length}§';
+    });
+  }
   return (masked: masked, pieces: pieces);
 }
 
@@ -120,7 +130,10 @@ class NoteTranslator {
   /// Asks the model; the answer is its text.
   final Future<String> Function(AiPrompt prompt, {AiCancel? cancel}) ask;
 
-  NoteTranslator(this.ask);
+  NoteTranslator(this.ask, {this.keep = const []});
+
+  /// Words that stay as they are (see [protectMarkdown]).
+  final List<String> keep;
 
   /// How many parts could not be translated (the model lost a formula or link, or failed) and were left as they were.
   int kept = 0;
@@ -138,7 +151,7 @@ class NoteTranslator {
         out.add(chunk);
         continue;
       }
-      final p = protectMarkdown(chunk);
+      final p = protectMarkdown(chunk, keep: keep);
       String? result;
       try {
         final answer = await ask(translationPrompt(p.masked, language), cancel: cancel);
@@ -173,7 +186,7 @@ class NoteTranslator {
       final marks = <int, List<String>>{};
       final masked = StringBuffer();
       for (var n = 0; n < batch.length; n++) {
-        final p = protectMarkdown(lines[batch[n]].replaceAll('\n', ' '));
+        final p = protectMarkdown(lines[batch[n]].replaceAll('\n', ' '), keep: keep);
         // (the marks are numbered across the batch, so that they are not mixed up between lines)
         var text = p.masked;
         for (var k = p.pieces.length; k >= 1; k--) {

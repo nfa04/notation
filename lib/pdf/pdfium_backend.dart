@@ -28,6 +28,9 @@ abstract class PdfiumBackend {
   /// Moves the pages [indices] (each once) to the start of the document, in that order.
   bool movePagesToFront(int doc, List<int> indices);
 
+  /// Copies every page of [src] into [doc], so that the first of them is page [index]; false when PDFium refuses.
+  bool importPages(int doc, int src, int index);
+
   /// A new blank page at [index]; 0 when that failed. Closed again by the caller with [closePage].
   int newPage(int doc, int index, double width, double height);
 

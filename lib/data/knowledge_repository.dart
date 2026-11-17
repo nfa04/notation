@@ -30,6 +30,18 @@ class KnowledgeRepository {
     );
   }
 
+  /// Every note reading [model] kept (note id -> vector), in one go.
+  Future<Map<String, Float32List>> noteEmbeddings(String model) async {
+    final rows = await _db.query('note_embeddings', columns: ['note_id', 'vector'], where: 'model = ?', whereArgs: [model]);
+    return {
+      for (final r in rows)
+        r['note_id'] as String: () {
+          final bytes = r['vector'] as Uint8List;
+          return Float32List.fromList(Float32List.view(bytes.buffer, bytes.offsetInBytes, bytes.lengthInBytes ~/ 4));
+        }(),
+    };
+  }
+
   Future<void> saveNoteEmbedding(String id, String model, int textHash, Float32List vector) => _db.insert(
         'note_embeddings',
         {

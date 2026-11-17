@@ -1,3 +1,4 @@
+import 'note_pdfs.dart';
 import 'dart:ui';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -179,16 +180,16 @@ class NoteTextRepository {
       });
 
   /// PDF notes whose text has not been read completely yet: id, the file and the number of pages.
-  Future<List<({String id, String path, int pages})>> pdfsToRead() async {
+  Future<List<({String id, String path, int pages, NotePdfs? table})>> pdfsToRead() async {
     final rows = await _db.rawQuery('''
-      SELECT n.id, n.pdf_path, n.pdf_page_count,
+      SELECT n.id, n.pdf_path, n.pdf_page_count, n.pdf_files,
              (SELECT COUNT(*) FROM pdf_text t WHERE t.note_id = n.id) AS done
         FROM notes n
        WHERE n.deleted_at IS NULL AND n.lock_mode = 0 AND n.pdf_path IS NOT NULL AND COALESCE(n.pdf_page_count, 0) > 0
     ''');
     return [
       for (final r in rows)
-        if ((r['done'] as int) < (r['pdf_page_count'] as int)) (id: r['id'] as String, path: r['pdf_path'] as String, pages: r['pdf_page_count'] as int),
+        if ((r['done'] as int) < (r['pdf_page_count'] as int)) (id: r['id'] as String, path: r['pdf_path'] as String, pages: r['pdf_page_count'] as int, table: NotePdfs.fromJsonText(r['pdf_files'] as String?)),
     ];
   }
 

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'note_pdfs.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -66,10 +67,13 @@ class LockRepository {
   /// gives back the files that held pictures and the PDF, for the caller to delete. The note itself stays, empty.
   Future<List<String>> purgeContent(String id) async {
     final files = <String>[];
-    final rows = await _db.query('notes', columns: ['pdf_path', 'theme_image'], where: 'id = ?', whereArgs: [id]);
+    final rows = await _db.query('notes', columns: ['pdf_path', 'pdf_files', 'theme_image'], where: 'id = ?', whereArgs: [id]);
     if (rows.isNotEmpty) {
       for (final k in ['pdf_path', 'theme_image']) {
         if (rows.single[k] != null) files.add(rows.single[k] as String);
+      }
+      for (final f in NotePdfs.fromJsonText(rows.single['pdf_files'] as String?)?.files ?? const <NotePdf>[]) {
+        if (!files.contains(f.path)) files.add(f.path);
       }
     }
     for (final r in await _db.query('images', columns: ['path'], where: 'note_id = ?', whereArgs: [id])) {
@@ -110,6 +114,7 @@ class LockRepository {
           'pdf_path': null,
           'pdf_sha256': null,
           'pdf_page_count': null,
+          'pdf_files': null,
           'native_pages': '[]',
         },
         where: 'id = ?',

@@ -1,7 +1,7 @@
 part of 'fixed_page_note_editor.dart';
 
 /// "You wrote about this before": while a text is written, a small note names the other notes whose facts (those of the graph view) have
-/// the same terms. Nothing is asked of a model; it is a look-up of words, a moment after the writing stops.
+/// the same terms; with a sentence model also the notes that say something similar in other words. A moment after the writing stops.
 extension _EditorEchoes on _FixedPageNoteEditorState {
   bool get _echoesOn => _on(Feature.echoes) && (widget.onOpenNote != null || widget.onOpenNoteAt != null);
 
@@ -28,7 +28,19 @@ extension _EditorEchoes on _FixedPageNoteEditorState {
     }
     if (!mounted) return;
     final text = read();
-    final found = _echoIndex!.find(text, exceptNote: widget.noteId);
+    final found = [..._echoIndex!.find(text, exceptNote: widget.noteId)];
+    // notes that say the same in other words (when a sentence model is there): after the ones that share words, up to three in all
+    final knowledge = widget.knowledge;
+    if (knowledge != null && found.length < 3) {
+      try {
+        for (final s in await knowledge.similarNotes(text, exceptNote: widget.noteId, max: 3 - found.length)) {
+          if (found.length < 3 && !found.any((e) => e.noteId == s.noteId)) found.add(Echo(s.noteId, const [], null, similarity: s.score));
+        }
+      } catch (_) {
+        // (a model that fails leaves the echoes of words)
+      }
+      if (!mounted) return;
+    }
     final key = found.map((e) => e.noteId).join(',');
     if (key == _echoLooked) return; // the same notes as before: a person who closed the note does not see it come back
     _echoLooked = key;
@@ -71,7 +83,7 @@ extension _EditorEchoes on _FixedPageNoteEditorState {
                         key: ValueKey('echo-${e.noteId}'),
                         visualDensity: VisualDensity.compact,
                         label: Text.verbatim(_echoTitles[e.noteId]!.isEmpty ? tr('Untitled') : _echoTitles[e.noteId]!),
-                        tooltip: tr('Both have: {terms}', {'terms': e.terms.join(', ')}),
+                        tooltip: e.terms.isEmpty ? tr('Says something similar') : tr('Both have: {terms}', {'terms': e.terms.join(', ')}),
                         onPressed: () => widget.onOpenNoteAt != null ? widget.onOpenNoteAt!(e.noteId, e.page) : widget.onOpenNote?.call(e.noteId),
                       ),
                     ),
