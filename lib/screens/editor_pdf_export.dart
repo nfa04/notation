@@ -21,10 +21,49 @@ pw.PdfBlendMode _pdfBlendOf(LayerBlend b) => switch (b) {
 /// when that is known, else what it was pulled to (0: as tall as its text).
 double exportBoxHeight(double pulledTo, double? shown) => math.max(pulledTo, shown ?? 0);
 
+/// One PDF export: where it goes, and the text under the handwriting. The pages are laid out with the open editor; what the
+/// handwriting says is read after that ([readInk]) and only put into the pages when the PDF is written, so the slow part, the
+/// reading, does not need the editor: an automation lets the note be left (or closed) once [prepared] is called.
+class _PdfExportRun {
+  /// The file an automation wants; null: the person picks one.
+  final String? target;
+
+  /// What the handwriting says (null: no text under it).
+  final PdfInkText? ink;
+
+  /// Called once the editor is no longer needed (the pages are laid out).
+  final void Function()? prepared;
+
+  /// What went wrong, for an automation.
+  String? error;
+
+  final List<({int page, List<DrawingStroke> strokes, List<InkTextLine> lines})> _pending = [];
+
+  _PdfExportRun(this.target, this.ink, this.prepared);
+
+  /// The lines of text for the handwriting [strokes] of [page]: empty now, filled by [readInk].
+  List<InkTextLine> inkFor(int page, List<DrawingStroke> strokes) {
+    final lines = <InkTextLine>[];
+    if (ink != null && strokes.isNotEmpty) _pending.add((page: page, strokes: strokes, lines: lines));
+    return lines;
+  }
+
+  /// Tells that the editor is no longer needed, and reads the handwriting of the pages laid out.
+  Future<void> readInk() async {
+    final done = prepared;
+    if (done != null) done();
+    final text = ink;
+    if (text == null) return;
+    for (final p in _pending) {
+      p.lines.addAll(await text.pageLines(p.page, p.strokes));
+    }
+  }
+}
+
 extension _PdfExport on _FixedPageNoteEditorState {
   /// Builds the annotation page for [i], or null if it has none and no
   /// [background] (page image for the rasterised export) was given.
-  Future<pw_widgets.Page?> _buildOverlayPage(int i,
+  Future<pw_widgets.Page?> _buildOverlayPage(int i, _PdfExportRun run,
       {Uint8List? background, bool blank = false, bool skipEmpty = false, bool commentsAsAnnotations = false}) async {
     var highlights = _highlightsPerPage[i] ?? [];
     // (what is on a hidden layer is left out)
@@ -76,8 +115,9 @@ extension _PdfExport on _FixedPageNoteEditorState {
       for (final box in boxes)
         box: await renderMathImages(context, mathIn([box.controller.text]), fontSize: box.fontSize, color: box.style.textColor),
     };
-    // what the handwriting says, as text under it that a PDF viewer can select (not what is on a hidden layer)
-    final inkLines = await _inkText?.pageLines(i, (_strokesPerPage[i] ?? const <DrawingStroke>[]).where((st) => _layers.byId(st.layer).visible)) ?? const <InkTextLine>[];
+    // what the handwriting says, as text under it that a PDF viewer can select (not what is on a hidden layer): read after the pages
+    // are laid out (see _PdfExportRun), and put in when the PDF is written
+    final inkLines = run.inkFor(i, [for (final st in _strokesPerPage[i] ?? const <DrawingStroke>[]) if (_layers.byId(st.layer).visible) st]);
     // (pictures, lines and boxes lie over each other by their layers: see PageStacking)
     final stacking = PageStacking(
       _layers,
@@ -321,11 +361,12 @@ extension _PdfExport on _FixedPageNoteEditorState {
           ),
         if (usualStrokes.isNotEmpty) strokesOf(usualStrokes),
         ...boxesOf(usualBoxes),
-        if (inkLines.isNotEmpty)
+        if (run.ink != null)
           pw_widgets.Positioned(
             left: 0,
             top: 0,
             child: pw_widgets.Builder(builder: (pw_widgets.Context context) {
+              if (inkLines.isEmpty) return pw_widgets.SizedBox();
               final font = pw.PdfFont.helvetica(context.document);
               return pw_widgets.CustomPaint(
                 size: pw.PdfPoint(_paperWidth, pageHeight),
@@ -425,12 +466,11 @@ extension _PdfExport on _FixedPageNoteEditorState {
     }
   }
 
-  Future<void> _saveExportedPdf(Uint8List bytes) async {
-    final unread = _inkText?.unread ?? 0;
-    await _keepExportReadings(_inkText);
-    _inkText = null;
+  Future<void> _saveExportedPdf(Uint8List bytes, _PdfExportRun run) async {
+    final unread = run.ink?.unread ?? 0;
+    await _keepExportReadings(run.ink);
     // an automation names the file itself: no dialog, no message
-    final target = _exportTo;
+    final target = run.target;
     if (target != null) {
       await File(target).writeAsBytes(bytes);
       return;
@@ -455,88 +495,101 @@ extension _PdfExport on _FixedPageNoteEditorState {
     }
   }
 
+  /// The spinner goes when the editor is no longer needed for an automation's export (the rest goes on unseen), else when it is done.
+  void _pdfLaidOut(_PdfExportRun run) {
+    if (run.target != null && mounted) _setLoadingPdf(false);
+  }
+
+  /// A failed export: an automation is told, the person sees it.
+  void _pdfFailed(_PdfExportRun run, String error) {
+    run.error = error;
+    if (!mounted) return;
+    _setLoadingPdf(false);
+    if (run.target == null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(tr('Error exporting PDF: {error}', {'error': error}))));
+  }
+
   /// Fallback for PDFs [mergeOverlay] cannot handle (encrypted, damaged): every
   /// page is rendered to an image and the annotations are drawn on top.
-  Future<void> _exportPdfRasterized({String? reason}) async {
+  Future<void> _exportPdfRasterized(_PdfExportRun run, {String? reason}) async {
     if (_pdfFilePath == null) return;
     try {
       _setLoadingPdf(true);
-      _inkText = await _newInkText();
       final doc = pw_widgets.Document();
       // the page images the editor shows are the backgrounds
       for (var i = 0; i < _totalPages; i++) {
-        final page = await _buildOverlayPage(i, background: await _pagePng(i));
+        final page = await _buildOverlayPage(i, run, background: await _pagePng(i));
         if (page != null) doc.addPage(page);
       }
+      _pdfLaidOut(run);
+      await run.readInk();
       final bytes = await doc.save();
       if (mounted) _setLoadingPdf(false);
-      await _saveExportedPdf(bytes);
+      await _saveExportedPdf(bytes, run);
     } catch (e) {
-      _exportError = '$e';
-      if (mounted) {
-        _setLoadingPdf(false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text.verbatim(tr('Error exporting PDF: {error}', {'error': '${reason != null ? '($reason) ' : ''}$e'}))));
-      }
+      _pdfFailed(run, '${reason != null ? '($reason) ' : ''}$e');
     }
   }
 
   /// No PDF imported: every notebook page becomes a white page.
-  Future<void> _exportBlank() async {
+  Future<void> _exportBlank(_PdfExportRun run) async {
     try {
       _setLoadingPdf(true);
       await Future<void>.delayed(Duration.zero); // let the spinner paint
-      _inkText = await _newInkText();
       final doc = pw_widgets.Document();
       // the trailing empty page is only there for the editor: skip empty pages
       var added = 0;
       for (var i = 0; i < _pageCount; i++) {
-        final page = await _buildOverlayPage(i, blank: true, skipEmpty: true);
+        final page = await _buildOverlayPage(i, run, blank: true, skipEmpty: true);
         if (page == null) continue;
         doc.addPage(page);
         added++;
       }
-      if (added == 0) doc.addPage((await _buildOverlayPage(0, blank: true))!);
+      if (added == 0) doc.addPage((await _buildOverlayPage(0, run, blank: true))!);
+      _pdfLaidOut(run);
+      await run.readInk();
       final bytes = await doc.save();
       if (mounted) _setLoadingPdf(false);
-      await _saveExportedPdf(bytes);
+      await _saveExportedPdf(bytes, run);
     } catch (e) {
-      _exportError = '$e';
-      if (mounted) {
-        _setLoadingPdf(false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text.verbatim(tr('Error exporting PDF: {error}', {'error': e}))));
-      }
+      _pdfFailed(run, '$e');
     }
   }
 
-  Future<void> _exportPdf() async {
+  /// Exports the note as a PDF: into the file [to] for an automation (null: the person picks one). [prepared] is called once the
+  /// open editor is no longer needed (the pages are laid out): the handwriting is read and the file written after that, also when the
+  /// note has been left or closed meanwhile. Gives what went wrong, or null.
+  Future<String?> _exportPdf({String? to, void Function()? prepared}) async {
     if (_infinite) {
       // (the pages of a PDF are a fixed size; a canvas has none to cut it into)
-      _exportError = tr('A note that is an infinite canvas cannot be exported as a PDF');
-      if (_exportTo == null) ScaffoldMessenger.maybeOf(context,)?.showSnackBar(SnackBar(content: Text.verbatim(_exportError!)));
-      return;
+      final error = tr('A note that is an infinite canvas cannot be exported as a PDF');
+      if (to == null) ScaffoldMessenger.maybeOf(context,)?.showSnackBar(SnackBar(content: Text.verbatim(error)));
+      return error;
     }
-    if (_isBlank) return _exportBlank();
+    final run = _PdfExportRun(to, await _newInkText(), prepared);
+    if (_isBlank) {
+      await _exportBlank(run);
+      return run.error;
+    }
     try {
       _setLoadingPdf(true);
       await Future<void>.delayed(Duration.zero); // let the spinner paint
-      _inkText = await _newInkText();
 
       // 1. overlay: one page per page that has annotations
       final overlay = pw_widgets.Document();
       final targets = <int>[];
       for (var i = 0; i < _totalPages; i++) {
-        final page = await _buildOverlayPage(i, commentsAsAnnotations: true);
+        final page = await _buildOverlayPage(i, run, commentsAsAnnotations: true);
         if (page == null) continue;
         targets.add(i);
         overlay.addPage(page);
       }
       final comments = await _pdfComments();
-
-      // 2. merge onto the original
       // (a note with several PDFs: one PDF with their pages as the note shows them)
       final original = _pdfTable != null ? await combinePdfFiles(_pdfTable!) : Uint8List.fromList(await File(_pdfFilePath!).readAsBytes());
+      _pdfLaidOut(run);
+
+      // 2. the handwriting, then merge onto the original
+      await run.readInk();
       final Uint8List bytes = targets.isEmpty && comments.isEmpty
           ? original
           : mergeOverlay(original, targets.isEmpty ? null : await overlay.save(), targetPages: targets, comments: comments);
@@ -544,18 +597,18 @@ extension _PdfExport on _FixedPageNoteEditorState {
       if (mounted) _setLoadingPdf(false);
 
       // 3. save
-      await _saveExportedPdf(bytes);
+      await _saveExportedPdf(bytes, run);
     } on UnsupportedPdfException catch (e) {
       // encrypted / damaged: use your old rasterising export instead
-      if (mounted) _setLoadingPdf(false);
-      await _exportPdfRasterized(reason: e.message);
+      // (it needs the editor again: the pages are drawn as pictures)
+      if (!mounted) return 'the note was closed';
+      _setLoadingPdf(false);
+      final again = _PdfExportRun(to, run.ink, run.prepared);
+      await _exportPdfRasterized(again, reason: e.message);
+      return again.error;
     } catch (e) {
-      _exportError = '$e';
-      if (mounted) {
-        _setLoadingPdf(false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text.verbatim(tr('Error exporting PDF: {error}', {'error': e}))));
-      }
+      _pdfFailed(run, '$e');
     }
+    return run.error;
   }
 }

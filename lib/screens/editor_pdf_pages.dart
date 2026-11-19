@@ -143,6 +143,15 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
   }
 
   Future<void> _pickAndLoadPdfFile() async {
+    setState(() => _importingPdf = true);
+    try {
+      await _pickAndLoadPdfFileNow();
+    } finally {
+      if (mounted) setState(() => _importingPdf = false);
+    }
+  }
+
+  Future<void> _pickAndLoadPdfFileNow() async {
     try {
       // (a note with no PDF yet may be given several: the first is its PDF, the pages of the others follow)
       final several = _pdfFilePath == null;
@@ -689,6 +698,32 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
       });
     });
     return true;
+  }
+
+  /// Offers the highlight colours at [globalAt] (where the selection's menu was); the one picked marks [selectedText] and is the colour
+  /// of the next highlights too.
+  Future<void> _highlightInColour(int pageIndex, String? selectedText, Offset globalAt) async {
+    if (selectedText == null || selectedText.trim().isEmpty) return;
+    final size = MediaQuery.sizeOf(context);
+    final picked = await showMenu<Color>(
+      context: context,
+      position: RelativeRect.fromLTRB(globalAt.dx, globalAt.dy, size.width - globalAt.dx, size.height - globalAt.dy),
+      items: [
+        for (final (name, color) in highlightColors)
+          PopupMenuItem(
+            key: ValueKey('highlight-colour-$name'),
+            value: color,
+            child: Row(children: [
+              Icon(color == _highlightColor ? Icons.check_circle : Icons.circle, color: color.withValues(alpha: 1), size: 16),
+              const SizedBox(width: 8),
+              Text(tr(name)),
+            ]),
+          ),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _highlightColor = picked);
+    _applyHighlightOrCommentToSelection(pageIndex, selectedText, isComment: false);
   }
 
   /// Takes the plain highlights away from the selected text (comment marks go with their comment).

@@ -59,7 +59,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600)); // (a page still being read shows a spinner, which never settles)
     expect(find.text('Type text...'), findsNothing); // no text box
 
-    // the word is selected: the highlight button of the top bar marks exactly it
+    // the word is selected, and its menu opened by itself when the mouse let go: its highlight button marks exactly the word
+    expect(find.byKey(const ValueKey('mouse-selection-menu')), findsOneWidget);
     expect(find.text('Highlight'), findsWidgets);
     await tester.tap(find.text('Highlight').first);
     await tester.pump(const Duration(milliseconds: 600)); // (a page still being read shows a spinner, which never settles)
@@ -71,5 +72,26 @@ void main() {
     final mark = marks.single.shift(origin);
     expect(mark.center.dx, closeTo(word.center.dx, word.width)); // on the word "beta", not its neighbours
     expect(mark.width, lessThan(word.width * 2));
+    expect(find.byKey(const ValueKey('mouse-selection-menu')), findsNothing, reason: 'a button of the menu closes it');
+
+    // a drag of the mouse across words: the menu opens when it lets go, over the selection; a click elsewhere closes it
+    final from = pdfWords(tester, 'alpha').single.centerLeft + const Offset(2, 0);
+    final to = pdfWords(tester, 'gamma').single.centerRight - const Offset(2, 0);
+    final drag = await tester.startGesture(from, kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+    for (var i = 1; i <= 8; i++) {
+      await drag.moveTo(Offset.lerp(from, to, i / 8)!);
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    expect(find.byKey(const ValueKey('mouse-selection-menu')), findsNothing, reason: 'not while still selecting');
+    await drag.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 100));
+    final menu = find.byKey(const ValueKey('mouse-selection-menu'));
+    expect(menu, findsOneWidget);
+    expect(find.text('Comment').hitTestable(), findsWidgets);
+    final click = await tester.startGesture(tester.getTopLeft(find.byKey(const ValueKey('page-0'))) + const Offset(300, 700), kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+    await click.up();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(menu, findsNothing);
   });
 }

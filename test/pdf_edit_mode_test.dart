@@ -59,8 +59,8 @@ void main() {
     }
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    await settle(() => find.text('Document').evaluate().isNotEmpty && pdfWords(tester, 'alpha').isNotEmpty);
-    await tester.tap(find.text('Document'));
+    await settle(() => find.text('Edit PDF').evaluate().isNotEmpty && pdfWords(tester, 'alpha').isNotEmpty);
+    await tester.tap(find.text('Edit PDF'));
     await settle(() => layer() != null && (layer()!.painter as dynamic).objects.isNotEmpty);
     final objects = (layer()!.painter as dynamic).objects as List<PdfEditObject>;
     expect(objects.single.text, 'alpha beta gamma');
@@ -165,8 +165,8 @@ void main() {
     }
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    await settle(() => find.text('Document').evaluate().isNotEmpty && pdfWords(tester, 'alpha').isNotEmpty);
-    await tester.tap(find.text('Document'));
+    await settle(() => find.text('Edit PDF').evaluate().isNotEmpty && pdfWords(tester, 'alpha').isNotEmpty);
+    await tester.tap(find.text('Edit PDF'));
     await settle(() => layer() != null && (layer()!.painter as dynamic).objects.isNotEmpty);
     final line = ((layer()!.painter as dynamic).objects as List<PdfEditObject>).single;
     final page = tester.getRect(find.byKey(const ValueKey('page-0')));
@@ -238,8 +238,8 @@ void main() {
     List<PdfEditObject> objects() => (layer()!.painter as dynamic).objects as List<PdfEditObject>;
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    await settle(() => find.text('Document').evaluate().isNotEmpty);
-    await tester.tap(find.text('Document'));
+    await settle(() => find.text('Edit PDF').evaluate().isNotEmpty);
+    await tester.tap(find.text('Edit PDF'));
     await settle(() => layer() != null && objects().isNotEmpty);
     final picture = objects().single;
     expect(picture.kind, PdfObjectKind.image);

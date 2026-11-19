@@ -72,7 +72,7 @@ extension _EditorShortcuts on _FixedPageNoteEditorState {
         if (widget.bookmarks == null || _infinite) return false;
         unawaited(_toggleBookmark(_visiblePage().$1));
       case 'note.importPdf':
-        if (!_on(Feature.pdf) || _infinite || _isLoadingPdf) return false;
+        if (!_on(Feature.pdf) || _infinite || _isLoadingPdf || _importedPdfName != null) return false;
         unawaited(_pickAndLoadPdfFile());
       case 'note.exportPdf':
         if (!_on(Feature.pdf) || _infinite || _isLoadingPdf) return false;

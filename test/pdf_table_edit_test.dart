@@ -74,8 +74,8 @@ void main() {
     List<PdfEditObject> objects() => ((layer()?.painter as dynamic)?.objects as List<PdfEditObject>?) ?? const [];
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
-    await settle(() => find.text('Document').evaluate().isNotEmpty && pdfWords(tester, 'bravo').isNotEmpty);
-    await tester.tap(find.text('Document'));
+    await settle(() => find.text('Edit PDF').evaluate().isNotEmpty && pdfWords(tester, 'bravo').isNotEmpty);
+    await tester.tap(find.text('Edit PDF'));
     await settle(() => objects().isNotEmpty);
     expect(objects().single.text, 'bravo', reason: 'the first page is the first page of b');
 

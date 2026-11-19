@@ -15,8 +15,6 @@ import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfrx/pdfrx.dart';
 
-import 'pdf_words.dart';
-
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -139,7 +137,7 @@ void main() {
     }
 
     List<PdfEditObject> objects() => ((layer()?.painter as dynamic)?.objects as List<PdfEditObject>?) ?? const [];
-    await tester.tap(find.text('Document'));
+    await tester.tap(find.text('Edit PDF'));
     for (var i = 0; i < 80 && objects().isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 100));

@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:notes/automations/automation_service.dart' show NoteEditorHandle;
+import 'package:notes/automations/automation_service.dart' show NoteEditorHandle, PdfExportStarter;
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/export/pdf_ink_text.dart';
@@ -279,6 +279,43 @@ void main() {
       // the PDF page is as big as the paper: the first line is where the writing is (100 to 194 across)
       expect(read.lines.first.left, closeTo(100, 2));
       expect(read.lines.first.right, closeTo(194, 2));
+    });
+
+    testWidgets('an automation\'s export needs the editor only to lay out the pages: the writing is read after, also when the note is closed', skip: !_pdfium.existsSync(), (tester) async {
+      Pdfrx.pdfiumModulePath = _pdfium.absolute.path;
+      await noteWith(tester);
+      // (a reader that takes long, as the model on a tablet does)
+      final reader = FakeReader((_) => 'hello there\nbye', delay: const Duration(milliseconds: 1500));
+      await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo, handwriting: reader)));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600)));
+      await tester.pump();
+      final handle = tester.state(find.byType(FixedPageNoteEditor)) as PdfExportStarter;
+      final out = '${dir.path}/out.pdf';
+      Future<String?>? written;
+      handle.startPdfExport(out).then((w) => written = w);
+      for (var i = 0; i < 40 && written == null; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(written, isNotNull, reason: 'laying out the pages does not wait for the reader');
+      expect(File(out).existsSync(), isFalse, reason: 'the writing is still being read');
+      // the note is left and its editor goes; the PDF is still written, with the text of the writing
+      await tester.pumpWidget(const SizedBox());
+      String? problem = 'pending';
+      var done = false;
+      written!.then((r) {
+        problem = r;
+        done = true;
+      });
+      for (var i = 0; i < 100 && !done; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(problem, isNull);
+      expect(reader.calls, hasLength(1));
+      final read = await tester.runAsync(() => _read(out));
+      expect(read!.text.replaceAll('\r\n', '\n').trim(), 'hello there\nbye');
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300))); // (the readings are kept in the database)
     });
 
     testWidgets('what the search already read is used and nothing is read again', skip: !_pdfium.existsSync(), (tester) async {
