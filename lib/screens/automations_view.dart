@@ -41,7 +41,7 @@ class AutomationsView extends StatelessWidget {
     if (!context.mounted) return;
     final result = await showDialog<Automation>(
       context: context,
-      builder: (context) => AutomationDialog(existing: existing, folders: folders, extensions: extensions, events: service.events, templates: choices, clouds: service.cloudChoices),
+      builder: (context) => AutomationDialog(existing: existing, folders: folders, extensions: extensions, events: service.events, templates: choices, clouds: service.cloudChoices, browseCloud: service.browseCloud),
     );
     if (result == null) return;
     if (existing == null) {
@@ -167,7 +167,9 @@ class AutomationsView extends StatelessWidget {
               tr('Task: {title}', {'title': a.params['title'] ?? '{title}'}) +
                   (a.params['smart'] == '1' ? tr(' (title improved by the language model)') : ''),
             AutomationAction.moveToFolder => tr('Into {folder}', {'folder': folderName(a.params['folder'])}),
-            AutomationAction.saveNoteFile => tr('Into {folder}', {'folder': a.params['dir'] ?? tr('(no folder chosen)')}),
+            AutomationAction.saveNoteFile => (a.params['cloud'] ?? '').isNotEmpty
+                ? tr('Into {folder} on {account}', {'folder': a.params['dir'] ?? '', 'account': service.cloudChoices.where((c) => c.id == a.params['cloud']).firstOrNull?.label ?? a.params['cloud']})
+                : tr('Into {folder}', {'folder': a.params['dir'] ?? tr('(no folder chosen)')}),
             AutomationAction.sortIntoFolder =>
               '${a.params['within'] == null || a.params['within']!.isEmpty ? tr('Into any folder') : tr('Into a folder of {folder}', {'folder': folderName(a.params['within'])})}'
                   ', ${a.params['unfiledOnly'] == '0' ? tr('also notes that are filed already') : tr('only notes not in a folder yet')}'
@@ -296,8 +298,11 @@ class AutomationDialog extends StatefulWidget {
   /// The cloud accounts a PDF can be put on (id and name).
   final List<({String id, String label})> clouds;
 
+  /// The folders of a cloud account (see [AutomationService.browseCloud]); null: no picker.
+  final Future<List<String>> Function(String account, String path)? browseCloud;
+
   const AutomationDialog(
-      {super.key, this.existing, required this.folders, this.extensions, this.events = AutomationEvent.values, this.templates = const [], this.step = false, this.clouds = const []});
+      {super.key, this.existing, required this.folders, this.extensions, this.events = AutomationEvent.values, this.templates = const [], this.step = false, this.clouds = const [], this.browseCloud});
 
   @override
   State<AutomationDialog> createState() => _AutomationDialogState();
@@ -426,7 +431,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
             if (_event == AutomationEvent.dateFound && _smart) 'smart': '1',
           },
           AutomationAction.moveToFolder => {'folder': _target!},
-          AutomationAction.saveNoteFile => {'dir': _dir.text.trim()},
+          AutomationAction.saveNoteFile => {'dir': _dir.text.trim(), if (_cloud.isNotEmpty) 'cloud': _cloud},
           AutomationAction.sortIntoFolder => {
             'within': ?_within,
             'unfiledOnly': _unfiledOnly ? '1' : '0',
@@ -456,6 +461,14 @@ class _AutomationDialogState extends State<AutomationDialog> {
           ..addAll(_event == AutomationEvent.triggerPressed ? {'trigger': _trigger} : {})
           ..addAll(_event == AutomationEvent.calendarEventStarting ? {'minutes': '${int.parse(_minutes.text.trim()).clamp(1, 720)}'} : {}),
       );
+
+  Future<void> _browseCloud() async {
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (_) => _CloudFolderPicker(account: _cloud, start: _dir.text.trim(), browse: widget.browseCloud!),
+    );
+    if (chosen != null) setState(() => _dir.text = chosen);
+  }
 
   Future<void> _browse() async {
     final dir = await FilePicker.getDirectoryPath(dialogTitle: 'Where should the files go?');
@@ -677,11 +690,11 @@ class _AutomationDialogState extends State<AutomationDialog> {
                     }),
             ),
             const SizedBox(height: 8),
-            if (_action == AutomationAction.exportPdf && widget.clouds.isNotEmpty) ...[
+            if ((_action == AutomationAction.exportPdf || _action == AutomationAction.saveNoteFile) && widget.clouds.isNotEmpty) ...[
               DropdownButtonFormField<String>(
                 key: const ValueKey('automation-pdf-where'),
                 initialValue: _cloud,
-                decoration: InputDecoration(labelText: tr('Put the PDF'), helperText: tr('A cloud account works on every device that has it; a folder of this device only here')),
+                decoration: InputDecoration(labelText: tr(_action == AutomationAction.exportPdf ? 'Put the PDF' : 'Put the note file'), helperText: tr('A cloud account works on every device that has it; a folder of this device only here')),
                 items: [
                   DropdownMenuItem(value: '', child: Text(tr('In a folder on this device'))),
                   for (final c in widget.clouds) DropdownMenuItem(value: c.id, child: Text(tr('In {account}', {'account': c.label}))),
@@ -690,16 +703,22 @@ class _AutomationDialogState extends State<AutomationDialog> {
               ),
               const SizedBox(height: 8),
             ],
-            if (_action == AutomationAction.exportPdf && _cloud.isNotEmpty)
-              TextField(
-                key: const ValueKey('automation-dir'),
-                controller: _dir,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: tr('Folder in the account'),
-                  helperText: tr('e.g. Notes/PDFs (made if it is not there); named after the note, an older one is replaced'),
+            if ((_action == AutomationAction.exportPdf || _action == AutomationAction.saveNoteFile) && _cloud.isNotEmpty)
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('automation-dir'),
+                    controller: _dir,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: tr('Folder in the account'),
+                      helperText: tr('e.g. Notes/PDFs (made if it is not there); named after the note, an older one is replaced'),
+                    ),
+                  ),
                 ),
-              )
+                if (widget.browseCloud != null)
+                  IconButton(key: const ValueKey('automation-cloud-browse'), tooltip: tr('Choose...'), icon: const Icon(Icons.folder_open), onPressed: _browseCloud),
+              ])
             else if (_action == AutomationAction.exportPdf || _action == AutomationAction.saveNoteFile)
               Row(children: [
                 Expanded(
@@ -934,6 +953,115 @@ class _AutomationDialogState extends State<AutomationDialog> {
           key: const ValueKey('automation-save'),
           onPressed: _valid ? () => Navigator.pop(context, _build()) : null,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Walks through the folders of a cloud account: tap a folder to go into it, the arrow goes up, and a new folder can be named
+/// (it is made when the first file is put into it).
+class _CloudFolderPicker extends StatefulWidget {
+  final String account;
+  final String start;
+  final Future<List<String>> Function(String account, String path) browse;
+
+  const _CloudFolderPicker({required this.account, required this.start, required this.browse});
+
+  @override
+  State<_CloudFolderPicker> createState() => _CloudFolderPickerState();
+}
+
+class _CloudFolderPickerState extends State<_CloudFolderPicker> {
+  late List<String> _path = widget.start.split('/').where((e) => e.trim().isNotEmpty).toList();
+  List<String>? _folders;
+  String? _problem;
+  final _new = TextEditingController();
+  int _asked = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _new.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final ask = ++_asked;
+    setState(() {
+      _folders = null;
+      _problem = null;
+    });
+    try {
+      final names = await widget.browse(widget.account, _path.join('/'));
+      if (mounted && ask == _asked) setState(() => _folders = names);
+    } catch (e) {
+      // (a folder that is not there yet - typed before - shows as empty; anything else is said)
+      if (mounted && ask == _asked) setState(() => _problem = '$e'.replaceFirst('Exception: ', ''));
+    }
+  }
+
+  void _go(List<String> path) {
+    _path = path;
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final here = _path.isEmpty ? '/' : '/${_path.join('/')}';
+    final named = _new.text.trim().replaceAll('/', '');
+    return AlertDialog(
+      title: Text(tr('Choose a folder')),
+      content: SizedBox(
+        width: 400,
+        height: 360,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            IconButton(
+              key: const ValueKey('cloud-picker-up'),
+              tooltip: tr('Up'),
+              icon: const Icon(Icons.arrow_upward),
+              onPressed: _path.isEmpty ? null : () => _go(_path.sublist(0, _path.length - 1)),
+            ),
+            Expanded(child: Text(here, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall)),
+          ]),
+          Expanded(
+            child: _problem != null
+                ? Center(child: Text(_problem!))
+                : _folders == null
+                ? const Center(child: CircularProgressIndicator())
+                : _folders!.isEmpty
+                ? Center(child: Text(tr('No folders here')))
+                : ListView(children: [
+                    for (final n in _folders!)
+                      ListTile(
+                        key: ValueKey('cloud-folder-$n'),
+                        dense: true,
+                        leading: const Icon(Icons.folder_outlined),
+                        title: Text(n),
+                        onTap: () => _go([..._path, n]),
+                      ),
+                  ]),
+          ),
+          TextField(
+            key: const ValueKey('cloud-picker-new'),
+            controller: _new,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(labelText: tr('A new folder in here (optional)'), isDense: true),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
+        FilledButton(
+          key: const ValueKey('cloud-picker-use'),
+          onPressed: () => Navigator.pop(context, [..._path, if (named.isNotEmpty) named].join('/')),
+          child: Text(tr('Use this folder')),
         ),
       ],
     );

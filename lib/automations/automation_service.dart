@@ -21,6 +21,7 @@ import '../templates/templates.dart';
 import '../ai/flashcards.dart';
 import '../ai/text_provider.dart' show ProviderState;
 import '../citations/citation_service.dart';
+import '../cloudsync/cloud_folder.dart' show BrowsableFolder;
 import '../cloudsync/cloud_sync_service.dart' show CloudProvider;
 import '../citations/source.dart';
 import '../data/card_repository.dart';
@@ -73,6 +74,14 @@ abstract class TitleSetter {
 abstract class ImageExporter {
   /// Saves a PNG of each page into [dir] in the size of [preset]; says what it did.
   Future<String> exportImagesInto(String dir, ImagePreset preset);
+}
+
+/// An editor that can write its PDF without being kept open for all of it.
+abstract class PdfExportStarter {
+  /// Starts writing the note as a PDF to [path]: what needs the open editor (laying out the pages) is done when this completes; the
+  /// future it gives completes when the file is written (null if it worked, else why not). Reading the handwriting under the ink,
+  /// which takes long, lies in between: the note can be left or closed meanwhile.
+  Future<Future<String?>> startPdfExport(String path);
 }
 
 /// An editor that can read the writing on its pages ahead of time (see `InkPrefetcher`).
@@ -416,6 +425,16 @@ class AutomationService extends ChangeNotifier {
 
   /// The cloud services a PDF can be put on: the id (what a rule keeps) and the name.
   List<({String id, String label})> get cloudChoices => [for (final c in _cloudAccounts?.call() ?? const <CloudProvider>[]) (id: c.id, label: c.label)];
+
+  /// The names of the folders in [path] (a folder of the account, '' the top) of the cloud service [id], for choosing one; throws
+  /// words for the person when the account cannot be reached.
+  Future<List<String>> browseCloud(String id, String path) async {
+    final (provider, why) = _cloudAccount(id);
+    if (provider == null) throw Exception(why);
+    final folder = provider.folderFor('');
+    if (folder is! BrowsableFolder) throw Exception(tr('{account} cannot show its folders here: type the name of the folder', {'account': provider.label}));
+    return (folder as BrowsableFolder).subfolders(_cloudRoot(path));
+  }
 
   List<Automation> get all => List.unmodifiable(_all);
 
@@ -1113,11 +1132,25 @@ class AutomationService extends ChangeNotifier {
   /// Settles when the files started so far are written.
   Future<void> get filesDone => _fileQueue;
 
+  /// Writes the note file into [dir] (of this device, or of the cloud account the rule names); says what came of it.
+  Future<String> _saveNoteFile(Automation a, String noteId, String dir) async {
+    final cloud = a.params['cloud'];
+    if (cloud == null || cloud.isEmpty) {
+      final path = await _noteFiles!.exportInto(noteId, dir);
+      return path == null ? tr('The note is gone') : tr('Saved as {path}', {'path': path});
+    }
+    final (provider, why) = _cloudAccount(cloud);
+    if (provider == null) return why!;
+    final root = _cloudRoot(dir);
+    final name = await _noteFiles!.exportIntoCloud(noteId, provider.folderFor(root));
+    if (name == null) return tr('The note is gone');
+    return tr('Uploaded to {account}: {path}', {'account': provider.label, 'path': root.isEmpty ? name : '$root/$name'});
+  }
+
   Future<void> _saveFileInBackground(Automation a, String noteId, String title, String dir, AutomationEvent? event) async {
     String result;
     try {
-      final path = await _noteFiles!.exportInto(noteId, dir);
-      result = path == null ? tr('The note is gone') : tr('Saved as {path}', {'path': path});
+      result = await _saveNoteFile(a, noteId, dir);
     } catch (e) {
       result = tr('Could not save the file: {error}', {'error': e});
     }
@@ -1402,28 +1435,73 @@ class AutomationService extends ChangeNotifier {
     return v is Map ? {for (final e in v.entries) '${e.key}': '${e.value}'} : const {};
   }
 
+  /// The cloud service [id] when it has an account on this device, else (null, what to tell the person).
+  (CloudProvider?, String?) _cloudAccount(String id) {
+    final provider = _cloudAccounts?.call().where((c) => c.id == id).firstOrNull;
+    if (provider == null) return (null, tr('That cloud account is not known here'));
+    if (!provider.available()) return (null, tr('{account} is not connected on this device', {'account': provider.label}));
+    return (provider, null);
+  }
+
+  static String _cloudRoot(String dir) => dir.split('/').where((e) => e.trim().isNotEmpty).join('/');
+
   /// Writes the note as a PDF into [dir] (a folder, `/` between the names) of the cloud account [providerId] - the account is the one
   /// connected on this device, so a rule that is synced works on every device that has the account, wherever its own folders are.
-  Future<String> _exportPdfToCloud(NoteEditorHandle editor, String providerId, String dir, String title) async {
-    final provider = _cloudAccounts?.call().where((c) => c.id == providerId).firstOrNull;
-    if (provider == null) return tr('That cloud account is not known here');
-    if (!provider.available()) return tr('{account} is not connected on this device', {'account': provider.label});
+  Future<String> _exportPdfToCloud(Automation a, NoteEditorHandle editor, String providerId, String dir, String? noteId, String title, AutomationEvent? event) async {
+    final (provider, why) = _cloudAccount(providerId);
+    if (provider == null) return why!;
     await editor.ready;
     final temp = await Directory.systemTemp.createTemp('notation_pdf');
-    try {
-      final name = '${safeFileName(title)}.pdf';
-      final file = p.join(temp.path, name);
-      final error = await editor.exportPdfTo(file);
-      if (error != null) return tr('Could not export: {error}', {'error': error});
-      final root = dir.split('/').where((e) => e.trim().isNotEmpty).join('/');
-      await provider.folderFor(root).write(name, await File(file).readAsBytes());
-      return tr('Uploaded to {account}: {path}', {'account': provider.label, 'path': root.isEmpty ? name : '$root/$name'});
-    } catch (e) {
-      return tr('Could not upload: {error}', {'error': '$e'});
-    } finally {
-      await temp.delete(recursive: true).then((_) {}, onError: (Object _) {});
+    final name = '${safeFileName(title)}.pdf';
+    final file = p.join(temp.path, name);
+    Future<String> upload(Future<String?> written) async {
+      try {
+        final error = await written;
+        if (error != null) return tr('Could not export: {error}', {'error': error});
+        final root = _cloudRoot(dir);
+        await provider.folderFor(root).write(name, await File(file).readAsBytes());
+        return tr('Uploaded to {account}: {path}', {'account': provider.label, 'path': root.isEmpty ? name : '$root/$name'});
+      } catch (e) {
+        return tr('Could not upload: {error}', {'error': '$e'});
+      } finally {
+        await temp.delete(recursive: true).then((_) {}, onError: (Object _) {});
+      }
     }
+
+    return _writePdf(a, editor, file, noteId, title, event, upload);
   }
+
+  /// Writes the PDF of [editor] to [file] and says what [finish] makes of it. An editor that can ([PdfExportStarter]) is needed only
+  /// until its pages are laid out: reading the handwriting under the ink and writing the file go on in the background, so that a
+  /// note being left (its "closed" rules run first) is not held up by them. A chain waits for all of it (the next step needs the file).
+  Future<String> _writePdf(Automation a, NoteEditorHandle editor, String file, String? noteId, String title, AutomationEvent? event,
+      Future<String> Function(Future<String?> written) finish) async {
+    if (editor is! PdfExportStarter || Zone.current[_inlineKey] == true) return finish(editor.exportPdfTo(file));
+    final Future<String?> written;
+    try {
+      written = await (editor as PdfExportStarter).startPdfExport(file);
+    } catch (e) {
+      return finish(Future<String?>.value('$e'));
+    }
+    _deferred();
+    _pdfQueue = _pdfQueue.then((_) async {
+      final result = await finish(written).catchError((Object e) => tr('Could not export: {error}', {'error': '$e'}));
+      if (noteId != null && event != null && _onlyWhenChanged(event)) await _remember(a.id, noteId, event);
+      _record(a, result, noteId: noteId, title: title);
+      final i = _all.indexWhere((x) => x.id == a.id);
+      if (i >= 0) {
+        _all[i] = _all[i].copyWith(lastRun: _now(), lastResult: result);
+        notifyListeners();
+        await _save();
+      }
+    }).catchError((Object _) {});
+    return tr('Writing the PDF in the background...');
+  }
+
+  Future<void> _pdfQueue = Future.value();
+
+  /// Settles when the PDFs started so far are written.
+  Future<void> get pdfsDone => _pdfQueue;
 
   Future<String> _perform(Automation a,
       {String? noteId, required String title, NoteEditorHandle? editor, FoundDate? found, TodoItem? todo, AutomationEvent? event, Map<String, Object?> data = const {}}) async {
@@ -1433,12 +1511,14 @@ class AutomationService extends ChangeNotifier {
         if (dir == null || dir.trim().isEmpty) return tr('No folder chosen for the PDF');
         if (editor == null) return tr('The note was not open');
         final cloud = a.params['cloud'];
-        if (cloud != null && cloud.isNotEmpty) return _exportPdfToCloud(editor, cloud, dir.trim(), title);
+        if (cloud != null && cloud.isNotEmpty) return _exportPdfToCloud(a, editor, cloud, dir.trim(), noteId, title, event);
         await editor.ready;
         await Directory(dir).create(recursive: true);
         final path = p.join(dir, '${safeFileName(title)}.pdf');
-        final error = await editor.exportPdfTo(path);
-        return error == null ? tr('Exported to {path}', {'path': path}) : tr('Could not export: {error}', {'error': error});
+        return _writePdf(a, editor, path, noteId, title, event, (written) async {
+          final error = await written;
+          return error == null ? tr('Exported to {path}', {'path': path}) : tr('Could not export: {error}', {'error': error});
+        });
       case AutomationAction.addTask:
         // "improve the title": the language model rewrites the line, if it can
         String? smart;
@@ -1556,10 +1636,7 @@ class AutomationService extends ChangeNotifier {
         if (_noteFiles == null) return tr('Note files are not available here');
         // the editor has written the note by now (closing saves it first); packing a big note
         // takes a moment: in the background, like reading handwriting
-        if (Zone.current[_inlineKey] == true) {
-          final path = await _noteFiles.exportInto(noteId, dir.trim());
-          return path == null ? tr('The note is gone') : tr('Saved as {path}', {'path': path});
-        }
+        if (Zone.current[_inlineKey] == true) return _saveNoteFile(a, noteId, dir.trim());
         _deferred();
         _fileQueue = _fileQueue.then((_) => _saveFileInBackground(a, noteId, title, dir.trim(), event)).then((_) {}, onError: (Object _) {});
         return tr('Saving the note as a file in the background...');

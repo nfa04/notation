@@ -30,6 +30,13 @@ abstract class CloudFolder {
   Future<Map<String, String>?> stamps(String dir);
 }
 
+/// A cloud folder that can say which folders a folder of the account holds, for a picker (not every service needs to: sync does not).
+abstract interface class BrowsableFolder {
+  /// The names of the folders directly in [path], a folder of the whole account (`/` between the names, '' is the top), whatever
+  /// root this object was made for.
+  Future<List<String>> subfolders(String path);
+}
+
 /// A cloud folder that did not do what was asked, with words for the person.
 class CloudFolderException implements Exception {
   final String message;

@@ -218,7 +218,7 @@ class OneDriveStorage extends OAuthShareStorage {
 }
 
 /// The folder of the sync through a cloud folder: a directory in the app folder.
-class _OneDriveFolder implements CloudFolder {
+class _OneDriveFolder implements CloudFolder, BrowsableFolder {
   @override
   Future<Map<String, String>?> stamps(String dir) async => null;
   /// Files up to this size go up in a single request (the service allows 4 MB that way).
@@ -236,7 +236,26 @@ class _OneDriveFolder implements CloudFolder {
 
   static String _enc(String path) => path.split('/').map(Uri.encodeComponent).join('/');
 
-  String _item(String path) => '${_storage._graph}/v1.0/me/drive/special/approot:/${_enc('$_name/$path')}';
+  String _item(String path) => '${_storage._graph}/v1.0/me/drive/special/approot:/${_enc(path.isEmpty ? _name : '$_name/$path')}';
+
+  @override
+  Future<List<String>> subfolders(String path) async {
+    final auth = await _auth();
+    final names = <String>[];
+    final top = '${_storage._graph}/v1.0/me/drive/special/approot';
+    String? url = '${path.isEmpty ? top : '$top:/${_enc(path)}:'}/children?\$select=name,folder&\$top=200';
+    while (url != null) {
+      final r = await _storage._client.get<dynamic>(url, options: Options(headers: auth));
+      if (r.statusCode == 404) return const [];
+      final data = r.data;
+      if (r.statusCode != 200 || data is! Map) throw CloudFolderException(_storage._error(r), r.statusCode);
+      for (final e in (data['value'] as List? ?? const [])) {
+        if (e is Map && e['folder'] != null) names.add(e['name'] as String);
+      }
+      url = data['@odata.nextLink'] as String?;
+    }
+    return names..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
 
   @override
   Future<List<String>> list(String dir) async {

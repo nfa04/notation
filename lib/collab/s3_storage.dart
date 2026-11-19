@@ -364,7 +364,7 @@ class S3Storage extends ShareStorage {
 }
 
 /// The folder of the sync through a cloud folder: the keys below a prefix in the bucket.
-class _S3Folder implements CloudFolder {
+class _S3Folder implements CloudFolder, BrowsableFolder {
   @override
   Future<Map<String, String>?> stamps(String dir) async => null;
   final S3Storage _storage;
@@ -385,9 +385,33 @@ class _S3Folder implements CloudFolder {
 
   @override
   Future<List<String>> list(String dir) async {
-    final a = _account();
-    final prefix = '$_name/$dir/';
+    final prefix = dir.isEmpty ? '$_name/' : '$_name/$dir/'; // (the folder itself: no empty name in the middle)
     final names = <String>[];
+    await _listPages(prefix, (text) {
+      for (final m in RegExp(r'<Key>([^<]*)</Key>').allMatches(text)) {
+        final key = _unescape(m.group(1)!);
+        if (key.startsWith(prefix) && key.length > prefix.length) names.add(key.substring(prefix.length));
+      }
+    });
+    return names;
+  }
+
+  @override
+  Future<List<String>> subfolders(String path) async {
+    final prefix = path.isEmpty ? '' : '$path/';
+    final names = <String>[];
+    await _listPages(prefix, (text) {
+      for (final m in RegExp(r'<CommonPrefixes>\s*<Prefix>([^<]*)</Prefix>').allMatches(text)) {
+        final p = _unescape(m.group(1)!);
+        if (p.startsWith(prefix) && p.length > prefix.length + 1) names.add(p.substring(prefix.length, p.length - 1));
+      }
+    });
+    return names..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
+
+  /// Asks for the keys below [prefix] (one level, `/` as the delimiter) page by page; [onPage] gets the XML of each.
+  Future<void> _listPages(String prefix, void Function(String xml) onPage) async {
+    final a = _account();
     String? token;
     do {
       final base = _storage._objectUri(a.c, '');
@@ -400,14 +424,10 @@ class _S3Folder implements CloudFolder {
       final r = await _storage._client.getUri<List<int>>(Uri.parse('${base.scheme}://$host$path?$q'), options: Options(headers: headers, responseType: ResponseType.bytes));
       if (r.statusCode != 200) throw _fail(r);
       final text = utf8.decode(r.data ?? const [], allowMalformed: true);
-      for (final m in RegExp(r'<Key>([^<]*)</Key>').allMatches(text)) {
-        final key = _unescape(m.group(1)!);
-        if (key.startsWith(prefix) && key.length > prefix.length) names.add(key.substring(prefix.length));
-      }
+      onPage(text);
       token = text.contains('<IsTruncated>true</IsTruncated>') ? RegExp(r'<NextContinuationToken>([^<]*)</NextContinuationToken>',).firstMatch(text)?.group(1) : null;
       if (token != null) token = _unescape(token);
     } while (token != null);
-    return names;
   }
 
   static String _unescape(String s) => s.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&apos;', "'").replaceAll('&amp;', '&');

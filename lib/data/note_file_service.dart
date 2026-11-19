@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../cloudsync/cloud_folder.dart';
 import '../models/image_item.dart';
 import 'audio_repository.dart';
 import 'brush_library.dart';
@@ -146,6 +147,25 @@ class NoteFileService {
       // the folder cannot be listed: the new file is there all the same
     }
     return path;
+  }
+
+  /// Like [exportInto], into a folder on cloud storage: returns the file name, or null if there is no such note.
+  Future<String?> exportIntoCloud(String noteId, CloudFolder folder) async {
+    final info = await _notes.noteInfo(noteId);
+    if (info == null) return null;
+    final bytes = await exportBytes(noteId);
+    if (bytes == null) return null;
+    final name = fileNameFor(info.title, noteId);
+    await folder.write(name, bytes);
+    final tail = name.substring(name.lastIndexOf(' ('));
+    try {
+      for (final other in await folder.list('')) {
+        if (other != name && other.endsWith(tail)) await folder.delete(other);
+      }
+    } catch (_) {
+      // the folder cannot be listed: the new file is there all the same
+    }
+    return name;
   }
 
   /// Writes the note file of [noteId] to [path] (all of it or nothing). Returns false if there is no such note.

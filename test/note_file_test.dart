@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/audio/wav.dart';
+import 'package:notes/cloudsync/cloud_sync_service.dart' show CloudProvider;
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/audio_repository.dart';
 import 'package:notes/data/note_data.dart';
@@ -22,6 +23,8 @@ import 'package:notes/models/page_background.dart';
 import 'package:notes/models/pdf_models.dart';
 import 'package:notes/models/rich_text.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'cloudsync/memory_cloud_folder.dart';
 
 DrawingStroke line(double y, {Color color = Colors.black, int points = 5}) =>
     DrawingStroke(color: color, width: 2.5, points: [for (var i = 0; i < points; i++) Offset(10.0 + i * 5, y + i)]);
@@ -333,6 +336,34 @@ void main() {
         expect(await automations.run(AutomationEvent.noteClosed, noteId: id, title: 'x'), hasLength(1));
         await automations.filesDone;
         expect(decodeNoteFile(file.readAsBytesSync()).note.documentText, 'more words');
+      });
+
+      test('a rule can put the file into a cloud account; a renamed note replaces its old file', () async {
+        final cloud = MemoryCloudFolder();
+        final roots = <String>[];
+        final withCloud = AutomationService(repo, TaskRepository(db), noteFiles: service, cloudAccounts: () => [
+              CloudProvider(id: 'nextcloud', label: 'Nextcloud', available: () => true, changes: ValueNotifier(0), folderFor: (n) {
+                roots.add(n);
+                return cloud;
+              }),
+            ]);
+        addTearDown(withCloud.dispose);
+        await db.delete('settings', where: "key LIKE 'automations%'");
+        await withCloud.load();
+        await withCloud.add(const Automation(id: 'c', event: AutomationEvent.noteClosed, action: AutomationAction.saveNoteFile, params: {'dir': 'Notes/Files', 'cloud': 'nextcloud'}));
+        final id = await richNote();
+        await withCloud.run(AutomationEvent.noteClosed, noteId: id, title: 'x');
+        await withCloud.filesDone;
+        final name = NoteFileService.fileNameFor('Physics / Week 1', id);
+        expect(roots, ['Notes/Files']);
+        expect(cloud.files.keys, [name]);
+        expect(withCloud.all.single.lastResult, 'Uploaded to Nextcloud: Notes/Files/$name');
+        expect(decodeNoteFile(cloud.files[name]!).note.strokes[0]!.length, 2);
+        // renamed: the file of the old title goes
+        final n = (await repo.loadNote(id))!..title = 'Physics week one';
+        await repo.saveNote(n);
+        await service.exportIntoCloud(id, cloud);
+        expect(cloud.files.keys, [NoteFileService.fileNameFor('Physics week one', id)]);
       });
 
       test('without a folder it says so', () async {

@@ -213,7 +213,7 @@ String dropboxArg(Object json) {
   return out.toString();
 }
 
-class _DropboxFolder implements CloudFolder {
+class _DropboxFolder implements CloudFolder, BrowsableFolder {
   @override
   Future<Map<String, String>?> stamps(String dir) async => null;
   final DropboxStorage _storage;
@@ -226,7 +226,27 @@ class _DropboxFolder implements CloudFolder {
 
   Future<Map<String, String>> _auth() async => {'Authorization': 'Bearer ${await _storage.oauth.accessToken()}'};
 
-  String _path(String path) => '/$_name/$path';
+  String _path(String path) => path.isEmpty ? '/$_name' : '/$_name/$path'; // (Dropbox refuses a path that ends in a slash)
+
+  @override
+  Future<List<String>> subfolders(String path) async {
+    final auth = await _auth();
+    final names = <String>[];
+    var r = await _storage._client.post<dynamic>('${_storage._api}/2/files/list_folder',
+        data: jsonEncode({'path': path.isEmpty ? '' : '/$path', 'recursive': false, 'limit': 1000}), options: Options(headers: {...auth, 'Content-Type': 'application/json'}));
+    while (true) {
+      if (_notFound(r)) return const [];
+      final data = r.data;
+      if (r.statusCode != 200 || data is! Map) throw CloudFolderException(_storage._error(r), r.statusCode);
+      for (final e in (data['entries'] as List? ?? const [])) {
+        if (e is Map && e['.tag'] == 'folder') names.add(e['name'] as String);
+      }
+      if (data['has_more'] != true) break;
+      r = await _storage._client.post<dynamic>('${_storage._api}/2/files/list_folder/continue',
+          data: jsonEncode({'cursor': data['cursor']}), options: Options(headers: {...auth, 'Content-Type': 'application/json'}));
+    }
+    return names..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
 
   bool _notFound(Response<dynamic> r) {
     if (r.statusCode != 409) return false;

@@ -72,7 +72,7 @@ void main() {
       await s.load();
     });
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), collab: s)));
-    await tester.tap(find.byKey(const ValueKey('settings-tab-Sharing and files')));
+    await tester.tap(find.byKey(const ValueKey('settings-tab-Sync and sharing')));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('advanced-Advanced: server and relay')));
@@ -110,7 +110,7 @@ void main() {
       await s.load();
     });
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), collab: s)));
-    await tester.tap(find.byKey(const ValueKey('settings-tab-Sharing and files')));
+    await tester.tap(find.byKey(const ValueKey('settings-tab-Sync and sharing')));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('collab-no-builtin')));

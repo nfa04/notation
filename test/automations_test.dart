@@ -56,6 +56,7 @@ class _InkEditor extends _Editor implements InkPreparer {
 
 void main() {
   setUpAll(AppDatabase.initFfi);
+  pickerTests();
 
   group('the rules', () {
     test('they survive being saved; an unknown action is dropped, an unknown event is kept', () {
@@ -393,8 +394,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(File('${dir.path}/Lecture 1.pdf').existsSync(), isFalse); // nothing until it is closed
 
+    // (the screen moves on once the pages are laid out; the handwriting is read and the file written in the background)
     await tester.tap(find.text('Calendar'));
-    for (var i = 0; i < 80 && service.all.single.lastResult == null; i++) {
+    for (var i = 0; i < 80 && !(service.all.single.lastResult ?? '').startsWith('Exported to'); i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 50));
     }
@@ -405,5 +407,53 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pumpAndSettle();
     expect(service.all.single.lastResult, startsWith('Exported to'));
+  });
+}
+
+void pickerTests() {
+  testWidgets('the folder of a cloud account is picked by walking through its folders', (tester) async {
+    final asked = <String>[];
+    Automation? made;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async => made = await showDialog<Automation>(
+            context: context,
+            builder: (_) => AutomationDialog(
+              folders: const [],
+              clouds: const [(id: 'nextcloud', label: 'Nextcloud')],
+              browseCloud: (account, path) async {
+                asked.add('$account:$path');
+                return switch (path) {
+                  '' => ['Notes', 'Photos'],
+                  'Notes' => ['PDFs'],
+                  _ => <String>[],
+                };
+              },
+            ),
+          ),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('automation-pdf-where')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('In Nextcloud').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('automation-cloud-browse')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cloud-folder-Notes')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cloud-folder-PDFs')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('cloud-picker-new')), 'Physics');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('cloud-picker-use')));
+    await tester.pumpAndSettle();
+    expect(asked, ['nextcloud:', 'nextcloud:Notes', 'nextcloud:Notes/PDFs']);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('automation-dir'))).controller!.text, 'Notes/PDFs/Physics');
+    expect(made, isNull);
   });
 }

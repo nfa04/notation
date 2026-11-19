@@ -6,12 +6,9 @@ import 'package:notes/app_services.dart';
 import 'package:notes/automations/automation.dart';
 import 'package:notes/automations/automation_service.dart';
 import 'package:notes/data/app_database.dart';
-import 'package:notes/events/event_bus.dart';
-import 'package:notes/events/event_sources.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/data/settings_repository.dart';
 import 'package:notes/data/task_repository.dart';
-import 'package:notes/screens/automations_view.dart';
 import 'package:notes/screens/main_shell.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:notes/style/app_theme.dart';
@@ -19,37 +16,6 @@ import 'package:notes/style/style_service.dart';
 import 'package:notes/sync/caldav_service.dart';
 import 'package:notes/sync/device_calendar_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-class _Editor implements NoteEditorHandle {
-  final String title;
-  String? exported;
-  _Editor(this.title);
-  @override
-  Future<void> get ready async {}
-  @override
-  Future<void> saveNow() async {}
-  @override
-  String get noteTitle => title;
-  List<String> lines = const [];
-  @override
-  Future<List<String>> pdfTextLines() async => lines;
-  @override
-  Future<String?> exportPdfTo(String path) async {
-    exported = path;
-    File(path).writeAsStringSync('%PDF');
-    return null;
-  }
-}
-
-class _InkEditor extends _Editor implements InkPreparer {
-  _InkEditor(super.title);
-  final asked = <(bool, bool)>[];
-  @override
-  Future<String> prepareInk({required bool text, required bool math}) async {
-    asked.add((text, math));
-    return 'reading ${asked.length}';
-  }
-}
 
 void main() {
   testWidgets('closing the tab of a note exports it as a PDF', (tester) async {
@@ -108,8 +74,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(File('${dir.path}/out/Lecture 1.pdf').existsSync(), isFalse); // nothing until it is closed
 
+    // (the tab goes once the pages are laid out; the handwriting is read and the file written in the background, without the editor)
     await tester.tap(find.byKey(const ValueKey('tab-page:0')));
-    for (var i = 0; i < 80 && service.all.single.lastResult == null; i++) {
+    for (var i = 0; i < 80 && !(service.all.single.lastResult ?? '').startsWith('Exported to'); i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 50));
     }

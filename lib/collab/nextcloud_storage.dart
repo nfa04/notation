@@ -63,7 +63,7 @@ class NextcloudStorage extends ShareStorage {
   bool get available => _caldav.isConnected && rootOf(_caldav.config!.serverUrl) != null;
 
   @override
-  String? get unavailableReason => available ? null : tr('Connect a Nextcloud in the settings under Sharing and files first.');
+  String? get unavailableReason => available ? null : tr('Connect a Nextcloud in the settings under Sync and sharing first.');
 
   /// One client for all requests: a new one for each would open a new connection (and TLS handshake) every time, where a sync is hundreds
   /// of small requests that can share a few.
@@ -81,7 +81,7 @@ class NextcloudStorage extends ShareStorage {
   Future<StoredFile> store(Uint8List sealed) async {
     final login = await _caldav.login();
     final root = login == null ? null : rootOf(login.serverUrl);
-    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sharing and files).'));
+    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sync and sharing).'));
     final auth = {'Authorization': 'Basic ${base64Encode(utf8.encode('${login.username}:${login.password}'))}',
       ...userAgentHeader,};
     final files = '$root/remote.php/dav/files/${Uri.encodeComponent(login.username)}';
@@ -110,7 +110,7 @@ class NextcloudStorage extends ShareStorage {
       data: {'path': '/$folder/$name', 'shareType': 3, 'permissions': 1, 'expireDate': '${expires.year}-${two(expires.month)}-${two(expires.day)}'},
       options: Options(contentType: Headers.formUrlEncodedContentType, headers: {...auth, 'OCS-APIRequest': 'true', 'Accept': 'application/json'}),
     );
-    if (share.statusCode == 401) throw StateError(tr('The Nextcloud did not accept the login. Connect again in the settings under Sharing and files.'));
+    if (share.statusCode == 401) throw StateError(tr('The Nextcloud did not accept the login. Connect again in the settings under Sync and sharing.'));
     if (share.statusCode == 405) throw StateError(tr('The Nextcloud answered with an error ({code}).', {'code': '405 (link, ${share.realUri})'}));
     final body = share.data is Map ? share.data as Map : null;
     final data = (body?['ocs'] as Map?)?['data'];
@@ -126,7 +126,7 @@ class NextcloudStorage extends ShareStorage {
   Future<void> replace(String ref, Uint8List sealed) async {
     final login = await _caldav.login();
     final root = login == null ? null : rootOf(login.serverUrl);
-    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sharing and files).'));
+    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sync and sharing).'));
     final auth = {'Authorization': 'Basic ${base64Encode(utf8.encode('${login.username}:${login.password}'))}',
       ...userAgentHeader,};
     final path = ref.split('/').map(Uri.encodeComponent).join('/');
@@ -147,7 +147,7 @@ class NextcloudStorage extends ShareStorage {
   Future<InboxInfo> createInbox() async {
     final login = await _caldav.login();
     final root = login == null ? null : rootOf(login.serverUrl);
-    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sharing and files).'));
+    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sync and sharing).'));
     final auth = {'Authorization': 'Basic ${base64Encode(utf8.encode('${login.username}:${login.password}'))}',
       ...userAgentHeader,};
     final files = '$root/remote.php/dav/files/${Uri.encodeComponent(login.username)}';
@@ -203,7 +203,7 @@ class NextcloudStorage extends ShareStorage {
   Future<({String root, String user, Map<String, String> auth})> account() async {
     final login = await _caldav.login();
     final root = login == null ? null : rootOf(login.serverUrl);
-    if (login == null || root == null) throw StateError(tr('Connect a Nextcloud in the settings under Sharing and files first.'));
+    if (login == null || root == null) throw StateError(tr('Connect a Nextcloud in the settings under Sync and sharing first.'));
     return (
       root: root,
       user: login.username,
@@ -218,7 +218,7 @@ class NextcloudStorage extends ShareStorage {
   Future<({String root, String files, Map<String, String> auth})> _owner() async {
     final login = await _caldav.login();
     final root = login == null ? null : rootOf(login.serverUrl);
-    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sharing and files).'));
+    if (login == null || root == null) throw StateError(tr('Sharing a copy needs a Nextcloud account (connect one in the settings under Sync and sharing).'));
     return (
       root: root,
       files: '$root/remote.php/dav/files/${Uri.encodeComponent(login.username)}',
@@ -261,13 +261,13 @@ class NextcloudStorage extends ShareStorage {
 
   void _check(Response<void> r, {required List<int> okIn, String? step}) {
     final code = r.statusCode ?? 0;
-    if (code == 401) throw StateError(tr('The Nextcloud did not accept the login. Connect again in the settings under Sharing and files.'));
+    if (code == 401) throw StateError(tr('The Nextcloud did not accept the login. Connect again in the settings under Sync and sharing.'));
     if (!okIn.contains(code)) throw StateError(tr('The Nextcloud answered with an error ({code}).', {'code': step == null ? code : '$code, $step ${r.realUri}'}));
   }
 }
 
 /// The folder of the sync through a cloud folder, by WebDAV.
-class _NextcloudFolder implements CloudFolder {
+class _NextcloudFolder implements CloudFolder, BrowsableFolder {
   final NextcloudStorage _storage;
   final String _name;
   final Map<String, Future<void>> _made = {};
@@ -300,9 +300,9 @@ class _NextcloudFolder implements CloudFolder {
  throw CloudAccountMissing(
         _storage._caldav.isConnected
             ? tr(
-                'The password of the Nextcloud account is not in the keystore of this device. Log in again in the settings under Sharing and files.',
+                'The password of the Nextcloud account is not in the keystore of this device. Log in again in the settings under Sync and sharing.',
               )
-            :tr('Connect a Nextcloud in the settings under Sharing and files first.'));
+            :tr('Connect a Nextcloud in the settings under Sync and sharing first.'));
     }
     return (
       base: '$root/remote.php/dav/files/${Uri.encodeComponent(login.username)}',
@@ -314,7 +314,7 @@ class _NextcloudFolder implements CloudFolder {
   static String _enc(String path) => path.split('/').map(Uri.encodeComponent).join('/');
 
   CloudFolderException _fail(Response<dynamic> r) {
-    if (r.statusCode == 401) return CloudFolderException(tr('The Nextcloud did not accept the login. Connect again in the settings under Sharing and files.'), 401);
+    if (r.statusCode == 401) return CloudFolderException(tr('The Nextcloud did not accept the login. Connect again in the settings under Sync and sharing.'), 401);
     if (r.statusCode == 507) return CloudFolderException(tr('Your Nextcloud is full.'), 507);
     return CloudFolderException(tr('The Nextcloud answered with an error ({code}).', {'code': r.statusCode}), r.statusCode);
   }
@@ -357,6 +357,30 @@ class _NextcloudFolder implements CloudFolder {
       names.add(href.split('/').last);
     }
     return names;
+  }
+
+  @override
+  Future<List<String>> subfolders(String path) async {
+    final l = await _login();
+    final r = await _storage._client.request<String>(
+      '${l.base}/${_enc(path)}',
+      options: Options(method: 'PROPFIND', headers: {...l.auth, 'Depth': '1', 'Content-Type': 'application/xml'}, responseType: ResponseType.plain),
+      data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+    );
+    if (r.statusCode == 404) return const [];
+    if (r.statusCode != 207 && r.statusCode != 200) throw _fail(r);
+    final names = <String>[];
+    var first = true;
+    for (final m in RegExp(r'<(?:\w+:)?href>([^<]*)</(?:\w+:)?href>', caseSensitive: false).allMatches(r.data ?? '')) {
+      final href = Uri.decodeFull(m.group(1)!);
+      if (!href.endsWith('/')) continue;
+      if (first) {
+        first = false; // (the first is the folder itself)
+        continue;
+      }
+      names.add(href.substring(0, href.length - 1).split('/').last);
+    }
+    return names..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   }
 
   /// The ETags of [dir] and of what is directly in it, in one request (the ETag of a directory changes when anything below it does).

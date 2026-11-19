@@ -59,7 +59,7 @@ class MemoryCloudFolder implements CloudFolder {
     await _wait();
     return [
       for (final p in files.keys)
-        if (p.startsWith('$dir/') && !p.substring(dir.length + 1).contains('/')) p.substring(dir.length + 1),
+        if (dir.isEmpty ? !p.contains('/') : p.startsWith('$dir/') && !p.substring(dir.length + 1).contains('/')) dir.isEmpty ? p : p.substring(dir.length + 1),
     ];
   }
 

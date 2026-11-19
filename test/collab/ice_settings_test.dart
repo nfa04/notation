@@ -114,7 +114,7 @@ void main() {
       await collab.load();
     });
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), collab: collab)));
-    await tester.tap(find.byKey(const ValueKey('settings-tab-Sharing and files')));
+    await tester.tap(find.byKey(const ValueKey('settings-tab-Sync and sharing')));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('advanced-Advanced: server and relay')));
