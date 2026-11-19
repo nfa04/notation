@@ -30,8 +30,9 @@ const _plainBias = 1.3;
 ///
 /// The shape is the one the tool would draw from corner to corner of the box around the stroke, so a drawing that is turned by a few
 /// degrees still becomes the upright shape and one turned by 45 degrees is a diamond. How close is close: on average within 3.5 % of the
-/// diagonal of the box of the shape's outline, and no part of the outline left out.
-({ShapeTool tool, List<Offset> points})? snapToShape(List<Offset> points) {
+/// diagonal of the box of the shape's outline, and no part of the outline left out. [looseness] scales every one of these tolerances
+/// (see straightenStrengthSetting).
+({ShapeTool tool, List<Offset> points})? snapToShape(List<Offset> points, {double looseness = 1}) {
   if (points.length < 12) return null;
   var left = double.infinity, top = double.infinity, right = -double.infinity, bottom = -double.infinity;
   var path = 0.0;
@@ -44,12 +45,12 @@ const _plainBias = 1.3;
     if (i > 0) path += (p - points[i - 1]).distance;
   }
   final w = right - left, h = bottom - top;
-  final arrow = snapToArrow(points);
+  final arrow = snapToArrow(points, looseness: looseness);
   if (arrow != null) return arrow;
   if (w < smallestShape || h < smallestShape) return null;
   final diag = math.sqrt(w * w + h * h);
   // closed: it comes back to where it began (a little overshoot or gap is the hand)
-  if ((points.first - points.last).distance > math.max(0.12 * path, 6.0)) return null;
+  if ((points.first - points.last).distance > math.max(0.12 * looseness * path, 6.0)) return null;
   // not a scribble over the same place again and again
   if (path > 2 * (w + h) * 1.4) return null;
 
@@ -71,7 +72,7 @@ const _plainBias = 1.3;
       uncovered = math.max(uncovered, _nearest(q, drawn));
     }
     // (the shapes that are not the plainest must fit closer: a blob is near enough to a pentagon at the plainest tolerance)
-    final fit = bias == 1.0 ? 1.0 : 0.7;
+    final fit = (bias == 1.0 ? 1.0 : 0.7) * looseness;
     if (mean > 0.035 * fit * diag + 1 || worst > 0.1 * fit * diag || uncovered > 0.12 * fit * diag) continue;
     final error = (mean + 0.5 * uncovered) * bias;
     if (best == null || error < best.error) best = (tool: tool, error: error);
@@ -86,7 +87,7 @@ const shortestArrow = 60.0;
 /// A line with an arrow head drawn in one go - the line, then a stroke out to one side of its end and back and out to the other side -
 /// as the arrow of the shape tool from where the line began to its tip. Null for anything else: a line that bends, a head that is not
 /// at the end, or one that is too big or not two-sided.
-({ShapeTool tool, List<Offset> points})? snapToArrow(List<Offset> points) {
+({ShapeTool tool, List<Offset> points})? snapToArrow(List<Offset> points, {double looseness = 1}) {
   if (points.length < 8) return null;
   final start = points.first;
   // the tip: the point furthest from the start; the line gets there the first time at (about) that distance, and the head is what follows
@@ -115,7 +116,7 @@ const shortestArrow = 60.0;
   for (var i = 0; i <= tipAt; i++) {
     bend = math.max(bend, ((points[i] - start).dx * normal.dx + (points[i] - start).dy * normal.dy).abs());
   }
-  if (bend > 0.06 * far) return null;
+  if (bend > 0.06 * looseness * far) return null;
   // the head: it stays near the tip, on the side the line came from, goes out on both sides of the line and comes back to the tip between
   final head = points.sublist(tipAt);
   var reach = 0.0, left = 0.0, right = 0.0;

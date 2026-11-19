@@ -134,4 +134,31 @@ void main() {
       expect(straightLine(arc(100, 4)), isNotNull); // (the same bend on a long line is the hand)
     });
   });
+
+  group('the strength setting', () {
+    test('a bent line: straightened only when loose enough', () {
+      List<Offset> bent(double bend) => [for (var i = 0; i <= 40; i++) Offset(100 + 300 * i / 40, 200 - bend * math.sin(math.pi * i / 40))];
+      expect([0.5, 1.0, 2.0].map((l) => straightLine(bent(14), looseness: l) != null), [false, true, true]);
+      expect([0.5, 1.0, 2.0].map((l) => straightLine(bent(24), looseness: l) != null), [false, false, true]);
+    });
+
+    test('a wobbly rectangle: made a rectangle only when loose enough', () {
+      final o = shapePoints(ShapeTool.rectangle, const Offset(100, 100), const Offset(400, 300), step: 5);
+      List<Offset> wobbly(double w) => [for (var i = 0; i < o.length; i++) o[i] + Offset(w * math.sin(i * 0.37), w * math.cos(i * 0.23))];
+      expect([0.5, 1.0, 2.0].map((l) => snapToShape(wobbly(12), looseness: l)?.tool), [null, ShapeTool.rectangle, ShapeTool.rectangle]);
+    });
+
+    test('a short curve (a part of a letter) is not straightened however loose the setting', () {
+      final arc = [for (var i = 0; i <= 12; i++) Offset(100 + 20 * i / 12, 100 - 3 * math.sin(math.pi * i / 12))];
+      expect(straightLine(arc, looseness: 2), isNull);
+    });
+
+    test('the stored value: unset or unreadable is 1, and it is held between 0.5 and 2', () {
+      expect(straightenLooseness(null), 1);
+      expect(straightenLooseness('x'), 1);
+      expect(straightenLooseness('1.5'), 1.5);
+      expect(straightenLooseness('9'), 2);
+      expect(straightenLooseness('0.1'), 0.5);
+    });
+  });
 }

@@ -6,12 +6,19 @@ import 'dart:ui';
 /// stray, see [straightLine]).
 const shortestLine = 8.0;
 
+/// The setting that holds how readily lines and shapes are corrected, from 0.5 (only very neat ones) to 2 (rough ones too); 1 when unset.
+const straightenStrengthSetting = 'straighten_strength';
+
+/// The looseness the setting [straightenStrengthSetting] holds, [value] being what is stored (or null).
+double straightenLooseness(String? value) => (double.tryParse(value ?? '') ?? 1.0).clamp(0.5, 2.0);
+
 /// A hand-drawn stroke that is meant to be a straight line, as the line it
 /// means: the two ends, joined; horizontal or vertical when it was nearly so.
 /// Null when [points] is no line (too short, bent, looping or back and forth).
 ///
-/// Units are page units (the page is 800 wide).
-List<Offset>? straightLine(List<Offset> points, {double snapDegrees = 10, double minLength = shortestLine}) {
+/// Units are page units (the page is 800 wide). [looseness] widens (above 1) or narrows (below 1) how far the stroke may stray and
+/// wiggle and still be a line: the setting [straightenStrengthSetting].
+List<Offset>? straightLine(List<Offset> points, {double snapDegrees = 10, double minLength = shortestLine, double looseness = 1}) {
   if (points.length < 2) return null; // (a quick short stroke may be only two points)
   final a = points.first, b = points.last;
   final chord = (b - a).distance;
@@ -21,7 +28,9 @@ List<Offset>? straightLine(List<Offset> points, {double snapDegrees = 10, double
   for (var i = 1; i < points.length; i++) {
     path += (points[i] - points[i - 1]).distance;
   }
-  if (path > chord * 1.12) return null; // wiggles, loops, goes back
+  // (a short stroke is never let off more than by default, however loose the setting: a curve that short is a part of a letter)
+  final loose = chord >= 40 ? looseness : math.min(looseness, 1.0);
+  if (path > chord * (1 + 0.12 * loose)) return null; // wiggles, loops, goes back
 
   // how far the stroke strays from the straight line between its ends
   final dir = (b - a) / chord;
@@ -33,7 +42,7 @@ List<Offset>? straightLine(List<Offset> points, {double snapDegrees = 10, double
   // (the allowed stray is 4 units from 40 units of length on, and less for shorter lines, down to 1 at the shortest: a short hand
   // stroke is less shaky in units, and a bend of the same size would be a letter)
   final stray = chord >= 40 ? math.max(4.0, chord * 0.06) : 1.0 + 3.0 * math.max(0.0, (chord - shortestLine) / (40 - shortestLine));
-  if (deviation > stray) return null;
+  if (deviation > stray * loose) return null;
 
   var start = a, end = b;
   final angle = math.atan2(b.dy - a.dy, b.dx - a.dx) * 180 / math.pi;
