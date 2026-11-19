@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -140,12 +140,11 @@ class MathService extends ModelFilesService implements InkRecognizer {
         _fallbackModel = defaultModel ?? standardModel,
         super(files: (defaultModel ?? standardModel) == FormulaModel.texteller ? tellerFiles : modelFiles, folderName: 'math', checksums: checksums ?? (tellerRepo == defaultTellerRepo ? tellerChecksums : const {}));
 
-  /// How long the sessions of TexTeller stay open after a formula was read (the next one is often asked for at once): longer
-  /// on a computer than on a tablet, which has less memory to spare.
-  static Duration get _keepOpen => switch (defaultTargetPlatform) {
-        TargetPlatform.android || TargetPlatform.iOS => const Duration(seconds: 6),
-        _ => const Duration(seconds: 30),
-      };
+  /// How long the sessions of TexTeller stay open after a formula was read (the next one is often asked for at once): two minutes. With 6 s
+  /// on a tablet the sessions were opened again for nearly every reading while someone wrote (measured on a Tab S6 Lite: readings about
+  /// 40 s apart, each opening costing seconds of a core). The system's call for memory still lets them go, see [OnnxTexTeller]. A browser
+  /// has less memory to spare: 6 s.
+  static Duration get _keepOpen => kIsWeb ? const Duration(seconds: 6) : const Duration(minutes: 2);
 
   FormulaModel _model = FormulaModel.pix2text;
   bool _modelKnown = false;

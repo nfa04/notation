@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/collab/invite.dart';
 import 'package:notes/collab/replica.dart';
@@ -20,15 +19,16 @@ class Device {
   final NoteData note = NoteData(id: 'n');
   late final NoteInkReader reader;
   final FakeReader hw;
+  final FakeReader? math;
   CollabSession? session;
   final saved = <String, String>{};
   late final CollabBinding binding;
 
-  Device(Directory dir, this.hw) {
+  Device(Directory dir, this.hw, [this.math]) {
     reader = NoteInkReader(
       noteId: 'n',
       handwriting: hw,
-      math: null,
+      math: math,
       idle: const Duration(milliseconds: 20),
       strokes: () => {0: note.strokes[0] ?? []},
       visiblePage: () => 0,
@@ -42,6 +42,8 @@ class Device {
       loadSaved: (id) async => (texts: <String, String>{}, unsure: <String, String>{}, reads: <InkRead>[]),
       onProgress: () {},
       readsHere: () => session?.readsInk ?? true,
+      checkReadsHere: () => (session?.readsInk ?? true) || !(session?.hostReadsMaths ?? false),
+      othersCheck: () => session?.othersCheckMaths ?? false,
       share: (r) => session?.announceReadings(r),
     );
     binding = CollabBinding(
@@ -80,14 +82,15 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  Device device() {
-    final d = Device(dir, FakeReader((s) => 'read ${s.length}'));
+  Device device({bool maths = false}) {
+    final d = Device(dir, maths ? FakeReader((s) => '\$x+${s.length}\$') : FakeReader((s) => 'read ${s.length}'),
+        maths ? FakeReader((s) => 'x+${s.length}', sayAgain: (s) => ['y+${s.length}']) : null);
     devices.add(d);
     return d;
   }
 
-  Future<Device> guest(CollabSession host, {required Device from, String name = 'Ben'}) async {
-    final g = device();
+  Future<Device> guest(CollabSession host, {required Device from, String name = 'Ben', bool maths = false}) async {
+    final g = device(maths: maths);
     final done = <Welcome>[];
     final s = await CollabSession.join(invite, hub.guest, name: name, onWelcome: done.add, imageSaver: g.binding.saveImage);
     toClose.add(s);
@@ -161,6 +164,81 @@ void main() {
     await host.end();
     await settle();
     expect(g.session!.readsInk, isTrue);
+  });
+
+  test('a guest that checks the maths reads nothing: the host reads by lines for it and shares the formulas', () async {
+    final h = device(maths: true);
+    h.note.strokes[0] = word('a', 100, 100) + word('b', 100, 500);
+    final host = CollabSession.host(invite, hub.host, h.binding, name: 'Anna');
+    toClose.add(host);
+    h.session = host;
+    host.offerMathReading(true); // (what the editor says when it has the formula reader)
+    final g = await guest(host, from: h, maths: true);
+    await until(() => g.session!.hostReadsMaths);
+    expect(g.session!.hostReadsMaths, isTrue);
+    expect(host.othersCheckMaths, isFalse);
+
+    // the guest switches the check on: the host hears it and reads by lines, with the formula reader
+    g.session!.wantMathCheck(true);
+    g.reader.checkOn = true;
+    await g.reader.start();
+    await until(() => host.othersCheckMaths);
+    expect(host.othersCheckMaths, isTrue);
+    expect(h.reader.checksForOthers, isTrue);
+    expect(g.reader.readsNow, isFalse);
+    await h.reader.start(); // (what the editor does when the session says who checks)
+
+    await until(() => (g.reader.prefetcher?.readings() ?? const []).where((r) => r.latex != null).length >= 2, ms: 5000);
+    expect([for (final r in g.reader.prefetcher!.readings()) r.latex], ['x+4', 'x+4']);
+    expect(h.math!.calls, hasLength(2));
+    expect(g.math!.calls, isEmpty); // (the guest read nothing)
+    expect(g.hw.calls, isEmpty);
+
+    // a line that looks wrong is looked at again by the host, and the guest gets the other readings too
+    final key = g.reader.prefetcher!.readings().first.block.key;
+    await h.reader.prefetcher!.lookAgain(key);
+    await until(() => g.reader.prefetcher!.othersOf(key).isNotEmpty, ms: 5000);
+    expect(g.reader.prefetcher!.othersOf(key), ['y+4']);
+    expect(g.math!.lookedAgain, 0);
+
+    // switched off again: the host no longer reads for it
+    g.session!.wantMathCheck(false);
+    await until(() => !host.othersCheckMaths);
+    expect(h.reader.checksForOthers, isFalse);
+  });
+
+  test('a guest checks the maths itself when the host cannot read formulas', () async {
+    final h = device();
+    h.note.strokes[0] = word('a', 100, 100);
+    final host = CollabSession.host(invite, hub.host, h.binding, name: 'Anna');
+    toClose.add(host);
+    h.session = host;
+    host.offerMathReading(false);
+    final g = await guest(host, from: h, maths: true);
+    g.session!.wantMathCheck(true);
+    g.reader.checkOn = true;
+    expect(g.session!.hostReadsMaths, isFalse);
+    expect(g.reader.readsNow, isTrue);
+    await g.reader.start();
+    await until(() => g.math!.calls.isNotEmpty, ms: 5000);
+    expect(g.math!.calls, isNotEmpty);
+    // and a guest that does not check reads nothing, whatever the host can do
+    g.reader.checkOn = false;
+    expect(g.reader.readsNow, isFalse);
+  });
+
+  test('a guest that leaves takes its wish to check with it', () async {
+    final h = device();
+    final host = CollabSession.host(invite, hub.host, h.binding, name: 'Anna');
+    toClose.add(host);
+    h.session = host;
+    final g = await guest(host, from: h);
+    g.session!.wantMathCheck(true);
+    await until(() => host.othersCheckMaths);
+    expect(host.othersCheckMaths, isTrue);
+    await g.session!.end();
+    await until(() => !host.othersCheckMaths);
+    expect(host.othersCheckMaths, isFalse);
   });
 
   test('what comes from another device is only taken as texts by key', () async {

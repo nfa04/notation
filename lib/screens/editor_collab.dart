@@ -106,6 +106,16 @@ extension _EditorCollab on _FixedPageNoteEditorState {
     _live = session;
     session.addListener(_liveChanged);
     session.attach(_collabBinding());
+    _tellLiveAboutMaths();
+  }
+
+  /// Tells the session whether the maths is checked here, and (as a host) whether formulas can be read here for the guests that check it.
+  void _tellLiveAboutMaths() {
+    final s = _live;
+    if (s == null) return;
+    s.wantMathCheck(_checkOn);
+    final math = widget.math;
+    s.offerMathReading(math != null && math.status == HandwritingStatus.installed);
   }
 
   Future<void> _startLive([SessionInvite? invite, HostTransport? transport, bool trustAll = false]) async {
@@ -115,6 +125,7 @@ extension _EditorCollab on _FixedPageNoteEditorState {
       _live = session;
       session.addListener(_liveChanged);
     }
+    _tellLiveAboutMaths();
     if (mounted) setState(() {});
   }
 
@@ -125,15 +136,22 @@ extension _EditorCollab on _FixedPageNoteEditorState {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.endReason ?? 'The live session ended')));
     }
     _lastLiveState = s?.state;
-    // who reads the handwriting changed (this device became the host, or lost it): the one that reads now starts, and tells the others all
+    // who reads the handwriting changed (this device became the host, or lost it; a guest switched the maths check on or off; the host
+    // can read formulas or not): the one that reads now starts, and tells the others all. A device that stops reading says nothing more.
     final reads = _inkReadsHere();
-    if (reads != _inkWasReadingHere) {
-      _inkWasReadingHere = reads;
-      if (reads) {
+    final was = _inkWasReadingHere;
+    final now = (reads, _reader.checksForOthers, _live?.hostReadsMaths ?? false);
+    if (now != was) {
+      _inkWasReadingHere = now;
+      _tellLiveAboutMaths();
+      if (!_reader.readsNow) _reader.pending.value = 0;
+      if (reads && !was.$1) {
         _reader.shareAgain();
         _ink?.changed();
         unawaited(_reader.startIndex());
       }
+      // (reading by lines, with the formula reader, or not: for the check here or for the others)
+      if (now.$2 != was.$2 || now.$3 != was.$3) unawaited(_startInk());
     }
     setState(() {});
     // someone new does not know the page yet (every message is sealed, so they are not sent for nothing)

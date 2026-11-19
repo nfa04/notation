@@ -555,6 +555,44 @@ class CollabSession extends ChangeNotifier {
     unawaited(_broadcast({'t': 'inkread', 'r': readings}));
   }
 
+  // ---- who checks the maths
+
+  /// Whether the person here has the maths check on (see [wantMathCheck]); told to the host on every welcome.
+  bool _ownCheck = false;
+
+  /// On the host: the guests (by site) that have the maths check on. The host then reads the writing line by line, with the formula
+  /// reader, as the check needs it, and the guests take the formulas from it instead of reading them each on their own.
+  final Set<String> _checkers = {};
+
+  /// On the host: whether it can read formulas for the guests ([offerMathReading]). On a guest: whether the host said it can. Until a
+  /// host says so (an older app never does) a guest that checks the maths reads for itself.
+  bool _hostReadsMaths = false;
+
+  /// The maths check was switched on or off here. A guest tells the host, which reads by lines for it from then on.
+  void wantMathCheck(bool on) {
+    if (on == _ownCheck) return;
+    _ownCheck = on;
+    if (role == SessionRole.guest) _sendOwnCheck();
+  }
+
+  void _sendOwnCheck() {
+    if (role != SessionRole.guest || _state != SessionState.live) return;
+    unawaited(_host?.send({'t': 'check', 'on': _ownCheck}).then((_) {}, onError: (Object _) {}));
+  }
+
+  /// On the host: whether one of the guests checks the maths (the writing is then read line by line here for them).
+  bool get othersCheckMaths => role == SessionRole.host && _checkers.any((s) => _participants.any((p) => p.site == s));
+
+  /// On the host: whether it can read formulas for the guests that check the maths (the formula reader is there). Told to the guests.
+  void offerMathReading(bool can) {
+    if (role != SessionRole.host || can == _hostReadsMaths) return;
+    _hostReadsMaths = can;
+    if (_state == SessionState.live) unawaited(_broadcast({'t': 'checker', 'ok': can}));
+  }
+
+  /// On a guest: whether the host reads the formulas for the maths check. When it does not, the check reads here.
+  bool get hostReadsMaths => role == SessionRole.guest && _state == SessionState.live && _hostReadsMaths;
+
   static Map<String, Object?> _pdfJson(SharedPdf pdf) => {
         'name': pdf.name,
         'sha': pdf.sha256,
@@ -822,6 +860,10 @@ class CollabSession extends ChangeNotifier {
         }
       case 'obs':
         if (peer.admitted) _takeObservations(peer.site, m['o']);
+      case 'check':
+        // (a guest that checks the maths: the host reads by lines for it)
+        if (!peer.admitted || peer.site == null) return;
+        if (m['on'] == true ? _checkers.add(peer.site!) : _checkers.remove(peer.site!)) notifyListeners();
       case 'veto':
         final veto = _vetoFrom(m['why']);
         if (veto == peer.veto) return;
@@ -909,6 +951,7 @@ class CollabSession extends ChangeNotifier {
       await peer.send(_atMessage(who, page, _sheets[who], seq: who == site ? _atSeq : _atSeen[who]));
     }
     await peer.send(_bandsMessage());
+    await peer.send({'t': 'checker', 'ok': _hostReadsMaths});
     if (registered.changed) await _broadcast({'t': 'roster', 'r': registered.roster.toJson()}, except: peer);
     _successionTimer ??= Timer.periodic(_successionTick, (_) => _reconsiderSuccession());
     _reconsiderSuccession();
@@ -934,7 +977,10 @@ class CollabSession extends ChangeNotifier {
     }
     if (_peers.remove(peer)) {
       // (not when the same guest is in on another link: the entry is theirs, not this old link's)
-      if (!_peers.any((p) => p.site == peer.site)) _participants.removeWhere((p) => p.site == peer.site);
+      if (!_peers.any((p) => p.site == peer.site)) {
+        _participants.removeWhere((p) => p.site == peer.site);
+        _checkers.remove(peer.site);
+      }
       _pruneViewing();
       notifyListeners();
       unawaited(_broadcast({'t': 'peers', 'peers': [for (final p in _participants) p.toJson()]}));
@@ -1634,6 +1680,7 @@ class CollabSession extends ChangeNotifier {
           // Changes that are known on the other side are no change there (the later version wins, see Replica), so this is safe to repeat.
           _sendAll();
           _sendOwnPage();
+          _sendOwnCheck();
           return;
         }
         if (_welcomed) {
@@ -1647,6 +1694,7 @@ class CollabSession extends ChangeNotifier {
           if (!(_resumed?.isCompleted ?? true)) _resumed!.complete();
           _sendAll();
           _sendOwnPage();
+          _sendOwnCheck();
           return;
         }
         _welcomed = true;
@@ -1673,6 +1721,7 @@ class CollabSession extends ChangeNotifier {
         _setParticipants(m['peers']);
         final pdf = _pdfFrom(m['pdf']);
         _set(SessionState.live);
+        _sendOwnCheck();
         onWelcome?.call(Welcome(headless, pdf));
       case 'wet':
         if (_state == SessionState.live && wet.take(m, self: site)) _pumpWetSoon(); // (which also takes away lines that stop)
@@ -1695,6 +1744,12 @@ class CollabSession extends ChangeNotifier {
           } catch (e) {
             debugPrint('[live] readings of the handwriting could not be taken: $e');
           }
+        }
+      case 'checker':
+        final ok = m['ok'] == true;
+        if (ok != _hostReadsMaths) {
+          _hostReadsMaths = ok;
+          notifyListeners();
         }
       case 'at':
         _takePage(m['site'] as String?, m['page'], m['sheet'], m['q']);

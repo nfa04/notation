@@ -13,6 +13,7 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
       return;
     }
     _checkOn = want;
+    _live?.wantMathCheck(want); // (a guest: the host reads by lines for it)
     _startInk().then((_) {
       if (!mounted) return;
       setState(() => _marks = want ? _currentMarks() : const []);
@@ -27,9 +28,12 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
     ], others: {
       for (final r in read) r.block.key: ink!.othersOf(r.block.key),
     });
-    // a line that is marked as a mistake is read once more, another way, in the background: the writing may have been misread
-    for (final m in marks) {
-      if (m.check.isProblem) unawaited(ink?.lookAgain(m.key) ?? Future<void>.value());
+    // a line that is marked as a mistake is read once more, another way, in the background: the writing may have been misread (by the
+    // device that reads: a guest of a live session gets the other readings from the host)
+    if (_reader.readsNow) {
+      for (final m in marks) {
+        if (m.check.isProblem) unawaited(ink?.lookAgain(m.key) ?? Future<void>.value());
+      }
     }
     return marks;
   }
