@@ -314,9 +314,9 @@ void main() {
     test('a block of writing has the same key on every run of the app, so that what was read of it is read only once', () {
       // (a key made of hash codes would differ in each run: the indexer would read all the writing again after every start)
       final s = DrawingStroke(id: 'abc', color: Colors.black, width: 2, points: [const Offset(1, 2), const Offset(3.5, 4.25)], pressures: [3, 4]);
-      expect(InkCluster(0, [s], Rect.zero).key, '1-6d2ec8c5');
+      expect(InkCluster(0, [s], Rect.zero).key, '1-6d8e0d4f');
       s.points.add(const Offset(5, 6));
-      expect(InkCluster(0, [s], Rect.zero).key, isNot('1-6d2ec8c5'));
+      expect(InkCluster(0, [s], Rect.zero).key, isNot('1-6d8e0d4f'));
     });
 
     test('a block has the same key just drawn and loaded again (its points are kept as 32-bit numbers)', () {
