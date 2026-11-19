@@ -48,7 +48,7 @@ class NextcloudShares extends NativeShareProvider {
     final said = meta is Map ? meta['message'] : null;
     if (said is String && said.trim().isNotEmpty) throw NativeShareException(said.trim());
     final allow = last.headers.value('allow');
-    throw NativeShareException(tr('The Nextcloud refused {method} at {url} (405). Check that the address of the Nextcloud in the settings under Sharing and files is the one you open in the browser.', {'method': method, 'url': lastUrl}) +
+    throw NativeShareException(tr('The Nextcloud refused {method} at {url} (405). Check that the address of the Nextcloud in the settings under Sync and sharing is the one you open in the browser.', {'method': method, 'url': lastUrl}) +
         (allow == null ? '' : ' (Allow: $allow)'));
   }
 
@@ -85,7 +85,7 @@ class NextcloudShares extends NativeShareProvider {
     final code = r.statusCode ?? 0;
     final body = r.data is Map ? r.data as Map : null;
     final meta = (body?['ocs'] as Map?)?['meta'] as Map?;
-    if (code == 401) throw NativeShareException(tr('The Nextcloud did not accept the login. Connect again in the settings under Sharing and files.'));
+    if (code == 401) throw NativeShareException(tr('The Nextcloud did not accept the login. Connect again in the settings under Sync and sharing.'));
     if (code == 429) throw NativeShareException(tr('The Nextcloud allows only a few new shares in a short time. Try again in a few minutes.'));
     if (code == 404 && body == null) throw NativeShareException(tr('This Nextcloud does not offer sharing with people.'));
     final status = (meta?['statuscode'] as num?)?.toInt() ?? code;

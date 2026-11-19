@@ -132,7 +132,7 @@ class DropboxShares extends NativeShareProvider {
         {'member': {'.tag': 'email', 'email': person.id}, 'access_level': {'.tag': _tag(role)}},
       ],
       'quiet': false,
-      'custom_message': tr('Shared with Notation. Accept it in your Dropbox, then it is listed in the app: Settings, Sharing and files.'),
+      'custom_message': tr('Shared with Notation. Accept it in your Dropbox, then it is listed in the app: Settings, Sync and sharing.'),
     });
     if (r.statusCode == 409 && '${(r.data is Map ? (r.data as Map)['error_summary'] : '')}'.contains('already')) {
       // (added already: the role asked for is set)

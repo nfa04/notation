@@ -70,9 +70,10 @@ void main() {
       await tap(tester, find.byKey(const ValueKey('intro-next')));
 
       expect(find.text('What will you use Notation for?'), findsOneWidget);
-      expect(find.byKey(const ValueKey('intro-everything-on')), findsOneWidget, reason: 'nothing chosen yet: everything stays on');
-      await tap(tester, find.byKey(const ValueKey('area-humanities')));
+      expect(find.byKey(const ValueKey('intro-basics-on')), findsOneWidget, reason: 'nothing chosen yet: the basics, not every tool');
       expect(find.byKey(const ValueKey('intro-everything-on')), findsNothing);
+      await tap(tester, find.byKey(const ValueKey('area-humanities')));
+      expect(find.byKey(const ValueKey('intro-basics-on')), findsNothing);
       await tap(tester, find.byKey(const ValueKey('area-languages')));
       await tap(tester, find.byKey(const ValueKey('intro-next')));
 
@@ -103,7 +104,7 @@ void main() {
       expect(features.areas, {UseArea.humanities, UseArea.languages});
     });
 
-    testWidgets('"show me everything" and "skip" leave every tool on; the name can stay empty; back goes back', (tester) async {
+    testWidgets('"show me everything" switches every tool on; the name can stay empty; back goes back', (tester) async {
       tester.view.physicalSize = const Size(1000, 1400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -125,14 +126,49 @@ void main() {
       expect(features.allOn, isTrue);
     });
 
-    testWidgets('skipping at the start leaves everything on and the intro done', (tester) async {
+    testWidgets('skipping at the first start gives the basics, not every tool, and the intro is done', (tester) async {
       await start(tester);
       await tester.pumpWidget(MaterialApp(home: IntroScreen(profile: profile, features: features)));
       await tap(tester, find.byKey(const ValueKey('intro-skip')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       expect(profile.introDone, isTrue);
+      expect(features.enabled, FeaturePresets.basics);
+      expect(features.areas, isEmpty);
+    });
+
+    testWidgets('choosing no use at the first start gives the basics too', (tester) async {
+      await start(tester);
+      await tester.pumpWidget(MaterialApp(home: IntroScreen(profile: profile, features: features)));
+      for (var i = 0; i < 4; i++) {
+        await tap(tester, find.byKey(const ValueKey('intro-next')));
+      }
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      expect(profile.introDone, isTrue);
+      expect(features.enabled, FeaturePresets.basics);
+    });
+
+    testWidgets('skipping the intro asked for again from the settings leaves the tools as they are', (tester) async {
+      await start(tester);
+      await tester.runAsync(() async {
+        await features.showAll();
+        await profile.finishIntro();
+        await profile.resetIntro();
+      });
+      await tester.pumpWidget(MaterialApp(home: IntroScreen(profile: profile, features: features)));
+      await tap(tester, find.byKey(const ValueKey('intro-skip')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      expect(profile.introDone, isTrue);
       expect(features.allOn, isTrue);
-      expect(store.values.containsKey(FeatureSettings.enabledKey), isFalse, reason: 'nothing chosen, nothing saved');
+    });
+
+    test('everyday notes are a general use: their tools go into every profile, and they get none of their own', () {
+      expect(UseArea.everyday.general, isTrue);
+      expect(UseArea.unrelated({UseArea.maths, UseArea.everyday}), isFalse);
+      final made = profilesForAreas({UseArea.arts, UseArea.maths, UseArea.everyday}, (a) => a.shortTitle);
+      expect([for (final p in made) p.id], ['area-maths', 'area-arts']);
+      for (final p in made) {
+        expect(p.tools, contains(Feature.tables), reason: p.id);
+      }
     });
   });
 
@@ -143,16 +179,19 @@ void main() {
       addTearDown(tester.view.reset);
       await start(tester);
       await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), profile: profile, features: features)));
+      // the intro is asked for from the general settings; the name and id are with sync and sharing (they are what others see)
+      await profile.finishIntro();
+      await tap(tester, find.byKey(const ValueKey('profile-intro')));
+      expect(profile.introDone, isFalse);
+
+      expect(find.byKey(const ValueKey('profile-id')), findsNothing);
+      await tap(tester, find.byKey(const ValueKey('settings-tab-Sync and sharing')));
       expect(find.byKey(const ValueKey('profile-id')), findsOneWidget);
       expect(find.textContaining(profile.id), findsOneWidget);
       await tester.enterText(find.byKey(const ValueKey('profile-name')), 'Platon');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(profile.name, 'Platon');
-
-      await profile.finishIntro();
-      await tap(tester, find.byKey(const ValueKey('profile-intro')));
-      expect(profile.introDone, isFalse);
     });
 
     testWidgets('the tools: a use sets them up, "only the basics" and "show everything" are presets, every tool has a switch', (tester) async {
@@ -221,7 +260,7 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pumpAndSettle();
       Finder inMenu(String label) => find.descendant(of: find.byType(NavigationRail), matching: find.text(label));
-      for (final label in ['Dashboard', 'Folders', 'Calendar', 'Active Canvas', 'Automations', 'Settings']) {
+      for (final label in ['Dashboard', 'Folders', 'Calendar', 'Automations', 'Settings']) {
         expect(inMenu(label), findsOneWidget, reason: label);
       }
 

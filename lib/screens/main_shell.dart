@@ -113,7 +113,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   /// The places of the menu on the left, by the index the rest of the shell goes by (the calendar and the
   /// automations go when they are off; the graph and the assistant go with the AI).
-  List<int> get _navItems => [0, 1, 6, if (_assistantOn) 9, if (_aiOn) 8, if (_f(Feature.calendar)) 2, 3, if (_f(Feature.automations)) 4, 5];
+  /// (3, the open note, is not among them: notes open as tabs, and on a phone from the dashboard, so it has no place of its own in the menu)
+  List<int> get _navItems => [0, 1, 6, if (_assistantOn) 9, if (_aiOn) 8, if (_f(Feature.calendar)) 2, if (_f(Feature.automations)) 4, 5];
 
   /// Whether the assistant that answers from all notes is offered (its own place in the menu).
   bool get _assistantOn => _app.ai != null && _aiOn && _f(Feature.assistant);
@@ -126,7 +127,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     0: NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Dashboard')),
     1: NavigationRailDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: Text('Folders')),
     2: NavigationRailDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: Text('Calendar')),
-    3: NavigationRailDestination(icon: Icon(Icons.note_alt_outlined), selectedIcon: Icon(Icons.note_alt), label: Text('Active Canvas')),
+    3: NavigationRailDestination(icon: Icon(Icons.note_alt_outlined), selectedIcon: Icon(Icons.note_alt), label: Text('Note')),
     4: NavigationRailDestination(icon: Icon(Icons.bolt_outlined), selectedIcon: Icon(Icons.bolt), label: Text('Automations')),
     6: NavigationRailDestination(icon: Icon(Icons.search), selectedIcon: Icon(Icons.search), label: Text('Search')),
     8: NavigationRailDestination(icon: Icon(Icons.hub_outlined), selectedIcon: Icon(Icons.hub), label: Text('Graph')),
@@ -710,7 +711,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     try {
       final p = await shares.addLink(link);
       messenger.showSnackBar(SnackBar(
-        content: Text.verbatim(tr('"{name}" is shared with you by {who}. Take it in under Settings, Sharing and files.', {'name': ShareNaming.shown(p.share.name), 'who': p.share.owner})),
+        content: Text.verbatim(tr('"{name}" is shared with you by {who}. Take it in under Settings, Sync and sharing.', {'name': ShareNaming.shown(p.share.name), 'who': p.share.owner})),
         action: SnackBarAction(label: tr('Open'), onPressed: () => _go(index: 5)),
         duration: const Duration(seconds: 10),
       ));
@@ -1030,7 +1031,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     }
     final place = navigationActions[id];
     if (place != null) {
-      if (!_navItems.contains(place)) return false;
+      // (the open note has no place in the menu, but its shortcut still goes back to it, when there is one)
+      if (place == 3 ? _activeNoteId == null && _lastNote == null : !_navItems.contains(place)) return false;
       unawaited(_go(index: place));
       return true;
     }
@@ -1173,7 +1175,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   /// A phone: the main places sit in a bar at the bottom, every place is in the menu (the button at the top left, or a swipe from the left edge); an open note gets the whole screen.
   Widget _phoneShell() {
-    final inBar = [for (final i in const [0, 1, 6, 9, 3]) if (_navItems.contains(i)) i];
+    final inBar = [for (final i in const [0, 1, 6, 9]) if (_navItems.contains(i)) i];
     final inBarNow = inBar.contains(_selectedNavIndex);
     NavigationDestination of(int i) {
       final d = _destinations[i]!;

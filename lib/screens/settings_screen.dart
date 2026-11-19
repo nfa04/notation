@@ -24,6 +24,7 @@ import 'advanced_section.dart';
 import 'stylus_settings_card.dart';
 import 'accessibility_settings.dart';
 import 'pdf_quality_settings.dart';
+import 'straighten_settings.dart';
 import 'refresh_rate_settings.dart';
 import 'acceleration_settings.dart';
 import '../ink/glm_vision_bench.dart';
@@ -212,11 +213,12 @@ class SettingsScreen extends StatelessWidget {
           ],
           if (profile != null) ...[
             const SizedBox(height: 28),
-            ProfileSettings(profile: profile!, onIntro: () => profile!.resetIntro()),
-          ],
-          if (sync != null) ...[
-            const SizedBox(height: 28),
-            SyncSettings(service: sync!),
+            OutlinedButton.icon(
+              key: const ValueKey('profile-intro'),
+              onPressed: () => profile!.resetIntro(),
+              icon: const Icon(Icons.waving_hand_outlined, size: 18),
+              label: const Text('Show the intro again'),
+            ),
           ],
           const SizedBox(height: 28),
           Text(
@@ -238,6 +240,10 @@ class SettingsScreen extends StatelessWidget {
           ],
           if (repository != null) ...[
             AdvancedSection(children: [const SizedBox(height: 8), PdfQualitySettings(repository: repository!)]),
+            const SizedBox(height: 28),
+          ],
+          if (repository != null && (features?.on(Feature.straighten) ?? true)) ...[
+            StraightenSettings(repository: repository!),
             const SizedBox(height: 28),
           ],
           if (features != null) ToolSettings(features: features!),
@@ -276,7 +282,7 @@ class SettingsScreen extends StatelessWidget {
             if (llm != null)
               _ModelSettings(
                 service: llm!,
-                title: 'Language model',
+                title: 'Titles for tasks from PDFs',
                 description: 'Writes short titles for the tasks that automations make from dates in a PDF '
                     '(Qwen3-0.6B, Apache-2.0 licence). It runs on this device and nothing is sent away; '
                     'it is loaded only while it works. It needs a fair amount of memory while it does.',
@@ -340,10 +346,13 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
       (
-        label: 'Sharing and files',
+        // what is backed up, to which devices, and who else sees what: one place (the name is the one others see)
+        label: 'Sync and sharing',
         icon: Icons.group_outlined,
         sections: [
           ..._spaced([
+            if (profile != null) ProfileSettings(profile: profile!),
+            if (sync != null) SyncSettings(service: sync!),
             if (collab != null) _LiveSettings(service: collab!),
             if (collab?.cloudShare != null) ShareStorageSettings(share: collab!.cloudShare!),
             if (collab?.nativeShares != null) NativeShareSettings(service: collab!.nativeShares!),

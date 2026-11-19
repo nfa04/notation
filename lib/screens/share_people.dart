@@ -201,7 +201,7 @@ class _SharePeoplePanelState extends State<SharePeoplePanel> {
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: r.link!));
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(tr('Link copied. Send it to {name}: they add it under Settings, Sharing and files.', {'name': r.person.label}))));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(tr('Link copied. Send it to {name}: they add it under Settings, Sync and sharing.', {'name': r.person.label}))));
                       }
                     },
                   ),

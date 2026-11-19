@@ -61,9 +61,15 @@ class _IntroScreenState extends State<IntroScreen> {
   int _step = 0;
   late final _name = TextEditingController(text: widget.profile.name);
   late final Set<UseArea> _areas = {...widget.features.areas};
+
+  /// The first start: nothing was chosen yet, so the app starts with the basics, not with every tool at once (a new person
+  /// is better met by a short toolbar; more is a switch away in the settings).
+  late final bool _first = !widget.profile.introSeen && !widget.features.chosen;
   // (the intro again, from the settings: it starts from what is set)
-  late Set<Feature> _tools = {...widget.features.enabled};
-  late bool _everything = widget.features.allOn && widget.features.areas.isEmpty;
+  late Set<Feature> _tools = _first ? FeaturePresets.forAreas(_areas) : {...widget.features.enabled};
+
+  /// Whether the person asked for every tool ("show me everything").
+  late bool _everything = !_first && widget.features.allOn && widget.features.areas.isEmpty;
   bool _busy = false;
 
   /// The AI features on or off (the kill switch of the settings), and which models to download (null: not looked at yet, so
@@ -118,9 +124,17 @@ class _IntroScreenState extends State<IntroScreen> {
   }
 
   void _chooseAreas() {
-    // the tools follow what was chosen; "everything" is the same as choosing nothing
-    _tools = _areas.isEmpty ? FeaturePresets.everything : FeaturePresets.forAreas(_areas);
-    _everything = _areas.isEmpty;
+    // the tools follow what was chosen; choosing nothing is the basics
+    _tools = FeaturePresets.forAreas(_areas);
+    _everything = false;
+    _download = null;
+  }
+
+  /// Every tool, whatever the uses.
+  void _chooseEverything() {
+    _areas.clear();
+    _tools = FeaturePresets.everything;
+    _everything = true;
     _download = null;
   }
 
@@ -128,7 +142,8 @@ class _IntroScreenState extends State<IntroScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     await widget.profile.setName(_name.text);
-    if (!skipped) await widget.features.apply(_tools, areas: _areas);
+    // skipped at the first start: the basics (skipped when the intro was asked for again: what is set stays)
+    if (!skipped || _first) await widget.features.apply(skipped ? FeaturePresets.basics : _tools, areas: skipped ? const {} : _areas);
     if (!skipped && _profiles && _offerProfiles) await _makeProfiles();
     if (!skipped) await widget.smart?.apply(aiOn: _ai, download: _downloads);
     if (!skipped && _welcomeNote) await widget.welcome?.call(_tools);
@@ -189,7 +204,7 @@ class _IntroScreenState extends State<IntroScreen> {
                   TextButton(
                     key: const ValueKey('intro-skip'),
                     onPressed: _busy ? null : () => _finish(skipped: true),
-                    child: const Text('Skip, show everything'),
+                    child: const Text('Skip'),
                   ),
                   const Spacer(),
                   if (_step > 0) TextButton(key: const ValueKey('intro-back'), onPressed: _busy ? null : () => setState(() => _step--), child: const Text('Back')),
@@ -341,7 +356,7 @@ class _IntroScreenState extends State<IntroScreen> {
                     key: const ValueKey('intro-profiles'),
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: Text(tr('Make a profile for each: {names}', {'names': [for (final a in UseArea.values) if (_areas.contains(a) && a != UseArea.together) tr(a.shortTitle)].join(', ')})),
+                    title: Text(tr('Make a profile for each: {names}', {'names': [for (final a in UseArea.values) if (_areas.contains(a) && !a.general) tr(a.shortTitle)].join(', ')})),
                     value: _profiles,
                     onChanged: (v) => setState(() => _profiles = v),
                   ),
@@ -352,19 +367,15 @@ class _IntroScreenState extends State<IntroScreen> {
           const SizedBox(height: 20),
           OutlinedButton.icon(
             key: const ValueKey('intro-everything'),
-            onPressed: _everything && _areas.isEmpty
-                ? null
-                : () => setState(() {
-                      _areas.clear();
-                      _chooseAreas();
-                    }),
+            onPressed: _everything ? null : () => setState(_chooseEverything),
             icon: const Icon(Icons.done_all, size: 18),
             label: const Text('Show me everything'),
           ),
-          if (_everything && _areas.isEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Every tool stays on.', key: const ValueKey('intro-everything-on'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          ],
+          const SizedBox(height: 8),
+          if (_everything)
+            Text('Every tool is on.', key: const ValueKey('intro-everything-on'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant))
+          else if (_areas.isEmpty)
+            Text('Nothing chosen: you start with the basics. More tools can be switched on in the settings at any time.', key: const ValueKey('intro-basics-on'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
         ]);
       case _Step.smart:
         return _smartPage(context, title, hint);

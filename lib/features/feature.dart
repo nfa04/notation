@@ -91,6 +91,7 @@ enum Feature {
 
 /// What a person uses the app for, which decides what is switched on to begin with.
 enum UseArea {
+  everyday('Everyday notes and meetings', 'Lists, meeting notes, to-dos and things to remember.', Icons.edit_note),
   maths('Mathematics and physics', 'Formulas, proofs, problem sheets and graphs.', Icons.functions),
   sciences('Chemistry, biology and medicine', 'Diagrams, tables, lab notes and a lot to learn by heart.', Icons.biotech_outlined),
   computing('Computer science and engineering', 'Diagrams, tables, specifications and code.', Icons.terminal),
@@ -108,6 +109,7 @@ enum UseArea {
 
   /// A short name, for a toolbar profile.
   String get shortTitle => switch (this) {
+        UseArea.everyday => 'Everyday',
         UseArea.maths => 'Maths',
         UseArea.sciences => 'Sciences',
         UseArea.computing => 'Computing',
@@ -119,13 +121,17 @@ enum UseArea {
       };
 
   /// Which way of working this use is: uses of one kind share most of their tools and are often at hand together (maths and the
-  /// sciences), uses of different kinds are seldom (maths and art). Working with others is no way of working of its own: -1.
+  /// sciences), uses of different kinds are seldom (maths and art). Working with others and everyday notes are no way of working
+  /// of their own (they go with any): -1.
   int get _kind => switch (this) {
         UseArea.maths || UseArea.sciences || UseArea.computing => 0,
         UseArea.humanities || UseArea.languages || UseArea.society => 1,
         UseArea.arts => 2,
-        UseArea.together => -1,
+        UseArea.together || UseArea.everyday => -1,
       };
+
+  /// Whether this use goes with every other (its tools are in each toolbar profile, and it gets none of its own).
+  bool get general => _kind < 0;
 
   /// Whether [areas] are of different kinds (maths and art), so that a person may well use them one at a time: the uses to
   /// offer a toolbar profile each for.
@@ -141,6 +147,7 @@ enum UseArea {
         UseArea.society => {Feature.diagrams, Feature.tables, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.automations},
         UseArea.arts => {Feature.diagrams, Feature.shapes, Feature.straighten, Feature.themeImages, Feature.handwriting, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket, Feature.freeTransform},
         UseArea.together => {Feature.live, Feature.history},
+        UseArea.everyday => {Feature.shapes, Feature.tables, Feature.straighten, Feature.handwriting},
       };
 }
 
@@ -184,6 +191,10 @@ class FeatureSettings extends ChangeNotifier {
   /// The uses the person chose in the intro (empty if they picked "everything", or never chose).
   Set<UseArea> get areas => Set.unmodifiable(_areas);
 
+  /// Whether a list of tools was ever saved (chosen in the intro or the settings); false: every tool is on because nobody chose.
+  bool get chosen => _chosen;
+  bool _chosen = false;
+
   /// Whether this tool is on. A tool that needs another is on only if that is too (flashcards need the assistant).
   bool on(Feature f) => _enabled.contains(f) && (f != Feature.flashcards || _enabled.contains(Feature.assistant));
 
@@ -192,6 +203,7 @@ class FeatureSettings extends ChangeNotifier {
 
   Future<void> load() async {
     final text = await _read(enabledKey);
+    _chosen = text != null;
     if (text != null) {
       try {
         _enabled = {for (final id in jsonDecode(text) as List) ?Feature.byId(id as String)};
@@ -215,6 +227,7 @@ class FeatureSettings extends ChangeNotifier {
   }
 
   Future<void> _save() async {
+    _chosen = true;
     await _write(enabledKey, jsonEncode([for (final f in Feature.values) if (_enabled.contains(f)) f.name]));
     await _write(areasKey, jsonEncode([for (final a in UseArea.values) if (_areas.contains(a)) a.name]));
     await _write(knownKey, jsonEncode([for (final f in Feature.values) f.name]));

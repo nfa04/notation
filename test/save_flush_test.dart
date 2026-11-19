@@ -90,7 +90,7 @@ void main() {
       files = NoteFileService(repo, supportDirectory: () async => dir);
     });
     await tester.pumpWidget(MaterialApp(home: SettingsScreen(theme: AppTheme.inMemory(), noteFiles: files)));
-    await tester.tap(find.byKey(const ValueKey('settings-tab-Sharing and files')));
+    await tester.tap(find.byKey(const ValueKey('settings-tab-Sync and sharing')));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('note-files-open')));

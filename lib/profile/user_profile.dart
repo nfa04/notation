@@ -38,6 +38,10 @@ class UserProfile extends ChangeNotifier {
   /// Whether the intro was done (or skipped).
   bool get introDone => _introDone;
 
+  /// Whether the intro was ever done or skipped on this device (it may have been asked for again since): false on a first start.
+  bool get introSeen => _introSeen;
+  bool _introSeen = false;
+
   bool get loaded => _loaded;
 
   /// A new id: 64 random bits as 16 hex digits.
@@ -55,7 +59,9 @@ class UserProfile extends ChangeNotifier {
       _id = newId(_random);
       await _write(idKey, _id);
     }
-    _introDone = (await _read(introKey)) == '1';
+    final intro = await _read(introKey);
+    _introDone = intro == '1';
+    _introSeen = intro != null;
     _loaded = true;
     _apply();
     notifyListeners();
@@ -91,6 +97,7 @@ class UserProfile extends ChangeNotifier {
   Future<void> finishIntro() async {
     if (_introDone) return;
     _introDone = true;
+    _introSeen = true;
     await _write(introKey, '1');
     notifyListeners();
   }

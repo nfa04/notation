@@ -205,7 +205,7 @@ class IcsCalendarService extends ChangeNotifier {
     return _parsed[id] = parseIcs(rows.isEmpty ? '' : rows.single['content'] as String);
   }
 
-  /// The calendars, for giving each its own look in the settings under Sharing and files.
+  /// The calendars, for giving each its own look in the settings under Sync and sharing.
   List<CalendarInfo> calendarInfos() => [for (final s in _sources) CalendarInfo(s.key, s.name, s.color)];
 
   /// Events of all imported calendars between [from] and [to]. A calendar that

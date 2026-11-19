@@ -75,14 +75,14 @@ class ToolbarProfile {
   }
 }
 
-/// A profile for each of [areas] that is a way of working (not working together), with the arrangement of the toolbars the
-/// app starts with: the tools of the basics and of that use only, and those of working together if that is chosen too.
+/// A profile for each of [areas] that is a way of working (not working together or everyday notes), with the arrangement of the
+/// toolbars the app starts with: the tools of the basics and of that use only, and those of the general uses that are chosen too.
 /// [name] gives the name of a use (translated).
 List<ToolbarProfile> profilesForAreas(Iterable<UseArea> areas, String Function(UseArea) name) {
-  final together = areas.contains(UseArea.together) ? UseArea.together.features : const <Feature>{};
+  final together = {for (final a in areas) if (a.general) ...a.features};
   return [
     for (final a in UseArea.values)
-      if (areas.contains(a) && a != UseArea.together)
+      if (areas.contains(a) && !a.general)
         ToolbarProfile(
           id: 'area-${a.name}',
           name: name(a),

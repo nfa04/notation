@@ -93,7 +93,7 @@ class OneDriveShares extends NativeShareProvider {
         'roles': [role == ShareRole.editor ? 'write' : 'read'],
         'requireSignIn': true,
         'sendInvitation': true,
-        'message': tr('Shared with Notation. Open the link in the invitation, or add it in the app: Settings, Sharing and files.'),
+        'message': tr('Shared with Notation. Open the link in the invitation, or add it in the app: Settings, Sync and sharing.'),
       }),
       options: Options(headers: {...await _storage.authHeaders(), 'Content-Type': 'application/json'}),
     );

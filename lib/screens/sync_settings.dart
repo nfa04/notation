@@ -615,7 +615,7 @@ class _CloudSyncCardState extends State<_CloudSyncCard> {
           if (c.enabled) ...[
             const SizedBox(height: 4),
             if (usable.isEmpty && c.provider == null)
-              Text('No cloud account is connected on this device. Connect one (Nextcloud in the settings under Sharing and files, or S3, Dropbox or OneDrive under sharing), or sync directly with the device that has one.',
+              Text('No cloud account is connected on this device. Connect one (Nextcloud in the settings under Sync and sharing, or S3, Dropbox or OneDrive under sharing), or sync directly with the device that has one.',
                   key: const ValueKey('cloud-no-account'), style: TextStyle(color: scheme.error, fontSize: 13))
             else
               DropdownButtonFormField<String>(

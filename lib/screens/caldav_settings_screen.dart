@@ -115,7 +115,7 @@ class _CalDavSettingsScreenState extends State<CalDavSettingsScreen> {
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text('A Nextcloud calendar is connected in the settings under Sharing and files, with the other services.',
+              Text('A Nextcloud calendar is connected in the settings under Sync and sharing, with the other services.',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
               if (_device != null) ..._phoneSection(),
               if (widget.ics != null) ..._icsSection(widget.ics!),

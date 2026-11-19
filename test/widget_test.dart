@@ -44,7 +44,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Dashboard'), findsWidgets);
-    for (final section in ['Folders', 'Calendar', 'Active Canvas', 'Settings']) {
+    for (final section in ['Folders', 'Calendar', 'Settings']) {
       expect(find.text(section), findsOneWidget);
     }
     expect(find.text('New Note'), findsOneWidget);
