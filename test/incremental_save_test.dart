@@ -151,16 +151,19 @@ void main() {
   test('a stroke has a stamp that moves with every kind of change', () {
     final s = line(10, points: 100);
     final stamp = s.stamp;
-    expect(line(10, points: 100).stamp, stamp);
+    expect(s.stamp, stamp);
     s.points[0] += const Offset(1, 0);
     expect(s.stamp, isNot(stamp));
-    final t = line(10, points: 100)..points.add(const Offset(1, 1));
-    expect(t.stamp, isNot(stamp));
+    final t = line(10, points: 100);
+    final tStamp = t.stamp;
+    t.points.add(const Offset(1, 1));
+    expect(t.stamp, isNot(tStamp));
     final moved = line(10, points: 100);
+    final movedStamp = moved.stamp;
     for (var i = 0; i < moved.points.length; i++) {
       moved.points[i] += const Offset(0, 3);
     }
-    expect(moved.stamp, isNot(stamp));
+    expect(moved.stamp, isNot(movedStamp));
   });
 
   test('strokes and highlights keep their ids through saving and loading', () async {

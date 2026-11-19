@@ -21,7 +21,16 @@ class InkCluster {
   static String keyOf(Iterable<DrawingStroke> strokes) {
     // (the key is kept in the database with what was read: it is made of what stays the same from one run of the app to the
     // next, not of DrawingStroke.stamp, whose hash codes are different in each run)
-    final parts = [for (final s in strokes) '${s.id}:${_print(s)}']..sort();
+    // The points are taken from the top left corner of the strokes together, so that moving the writing (a lasso drag, a move
+    // of the page contents) leaves the key as it was: the same writing is not read again just because it lies elsewhere.
+    var left = double.infinity, top = double.infinity;
+    for (final s in strokes) {
+      for (final p in s.points) {
+        if (_f32(p.dx) < left) left = _f32(p.dx);
+        if (_f32(p.dy) < top) top = _f32(p.dy);
+      }
+    }
+    final parts = [for (final s in strokes) '${s.id}:${_print(s, left, top)}']..sort();
     var h = 5381;
     for (final c in parts.join(',').codeUnits) {
       h = ((h * 33) ^ c) & 0x7fffffff;
@@ -29,20 +38,26 @@ class InkCluster {
     return '${parts.length}-${h.toRadixString(16)}';
   }
 
-  /// The width and the points of [s] (to a tenth of a unit), the same on every run.
-  static String _print(DrawingStroke s) {
+  /// The width and the points of [s] relative to ([left], [top]), in halves of a unit, the same on every run and wherever the writing lies.
+  static String _print(DrawingStroke s, double left, double top) {
     var h = 5381;
     void add(int v) => h = ((h * 33) ^ v) & 0x7fffffff;
     add(s.points.length);
     add(_tenths(s.width));
     for (final p in s.points) {
-      add(_tenths(p.dx));
-      add(_tenths(p.dy));
+      add(_halves(_f32(p.dx) - left));
+      add(_halves(_f32(p.dy) - top));
     }
     return h.toRadixString(16);
   }
 
+  /// [v] in halves of a unit, a grain coarse enough that the rounding error of moving (a few millionths) hardly ever tips a number over.
+  static int _halves(double v) => (v * 2).round();
+
   static final _single = Float32List(1);
+
+  /// [v] as the 32-bit number it is after it was stored (see [_tenths]).
+  static double _f32(double v) => (_single..[0] = v)[0];
 
   /// [v] in tenths, as it is after it was stored: points are kept as 32-bit numbers, so a stroke that was just drawn (64-bit) and the
   /// same stroke loaded again can round differently (244.54999 and 244.55000), and its block would get another key and be read

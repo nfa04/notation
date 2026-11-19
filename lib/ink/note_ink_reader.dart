@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart';
 
@@ -52,8 +53,15 @@ class NoteInkReader {
   final Future<({Map<String, String> texts, Map<String, String> unsure, List<InkRead> reads})> Function(String noteId) loadSaved;
 
   /// Whether this device reads the writing in the background. False for a guest of a live session: the host reads, and what it read
-  /// arrives by [takeShared]. (A person's own maths check, switched on here, still reads here.)
+  /// arrives by [takeShared].
   final bool Function() readsHere;
+
+  /// Whether the maths check, when it is on here, reads here although [readsHere] says no: a guest whose host cannot read formulas.
+  final bool Function() checkReadsHere;
+
+  /// Whether others in a live session check the maths ([readsHere] being true): the writing is then read line by line, with the
+  /// formula reader, for them as well, and what was read goes to them.
+  final bool Function() othersCheck;
 
   /// Gives the others in a live session what was read ([shareNew] says what); null when there is no session to tell.
   final void Function(Map<String, Object?> readings)? share;
@@ -78,10 +86,19 @@ class NoteInkReader {
     required this.loadSaved,
     required this.onProgress,
     this.readsHere = _always,
+    this.checkReadsHere = _always,
+    this.othersCheck = _never,
     this.share,
   });
 
   static bool _always() => true;
+  static bool _never() => false;
+
+  /// Whether anything is read on this device now (the chip that says the writing is being read is shown only then).
+  bool get readsNow => readsHere() || (checkOn && checkReadsHere());
+
+  /// Whether the writing is read line by line for the maths check of others (and not for one here).
+  bool get checksForOthers => readsHere() && othersCheck();
 
   /// How many blocks of writing are still to be read (for the chip that says the writing is being read).
   final pending = ValueNotifier<int>(0);
@@ -107,8 +124,9 @@ class NoteInkReader {
   /// Sets the background reader up for what is asked of it (read ahead, check the maths, index for the search); says why not when
   /// it cannot.
   Future<String?> start() async {
-    final hw = prepText || checkOn || indexInk ? handwriting : null;
-    final formulas = prepMath || checkOn ? math : null;
+    final rows = checkOn || checksForOthers;
+    final hw = prepText || rows || indexInk ? handwriting : null;
+    final formulas = prepMath || rows ? math : null;
     if (hw == null && formulas == null) {
       prefetcher?.configure(text: null, math: null, rows: false);
       return tr('The handwriting and formula readers are switched off (see Settings)');
@@ -118,13 +136,13 @@ class NoteInkReader {
     await ready();
     if (!isOpen()) return tr('The note was not open');
     final reader = _ensure();
-    reader.configure(text: hw, math: formulas, rows: checkOn);
+    reader.configure(text: hw, math: formulas, rows: rows);
     return null;
   }
 
   InkPrefetcher _ensure() => prefetcher ??= InkPrefetcher(
         strokes: strokes,
-        canRun: () => (readsHere() || checkOn) && isQuiet(),
+        canRun: () => readsNow && isQuiet(),
         idle: idle,
         // (only the page in view and its neighbours; a rest after each piece so that the screen keeps up)
         // (all of it when the writing is read for the search)
@@ -182,6 +200,9 @@ class NoteInkReader {
   /// What is in the database now (the text of blocks by key, and the other readings), so that the same is not written again.
   final Map<String, String> _keptTexts = {};
 
+  /// Where those blocks lay when they were written (a block that is moved is written again, for the search and the PDF text).
+  final Map<String, Rect> _keptBounds = {};
+
   /// The words of those texts that the reader was unsure of (by block key).
   final Map<String, String> _keptUnsure = {};
   String _keptReads = '';
@@ -213,11 +234,15 @@ class NoteInkReader {
     }.values.toList();
     // (nothing new to keep, nothing dropped)
     final sameTexts = texts.length == _keptTexts.length &&
-        texts.entries.every((e) => _keptTexts[e.key] == e.value && (keep.unsure[e.key] ?? '') == (_keptUnsure[e.key] ?? ''));
+        texts.entries.every((e) => _keptTexts[e.key] == e.value && (keep.unsure[e.key] ?? '') == (_keptUnsure[e.key] ?? '')) &&
+        keep.texts.every((t) => _keptBounds[t.block.key] == t.block.bounds); // (a moved block keeps its text, not its place)
     final signature = _signature(reads);
     try {
       if (!sameTexts) {
         await saveIndex(noteId, [for (final t in keep.texts) InkText(key: t.block.key, page: t.block.page, text: t.text, bounds: t.block.bounds, unsure: keep.unsure[t.block.key] ?? '')], keep.blocks);
+        _keptBounds
+          ..clear()
+          ..addAll({for (final t in keep.texts) t.block.key: t.block.bounds});
         _keptTexts
           ..clear()
           ..addAll(texts);
@@ -235,13 +260,14 @@ class NoteInkReader {
   }
 
   /// What was last given to the others, by key: only what is new or different goes out the next time.
-  final Map<String, String> _sentTexts = {}, _sentUnsure = {}, _sentFormulas = {};
+  final Map<String, String> _sentTexts = {}, _sentUnsure = {}, _sentFormulas = {}, _sentOthers = {};
 
   /// The others know nothing of it (somebody joined, or this device became the one that reads): everything goes out the next time.
   void shareAgain() {
     _sentTexts.clear();
     _sentUnsure.clear();
     _sentFormulas.clear();
+    _sentOthers.clear();
     _saveSoon();
   }
 
@@ -251,7 +277,7 @@ class NoteInkReader {
     final reader = prefetcher;
     if (send == null || reader == null || !readsHere() || isLocked()) return;
     final keep = reader.toKeep();
-    final texts = <String, String>{}, unsure = <String, String>{}, formulas = <String, String>{};
+    final texts = <String, String>{}, unsure = <String, String>{}, formulas = <String, String>{}, others = <String, List<String>>{};
     for (final t in keep.texts) {
       if (_sentTexts[t.block.key] != t.text) texts[t.block.key] = t.text;
     }
@@ -261,17 +287,23 @@ class NoteInkReader {
     for (final e in keep.formulas.entries) {
       if (_sentFormulas[e.key] != e.value) formulas[e.key] = e.value;
     }
-    if (texts.isEmpty && unsure.isEmpty && formulas.isEmpty) return;
+    // (the other readings of lines the maths check found wrong: the guests mark them as doubtful without reading them again)
+    for (final e in reader.allOthers().entries) {
+      if (_sentOthers[e.key] != e.value.join('\u0000')) others[e.key] = e.value;
+    }
+    if (texts.isEmpty && unsure.isEmpty && formulas.isEmpty && others.isEmpty) return;
     _sentTexts.addAll(texts);
     _sentUnsure.addAll(unsure);
     _sentFormulas.addAll(formulas);
-    final keys = {...texts.keys, ...unsure.keys, ...formulas.keys}.toList();
+    _sentOthers.addAll({for (final e in others.entries) e.key: e.value.join('\u0000')});
+    final keys = {...texts.keys, ...unsure.keys, ...formulas.keys, ...others.keys}.toList();
     for (var i = 0; i < keys.length; i += _sharePiece) {
       final part = keys.skip(i).take(_sharePiece).toSet();
       send({
         'texts': {for (final k in part) if (texts.containsKey(k)) k: texts[k]},
         'unsure': {for (final k in part) if (unsure.containsKey(k)) k: unsure[k]},
         'formulas': {for (final k in part) if (formulas.containsKey(k)) k: formulas[k]},
+        if (part.any(others.containsKey)) 'others': {for (final k in part) if (others.containsKey(k)) k: others[k]},
       });
     }
   }
@@ -290,9 +322,18 @@ class NoteInkReader {
       };
     }
 
-    final texts = strings(readings['texts']), unsure = strings(readings['unsure']), formulas = strings(readings['formulas']);
-    if (texts.isEmpty && unsure.isEmpty && formulas.isEmpty) return;
-    _ensure().seed(texts: texts, unsure: unsure, formulas: formulas);
+    Map<String, List<String>> lists(Object? m) {
+      if (m is! Map || m.length > _sharePiece * 2) return const {};
+      return {
+        for (final e in m.entries)
+          if (e.key is String && (e.key as String).length < 100 && e.value is List && (e.value as List).length <= 8 && (e.value as List).every((v) => v is String && v.length < 20000))
+            e.key as String: [for (final v in e.value as List) v as String],
+      };
+    }
+
+    final texts = strings(readings['texts']), unsure = strings(readings['unsure']), formulas = strings(readings['formulas']), others = lists(readings['others']);
+    if (texts.isEmpty && unsure.isEmpty && formulas.isEmpty && others.isEmpty) return;
+    _ensure().seed(texts: texts, unsure: unsure, formulas: formulas, others: others);
   }
 
   /// Keeps what was read of the writing soon after the readings change.

@@ -153,6 +153,112 @@ class _SheetsClipper extends CustomClipper<Path> {
 
 /// One page as it is laid out on screen: the text layer, the drawing layer and what is on it.
 extension _EditorPageTile on _FixedPageNoteEditorState {
+
+  /// What the menu of the selection on page [pageIndex] offers: the selection's own (Copy...), looking up, the extensions, summing up,
+  /// and marking it. [hide] closes the menu; [menuAt] is where it is, for the colours.
+  List<ContextMenuButtonItem> _selectionMenuItems(int pageIndex, SelectableRegionState region, VoidCallback hide, Offset menuAt) {
+    final buttonItems = <ContextMenuButtonItem>[
+      // (the selection's own, Copy and the like, close this menu too when it was opened by the editor)
+      for (final item in region.contextMenuButtonItems)
+        item.copyWith(onPressed: () {
+          item.onPressed?.call();
+          hide();
+        }),
+    ];
+    buttonItems.addAll(
+      _lookupItems(_currentSelectedText, hide),
+    );
+    buttonItems.addAll(_extensionItemsForReading(_currentSelectedText, hide));
+    final picked = _currentSelectedText;
+    buttonItems.addAll(_summarizeItems(
+      picked,
+      hide,
+      () async {
+        final at = await _positionUnderSelection(pageIndex, picked);
+        return (summary) => _addTextBoxAt(pageIndex, at, initialText: summary);
+      },
+    ));
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: 'Highlight',
+        onPressed: () {
+          hide();
+          _applyHighlightOrCommentToSelection(
+            pageIndex,
+            _currentSelectedText,
+            isComment: false,
+          );
+        },
+      ),
+    );
+    // the colours, as a menu where the toolbar was: picking one marks the text in it (and it is the colour from then on)
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: tr('Highlight colour'),
+        onPressed: () {
+          hide();
+          _highlightInColour(pageIndex, picked, menuAt);
+        },
+      ),
+    );
+    if ((_highlightsPerPage[pageIndex] ?? const <PdfHighlight>[]).any((h) => h.commentBox == null)) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          label: tr('Remove highlight'),
+          onPressed: () {
+            hide();
+            _removeHighlightFromSelection(pageIndex, picked);
+          },
+        ),
+      );
+    }
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: 'Comment',
+        onPressed: () {
+          hide();
+          _applyHighlightOrCommentToSelection(
+            pageIndex,
+            _currentSelectedText,
+            isComment: true,
+          );
+        },
+      ),
+    );
+
+    return buttonItems;
+  }
+
+  /// Opens the selection's menu on page [pageIndex] (when there is a selection there): a mouse let go of one, and Flutter opens it
+  /// only on a right click. The same menu as there, in the strip a finger gets, over the selection.
+  void _showSelectionMenu(int pageIndex) {
+    if (!mounted || _mode != CanvasInteractionMode.selectText || _boxJustMade) return;
+    final text = _currentSelectedText;
+    if (_currentSelectedPageIndex != pageIndex || text == null || text.trim().isEmpty) return;
+    final region = _areaKeys[pageIndex]?.currentState?.selectableRegion;
+    if (region == null || !region.mounted) return;
+    final anchors = region.contextMenuAnchors;
+    final items = _selectionMenuItems(pageIndex, region, _mouseMenu.remove, anchors.primaryAnchor);
+    _mouseMenu.show(
+      context: region.context,
+      contextMenuBuilder: (context) => menuAtScreenSize(
+        region.context,
+        TextSelectionToolbar(
+          key: const ValueKey('mouse-selection-menu'),
+          anchorAbove: anchors.primaryAnchor,
+          anchorBelow: anchors.secondaryAnchor ?? anchors.primaryAnchor,
+          children: [
+            for (final (i, item) in items.indexed)
+              TextSelectionToolbarTextButton(
+                padding: TextSelectionToolbarTextButton.getPadding(i, items.length),
+                onPressed: item.onPressed,
+                child: Text(AdaptiveTextSelectionToolbar.getButtonLabel(context, item)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
   /// First page in document mode: the editable sheet with the page's drawings
   /// and text boxes drawn over it, not reacting to input.
   Widget _buildDocumentEditorPage() {
@@ -360,8 +466,21 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
             Listener(
               behavior: HitTestBehavior.translucent,
               onPointerDown: (e) {
-                if (_tripleClick(e)) _addTextBoxAt(pageIndex, e.localPosition);
+                _mouseMenu.remove();
+                _menuOnUp = e.kind == PointerDeviceKind.mouse && e.buttons == kPrimaryMouseButton && _mode == CanvasInteractionMode.selectText;
+                if (_tripleClick(e)) {
+                  _menuOnUp = false;
+                  _addTextBoxAt(pageIndex, e.localPosition);
+                }
               },
+              // the mouse let go of a selection (a drag, or a double click on a word): its menu opens, as it does by itself for a finger
+              onPointerUp: (e) {
+                if (!_menuOnUp || _infinite) return;
+                _menuOnUp = false;
+                // (after the selection has taken the release itself: it is under this listener, so it had it first)
+                scheduleMicrotask(() => _showSelectionMenu(pageIndex));
+              },
+              onPointerSignal: (_) => _mouseMenu.remove(), // (the wheel moves the page away from the menu)
               child: GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTapUp: (d) {
@@ -392,58 +511,18 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     } else if (_currentSelectedPageIndex == pageIndex) {
                       _currentSelectedText = null;
                       _currentSelectedPageIndex = null;
+                      _mouseMenu.remove();
                     }
                   });
                 },
                 contextMenuBuilder: (context, selectableRegionState) {
-                  final buttonItems = <ContextMenuButtonItem>[
-                    ...selectableRegionState.contextMenuButtonItems,
-                  ];
-                  buttonItems.addAll(
-                    _lookupItems(_currentSelectedText, selectableRegionState.hideToolbar),
-                  );
-                  buttonItems.addAll(_extensionItemsForReading(_currentSelectedText, selectableRegionState.hideToolbar));
-                  final picked = _currentSelectedText;
-                  buttonItems.addAll(_summarizeItems(
-                    picked,
-                    selectableRegionState.hideToolbar,
-                    () async {
-                      final at = await _positionUnderSelection(pageIndex, picked);
-                      return (summary) => _addTextBoxAt(pageIndex, at, initialText: summary);
-                    },
-                  ));
-                  buttonItems.add(
-                    ContextMenuButtonItem(
-                      label: 'Highlight',
-                      onPressed: () {
-                        selectableRegionState.hideToolbar();
-                        _applyHighlightOrCommentToSelection(
-                          pageIndex,
-                          _currentSelectedText,
-                          isComment: false,
-                        );
-                      },
-                    ),
-                  );
-                  buttonItems.add(
-                    ContextMenuButtonItem(
-                      label: 'Comment',
-                      onPressed: () {
-                        selectableRegionState.hideToolbar();
-                        _applyHighlightOrCommentToSelection(
-                          pageIndex,
-                          _currentSelectedText,
-                          isComment: true,
-                        );
-                      },
-                    ),
-                  );
-
+                  // (read once: reading the anchors forgets where the right click was)
+                  final anchors = selectableRegionState.contextMenuAnchors;
                   return menuAtScreenSize(
                     selectableRegionState.context,
                     AdaptiveTextSelectionToolbar.buttonItems(
-                      anchors: selectableRegionState.contextMenuAnchors,
-                      buttonItems: buttonItems,
+                      anchors: anchors,
+                      buttonItems: _selectionMenuItems(pageIndex, selectableRegionState, selectableRegionState.hideToolbar, anchors.primaryAnchor),
                     ),
                   );
                 },
@@ -466,25 +545,29 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
 
             // Z-INDEX 3: Vector Drawing Ink Layer - the finished lines as one kept picture, the line being drawn above it
             // (each in a layer of its own, so that a move of the pen paints only that line)
+            // (built again on its own when a line is written: see _inkChanged)
             IgnorePointer(
               ignoring: true,
               child: RepaintBoundary(
-                child: CustomPaint(
-                  painter: InkLayerPainter(strokes: pageStrokes, skip: _currentActiveStroke ?? _penEditing, layers: _layers, pressureSensitivity: widget.stylus?.effectiveSensitivity ?? 0.6, only: _usualInk(stacking), pixelScale: _inkPixelScale),
-                  isComplex: true,
-                  size: Size(_paperWidth, pageHeight),
-                ),
-              ),
-            ),
-            if (_currentActiveStroke != null && pageStrokes.isNotEmpty && identical(pageStrokes.last, _currentActiveStroke) && _activeInUsualPlace(stacking))
-              IgnorePointer(
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: ActiveInkPainter(() => _currentActiveStroke, repaint: _inkTick, pressureSensitivity: widget.stylus?.effectiveSensitivity ?? 0.6, alongside: () => _symmetryCopies),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _inkRevisionOf(pageIndex),
+                  builder: (context, _, _) => CustomPaint(
+                    painter: InkLayerPainter(strokes: _strokesPerPage[pageIndex] ?? pageStrokes, skip: _currentActiveStroke ?? _penEditing, layers: _layers, pressureSensitivity: widget.stylus?.effectiveSensitivity ?? 0.6, only: _usualInk(stacking), pixelScale: _inkPixelScale),
+                    isComplex: true,
                     size: Size(_paperWidth, pageHeight),
                   ),
                 ),
               ),
+            ),
+            // (always there, so that a line begun needs no build: it paints the line only while it is being drawn here)
+            IgnorePointer(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: ActiveInkPainter(() => _activeAt(pageIndex, stacking), repaint: _inkTick, pressureSensitivity: widget.stylus?.effectiveSensitivity ?? 0.6, alongside: () => _symmetryCopies),
+                  size: Size(_paperWidth, pageHeight),
+                ),
+              ),
+            ),
 
             // the lines others are drawing right now (gone when they are finished: they then are lines of the note)
             if (_live != null)
@@ -611,14 +694,24 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                       event.kind == PointerDeviceKind.stylus ||
                       event.kind == PointerDeviceKind.invertedStylus;
                   _penPointer = event.pointer;
-                  if (!_penDown) {
-                    setState(() => _penDown = true); // freezes the page list
+                  final wasDown = _penDown;
+                  _penDown = true; // freezes the page list (only the list listens: nothing else is built for it)
+                  // (whatever the pen does other than write a line builds the editor, as it always did)
+                  void built() {
+                    if (!wasDown) setState(() {});
                   }
-                  if (_picksWith(event)) return _pickDown(event.position, event.pointer); // (the pen's side button, set to pick a colour)
+                  if (_picksWith(event)) {
+                    built();
+                    return _pickDown(event.position, event.pointer); // (the pen's side button, set to pick a colour)
+                  }
                   if (_erasesWith(event)) {
+                    // (nothing shown depends on the pen being down but the page list's scrolling: erasing builds what it changes)
                     return _eraseAt(pageIndex, event.localPosition);
                   }
-                  if (_bucketOn && !_lassosWith(event)) return _fillAt(pageIndex, event.localPosition, Size(_paperWidth, pageHeight)); // (the bucket: a touch fills, nothing is drawn)
+                  if (_bucketOn && !_lassosWith(event)) {
+                    built();
+                    return _fillAt(pageIndex, event.localPosition, Size(_paperWidth, pageHeight)); // (the bucket: a touch fills, nothing is drawn)
+                  }
                   _downAt = event.localPosition;
                   _downTime = DateTime.now();
                   _travel = 0;
@@ -631,6 +724,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                       selBounds.contains(event.localPosition) &&
                       !_addingToSelection; // (Shift: a tap there picks what is under it, for the selection)
                   if (_draggingStroke) {
+                    built();
                     _startStrokeDrag(
                       event.position,
                       pointer: event.pointer,
@@ -646,16 +740,21 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     return;
                   }
                   if (!_drawingLayer.editable) {
+                    built();
                     _layerBlocked(); // (the layer is hidden or locked: nothing would show)
                     return;
                   }
                   if (_penToolOn) {
+                    built();
                     _penToolDown(pageIndex, event.localPosition, touch: event.kind == PointerDeviceKind.touch);
                     return;
                   }
                   final brush = _highlighter || _shape != ShapeTool.freehand && _activeDrawTool == null ? null : Brushes.byId(_brush);
                   final brushWidth = brush?.widthScale ?? 1.0;
-                  setState(() {
+                  // a line begins: the layer of the line being drawn is there on every page already and paints it at the next tick,
+                  // so nothing is built (the editor is, when the line needs what a build does: symmetry, guides, connectors)
+                  final quiet = _writesQuietly;
+                  void begin() {
                     _currentActiveStroke = DrawingStroke(
                       color: _highlighter
                           ? _selectedPenColor.withValues(
@@ -685,7 +784,14 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     _strokesPerPage
                         .putIfAbsent(pageIndex, () => [])
                         .add(_currentActiveStroke!);
-                  });
+                  }
+                  if (quiet) {
+                    begin();
+                    _inkTick.value++;
+                    _scheduleSave(); // (what a setState does besides building)
+                  } else {
+                    setState(begin);
+                  }
                   if (!_lassoing && _currentActiveStroke != null) {
                     _live?.drawing(pageIndex, _currentActiveStroke!); // (the others see it grow, with its repeats)
                     for (final copy in _symmetryCopies) {
@@ -788,7 +894,10 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                       DateTime.now().difference(_downTime) <
                           const Duration(milliseconds: 350) &&
                       !_erasesWith(event);
-                  setState(() {
+                  // a line written (or a dot) changes only the lines of the page: their layer is built again, not the editor
+                  final nothingSelected = _selection.isEmpty && _groupBoxes.isEmpty && _groupImages.isEmpty;
+                  var quiet = false;
+                  void finish() {
                     if (_penDown && event.pointer == _penPointer) _penDown = false;
                     if (_draggingStroke) {
                       // a tap on the selection keeps it; a drag moved it
@@ -833,6 +942,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                         () => _strokesPerPage[pageIndex]?.remove(stroke),
                         () => _strokesPerPage.putIfAbsent(pageIndex, () => []).add(stroke),
                       ));
+                      quiet = _writesQuietly && nothingSelected && copies.isEmpty;
                     } else if (stroke != null && tap && _connecting && _connectFrom != null && _connectFrom!.anchor != Anchor.auto) {
                       // a tap on the dot of a side of an item: a new box grows out of it
                       _strokesPerPage[pageIndex]?.remove(stroke);
@@ -880,8 +990,8 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                       if (_shape == ShapeTool.freehand) stroke.simplify(_inkTolerance);
                       if (_shape == ShapeTool.connector) _finishConnector(pageIndex, stroke, event.localPosition);
                       if (_straighten && _shape == ShapeTool.freehand) {
-                        final line = straightLine(stroke.points);
-                        final shape = line == null ? snapToShape(stroke.points) : null; // (a drawing very close to a rectangle, ellipse, ...)
+                        final line = straightLine(stroke.points, looseness: _straightenLooseness);
+                        final shape = line == null ? snapToShape(stroke.points, looseness: _straightenLooseness) : null; // (a drawing very close to a rectangle, ellipse, ...)
                         final made = line ?? shape?.points;
                         if (made != null) {
                           stroke.points
@@ -899,9 +1009,19 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                         () => _strokesPerPage[pageIndex]?.removeWhere(made.contains),
                         () => _strokesPerPage.putIfAbsent(pageIndex, () => []).addAll(made),
                       ));
+                      quiet = _writesQuietly && nothingSelected && copies.isEmpty;
+                    } else if (stroke == null && _erasesWith(event)) {
+                      // the eraser lifted: what it erased was built as it went (and became one step to take back, above)
+                      quiet = _erasesQuietly(pageIndex);
                     }
                     _draggingStroke = false;
-                  });
+                  }
+                  finish();
+                  if (quiet && (_infinite || _pageCount == _shownPageCount)) {
+                    _inkChanged(pageIndex);
+                  } else {
+                    setState(() {});
+                  }
                   if (moved) _scheduleSave();
                   // the line is a part of the note now (and goes as a change of it), or it was a tap and is gone
                   if (stroke != null) {

@@ -133,14 +133,47 @@ void main() {
       expect(s.stamp, isNot(after));
     });
 
-    test('is the same while nothing changes, and the points are the list it was made with', () {
+    test('is the same while nothing changes; the points are a copy of the list given (a change to that list is not one of the line)', () {
       final list = [const Offset(0, 0), const Offset(1, 1)];
       final s = DrawingStroke(color: const Color(0xFF000000), width: 2, points: list);
-      expect(s.stamp, s.stamp);
-      list.add(const Offset(2, 2)); // (a change to that list itself: the sample sees it)
-      expect(s.points.length, 3);
+      final before = s.stamp;
+      expect(s.stamp, before);
+      list.add(const Offset(2, 2));
+      expect(s.points.length, 2);
+      expect(s.stamp, before);
+      // (the points of a line given to another are shared: a change through either is counted)
       final copy = DrawingStroke(color: const Color(0xFF000000), width: 2, points: s.points);
       expect(identical(copy.points, s.points), isTrue);
+      final copyBefore = copy.stamp;
+      s.points.add(const Offset(3, 3));
+      expect(copy.stamp, isNot(copyBefore));
+    });
+
+    test('sees every change of how the line looks, and a value set to what it was is no change', () {
+      final s = line();
+      var last = s.stamp;
+      void changed(void Function() change, String what) {
+        change();
+        expect(s.stamp, isNot(last), reason: what);
+        last = s.stamp;
+      }
+
+      changed(() => s.color = const Color(0xFFFF0000), 'colour');
+      changed(() => s.width = 5, 'width');
+      changed(() => s.dash = StrokeDash.dashed, 'dash');
+      changed(() => s.fill = const Color(0xFF00FF00), 'fill');
+      changed(() => s.pressures = [1, 2, 3], 'pressures');
+      changed(() => s.pressures!.add(9), 'pressure added');
+      changed(() => s.author = 'someone', 'author');
+      changed(() => s.brush = 'roller', 'brush');
+      changed(() => s.layer = 'l2', 'layer');
+      changed(() => s.group = 'g', 'group');
+      s.color = const Color(0xFFFF0000);
+      s.width = 5;
+      s.group = 'g';
+      expect(s.stamp, last, reason: 'the same values again');
+      // two lines that look the same are still two: the stamp says whether this one changed
+      expect(line().stamp, isNot(line().stamp));
     });
   });
 

@@ -841,21 +841,85 @@ Future<void> _ink(_Library l) async {
     final box = page?.renderObject as RenderBox?;
     if (box == null) continue;
     final origin = box.localToGlobal(const Offset(120, 160));
-    await frames('$what: writing 5 lines of 120 moves', () async {
-      for (var n = 0; n < 5; n++) {
+    // (the main isolate's time from the event to the end of its frame, apart for the pen going down, moving and lifting)
+    final downs = <int>[], moves = <int>[], ups = <int>[];
+    final downWork = <int>[], moveWork = <int>[], upWork = <int>[];
+    Future<void> timed(List<int> into, PointerEvent e) async {
+      final sw = Stopwatch()..start();
+      GestureBinding.instance.handlePointerEvent(e);
+      final dispatch = sw.elapsedMicroseconds;
+      // (the frame's own work on the main isolate: from its start to after build, layout and paint)
+      final frame = Stopwatch();
+      SchedulerBinding.instance.scheduleFrameCallback((_) => frame.start());
+      SchedulerBinding.instance.addPostFrameCallback((_) => frame.stop());
+      await WidgetsBinding.instance.endOfFrame;
+      into.add(sw.elapsedMicroseconds);
+      (identical(into, downs) ? downWork : identical(into, ups) ? upWork : moveWork).add(dispatch + frame.elapsedMicroseconds);
+    }
+    await frames('$what: writing 20 lines of 120 moves', () async {
+      for (var n = 0; n < 20; n++) {
         var pos = origin + Offset(0, n * 30.0);
-        GestureBinding.instance.handlePointerEvent(PointerDownEvent(pointer: 800 + n, position: pos, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
-        await WidgetsBinding.instance.endOfFrame;
+        await timed(downs, PointerDownEvent(pointer: 800 + n, position: pos, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
         for (var i = 1; i <= 120; i++) {
           pos = origin + Offset(i * 2.0, n * 30.0 + 8 * sin(i / 6));
-          GestureBinding.instance.handlePointerEvent(PointerMoveEvent(pointer: 800 + n, position: pos, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
-          await WidgetsBinding.instance.endOfFrame;
+          await timed(moves, PointerMoveEvent(pointer: 800 + n, position: pos, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
         }
-        GestureBinding.instance.handlePointerEvent(PointerUpEvent(pointer: 800 + n, position: pos, kind: PointerDeviceKind.stylus));
-        await WidgetsBinding.instance.endOfFrame;
+        await timed(ups, PointerUpEvent(pointer: 800 + n, position: pos, kind: PointerDeviceKind.stylus));
         await Future<void>.delayed(const Duration(milliseconds: 40));
       }
     });
+    say('$what: pen down, event to frame', _stats(downs));
+    say('$what: pen move, event to frame', _stats(moves));
+    say('$what: pen up, event to frame', _stats(ups));
+    // the eraser end of the pen swept across lines that are there (each sweep erases some on most moves)
+    final eDowns = <int>[], eMoves = <int>[], eUps = <int>[];
+    final eDownWork = <int>[], eMoveWork = <int>[], eUpWork = <int>[];
+    Future<void> erased(List<int> into, List<int> work, PointerEvent e) async {
+      final sw = Stopwatch()..start();
+      GestureBinding.instance.handlePointerEvent(e);
+      final dispatch = sw.elapsedMicroseconds;
+      final frame = Stopwatch();
+      SchedulerBinding.instance.scheduleFrameCallback((_) => frame.start());
+      SchedulerBinding.instance.addPostFrameCallback((_) => frame.stop());
+      await WidgetsBinding.instance.endOfFrame;
+      into.add(sw.elapsedMicroseconds);
+      work.add(dispatch + frame.elapsedMicroseconds);
+    }
+    final pageOrigin = box.localToGlobal(Offset.zero);
+    await frames('$what: erasing 10 sweeps of 80 moves', () async {
+      for (var n = 0; n < 10; n++) {
+        var pos = pageOrigin + Offset(30, 70 + n * 42.0);
+        await erased(eDowns, eDownWork, PointerDownEvent(pointer: 700 + n, position: pos, kind: PointerDeviceKind.invertedStylus, buttons: kPrimaryButton));
+        for (var i = 1; i <= 80; i++) {
+          pos = pageOrigin + Offset(30 + i * 8.0, 70 + n * 42.0 + 6 * sin(i / 5));
+          await erased(eMoves, eMoveWork, PointerMoveEvent(pointer: 700 + n, position: pos, kind: PointerDeviceKind.invertedStylus, buttons: kPrimaryButton));
+        }
+        await erased(eUps, eUpWork, PointerUpEvent(pointer: 700 + n, position: pos, kind: PointerDeviceKind.invertedStylus));
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+      }
+    });
+    say('$what: eraser down, main isolate work', _stats(eDownWork));
+    say('$what: eraser move, main isolate work', _stats(eMoveWork));
+    say('$what: eraser up, main isolate work', _stats(eUpWork));
+    say('$what: eraser move, event to frame', _stats(eMoves));
+    // (short strokes, as in handwriting: what the pen going down and lifting costs, for PROFILE_CPU=1)
+    await sampled('$what: 60 short strokes', () async {
+      for (var n = 0; n < 60; n++) {
+        var pos = origin + Offset((n % 10) * 20.0, 300 + (n ~/ 10) * 30.0);
+        GestureBinding.instance.handlePointerEvent(PointerDownEvent(pointer: 900 + n, position: pos, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
+        await WidgetsBinding.instance.endOfFrame;
+        for (var i = 1; i <= 4; i++) {
+          pos += Offset(3, 4.0 * (i.isEven ? 1 : -1));
+          GestureBinding.instance.handlePointerEvent(PointerMoveEvent(pointer: 900 + n, position: pos, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
+          await WidgetsBinding.instance.endOfFrame;
+        }
+        GestureBinding.instance.handlePointerEvent(PointerUpEvent(pointer: 900 + n, position: pos, kind: PointerDeviceKind.stylus));
+        await WidgetsBinding.instance.endOfFrame;
+      }
+    });
+    say('$what: pen down, main isolate work', _stats(downWork));
+    say('$what: pen move, main isolate work', _stats(moveWork));
+    say('$what: pen up, main isolate work', _stats(upWork));
     await Future<void>.delayed(const Duration(seconds: 2)); // (its autosave)
   }
 }
@@ -1102,6 +1166,12 @@ Future<void> main() async {
     }
     if (only.contains('save')) await _saves(l);
     if (only.contains('export')) await _exports(l);
+    if (only.contains('ink') && !only.contains('frames')) {
+      // (PROFILE_ONLY=ink: only writing with the pen, in the page of 5000 lines and the heavy note)
+      _listenFrames();
+      await _mount(const SizedBox());
+      await _ink(l);
+    }
     if (only.contains('pdfscroll')) {
       _listenFrames();
       await _pdfScroll(l, dir);

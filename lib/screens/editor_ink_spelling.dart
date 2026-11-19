@@ -18,7 +18,7 @@ extension _EditorInkSpelling on _FixedPageNoteEditorState {
         final text = r.text;
         if (text == null) continue;
         final unsure = _ink?.unsureOf(r.block.key) ?? const <String>{};
-        final key = '${r.block.page}\u0000${r.block.key}\u0000$text\u0000${unsure.join(' ')}';
+        final key = '${r.block.page}\u0000${r.block.key}\u0000${r.block.bounds}\u0000$text\u0000${unsure.join(' ')}';
         seen.add(key);
         next.addAll(_inkSpellByBlock[key] ??= checkedInk([(block: r.block, text: text)], spell!.checker, unsure: unsure));
       }

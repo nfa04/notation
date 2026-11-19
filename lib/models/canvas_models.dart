@@ -56,16 +56,20 @@ List<double> pressureHalfWidths(DrawingStroke stroke, double sensitivity) {
 }
 
 /// The points of a line: a list that counts the changes made through it ([revision]), so that [DrawingStroke.stamp] sees every change
-/// without reading every point. It is the list it was made with, not a copy: a change made to that list directly is not counted (the
-/// stamp's sample of the points is there for that).
+/// without reading a single point. It owns its points: nothing else holds the list they are in, so every change goes through here
+/// and is counted.
 class StrokePoints extends ListBase<Offset> {
   final List<Offset> _points;
   int _revision = 0;
 
   StrokePoints._(this._points);
 
-  /// [points] as the points of a line ([points] itself if it is that already).
-  factory StrokePoints.of(List<Offset> points) => points is StrokePoints ? points : StrokePoints._(points);
+  /// [points] as the points of a line: [points] itself if it is that already, else a copy of them (the list given stays the caller's,
+  /// and a change made to it later is not one of the line).
+  factory StrokePoints.of(List<Offset> points) => points is StrokePoints ? points : StrokePoints._(List.of(points));
+
+  /// [points] taken over as they are, with no copy: for a list just made (decoded, say) that nothing else will change.
+  factory StrokePoints.owning(List<Offset> points) => points is StrokePoints ? points : StrokePoints._(points);
 
   /// Goes up with every change made through this list.
   int get revision => _revision;
@@ -208,68 +212,153 @@ class DrawingStroke {
   /// Names the stroke across devices and saves; it never changes.
   final String id;
 
+  /// Goes up with every change of the look or the place of the line made through its setters (the points count their own, see
+  /// [StrokePoints]): what [stamp] goes by instead of reading the values themselves.
+  int _version = 0;
+
   /// The look of the line: the colour, the width, and the dashes can be changed afterwards (a selected shape has a style dialog).
-  Color color;
-  double width;
-  StrokeDash dash;
+  Color get color => _color;
+  set color(Color v) {
+    if (v != _color) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _color = v;
+  }
+  Color _color;
+
+  double get width => _width;
+  set width(double v) {
+    if (v != _width) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _width = v;
+  }
+  double _width;
+
+  StrokeDash get dash => _dash;
+  set dash(StrokeDash v) {
+    if (v != _dash) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _dash = v;
+  }
+  StrokeDash _dash;
 
   /// What a closed line (a rectangle, an ellipse, a loop) is filled with; null: nothing.
-  Color? fill;
+  Color? get fill => _fill;
+  set fill(Color? v) {
+    if (v != _fill) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _fill = v;
+  }
+  Color? _fill;
 
   /// Changed in place as the line is drawn, moved or reshaped; every change made through it is counted (see [StrokePoints]).
   final StrokePoints points;
 
   /// How hard the pen pressed at each point (0 to 255, one for each point), for a line drawn with a pressure-sensitive pen:
-  /// the line is thicker where it was pressed harder. Null for a line with no pressure (finger, mouse, shapes).
-  List<int>? pressures;
+  /// the line is thicker where it was pressed harder. Null for a line with no pressure (finger, mouse, shapes). (It grows in place
+  /// while the line is drawn: [stamp] reads its length and ends.)
+  List<int>? get pressures => _pressures;
+  set pressures(List<int>? v) {
+    if (!identical(v, _pressures)) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _pressures = v;
+  }
+  List<int>? _pressures;
 
   /// Who drew it (the name they had then); null if not known, as for notes from before names were kept.
-  String? author;
+  String? get author => _author;
+  set author(String? v) {
+    if (v != _author) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _author = v;
+  }
+  String? _author;
 
   /// The brush that drew it, by [Brush.id]: how the points become a line (see `brushes.dart`). A line of a brush this app does
   /// not know (one from an extension that is not here) is drawn as the pen would.
-  String brush;
+  String get brush => _brush;
+  set brush(String v) {
+    if (v != _brush) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _brush = v;
+  }
+  String _brush;
 
   /// The layer it is on, by id (see `layers.dart`); [baseLayerId] for a line drawn before there were layers. A layer that is not
   /// there (it was deleted) is the base layer.
-  String layer;
+  String get layer => _layer;
+  set layer(String v) {
+    if (v != _layer) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _layer = v;
+  }
+  String _layer;
 
   /// For a connector: the items its ends are fixed to (see `connector.dart`). The points are what it is drawn from; the editor
   /// makes them again when an item moves. Null for a line that is just a line.
-  StrokeLink? link;
+  StrokeLink? get link => _link;
+  set link(StrokeLink? v) {
+    if (v != _link) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _link = v;
+  }
+  StrokeLink? _link;
 
   /// The group it belongs to, by id ([noGroup] for none): what is in a group is selected, moved, copied and deleted together.
-  String group;
+  String get group => _group;
+  set group(String v) {
+    if (v != _group) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _group = v;
+  }
+  String _group;
 
   /// For a line made with the pen for curves: the points and handles it was made from, so that it can be bent again. They are
   /// kept as they were when the line was finished; if the line has been moved or resized since, [CurvedPath] is fitted to it again
-  /// when it is needed (see `fittedCurve` in `bezier.dart`).
-  CurvedPath? curve;
+  /// when it is needed (see `fittedCurve` in `bezier.dart`). (Its nodes can change in place: [stamp] reads their count and ends.)
+  CurvedPath? get curve => _curve;
+  set curve(CurvedPath? v) {
+    if (!identical(v, _curve)) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _curve = v;
+  }
+  CurvedPath? _curve;
 
   /// For a closed line whose inside runs from [fill] to another colour: how (see `gradient.dart`). Null: the fill is one colour.
-  FillGradient? gradient;
+  FillGradient? get gradient => _gradient;
+  set gradient(FillGradient? v) {
+    if (!identical(v, _gradient)) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _gradient = v;
+  }
+  FillGradient? _gradient;
 
   /// Text that runs along the line or is written inside the shape, and goes where it goes (see `stroke_label.dart`). Null: none.
-  StrokeLabel? label;
+  StrokeLabel? get label => _label;
+  set label(StrokeLabel? v) {
+    if (!identical(v, _label)) _version++; // (the value is taken even when it is equal: equal is not always the same, see StrokeLink)
+    _label = v;
+  }
+  StrokeLabel? _label;
 
   DrawingStroke({
     String? id,
-    required this.color,
-    required this.width,
+    required Color color,
+    required double width,
     required List<Offset> points,
-    this.author,
-    this.dash = StrokeDash.solid,
-    this.fill,
-    this.pressures,
-    this.brush = penBrushId,
-    this.layer = baseLayerId,
-    this.link,
-    this.group = noGroup,
-    this.curve,
-    this.gradient,
-    this.label,
+    String? author,
+    StrokeDash dash = StrokeDash.solid,
+    Color? fill,
+    List<int>? pressures,
+    String brush = penBrushId,
+    String layer = baseLayerId,
+    StrokeLink? link,
+    String group = noGroup,
+    CurvedPath? curve,
+    FillGradient? gradient,
+    StrokeLabel? label,
   })  : id = id ?? newElementId(),
-        points = StrokePoints.of(points);
+        points = StrokePoints.of(points),
+        _color = color,
+        _width = width,
+        _author = author,
+        _dash = dash,
+        _fill = fill,
+        _pressures = pressures,
+        _brush = brush,
+        _layer = layer,
+        _link = link,
+        _group = group,
+        _curve = curve,
+        _gradient = gradient,
+        _label = label;
 
   /// Whether the line comes back to where it began, so that it has an inside to fill.
   bool get isClosed => points.length >= 4 && (points.first - points.last).distance <= math.max(6, width * 1.5);
@@ -291,19 +380,21 @@ class DrawingStroke {
         label: label,
       );
 
-  /// A cheap fingerprint of the stroke: its look, the number of changes made to its points ([StrokePoints.revision]) and a sample of
-  /// them (about sixteen, the first and last among them). The count sees a change anywhere in the line, which a sample alone misses
-  /// (two points of four hundred moved); the sample sees a change made to the list the line was made from, which the count does not.
-  /// Reading all of the points of every stroke at each save is what this avoids. Not the same from one run of the app to the next.
+  /// A cheap fingerprint of the stroke, read for every stroke of every page at each build and save: which stroke it is, the number of
+  /// changes made to its look ([_version]) and to its points ([StrokePoints.revision]), and the length and ends of what changes in place
+  /// (the pressures, the nodes of a curve). It reads no point. Two strokes have different stamps even when they look the same: it says
+  /// whether this stroke changed, not what it looks like. Not the same from one run of the app to the next.
   int get stamp {
-    final n = points.length;
-    final step = n <= 16 ? 1 : n ~/ 16;
-    final pr = pressures;
-    var h = Object.hash(points.revision, color.toARGB32(), width, n, author, dash, fill?.toARGB32(), pr == null || pr.isEmpty ? 0 : Object.hash(pr.length, pr.first, pr.last), brush, link, layer, group, curve == null || curve!.nodes.isEmpty ? 0 : Object.hash(curve!.nodes.length, curve!.closed, curve!.nodes.first.at, curve!.nodes.last.at, curve!.nodes.first.out, curve!.nodes.last.inn), gradient, label);
-    for (var i = 0; i < n; i += step) {
-      h = Object.hash(h, points[i]);
-    }
-    return n == 0 ? h : Object.hash(h, points.last);
+    final pr = _pressures;
+    final cv = _curve;
+    return Object.hash(
+      identityHashCode(this),
+      _version,
+      points.revision,
+      points.length,
+      pr == null || pr.isEmpty ? 0 : Object.hash(pr.length, pr.first, pr.last),
+      cv == null || cv.nodes.isEmpty ? 0 : Object.hash(cv.nodes.length, cv.closed, cv.nodes.first.at, cv.nodes.last.at, cv.nodes.first.out, cv.nodes.last.inn),
+    );
   }
 
   /// Leaves out the points that add nothing one can see: those that lie within [tolerance] of the straight line between the

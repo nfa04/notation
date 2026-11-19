@@ -45,6 +45,12 @@ class _Kept implements Canvas {
     real.drawImageRect(image, src, dst, paint);
   }
 
+  /// (the place drawn line by line over the pixels: only the clip that keeps to it, not the one that leaves it out, is told)
+  @override
+  void clipRect(Rect rect, {ui.ClipOp clipOp = ui.ClipOp.intersect, bool doAntiAlias = true}) {
+    if (clipOp == ui.ClipOp.intersect) drawn.add('lines in ${rect.width.round()}x${rect.height.round()}');
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
@@ -230,8 +236,11 @@ void main() {
     });
   });
 
-  group('a page with very many lines is shown as pixels', () {
+  group('a page with many lines is shown as pixels', () {
     List<DrawingStroke> lines(int n, {double shift = 0}) => [for (var i = 0; i < n; i++) _word(10 + shift + (i % 30) * 9.0, 10 + (i % 17) * 11.0)];
+    // (a word has 121 points: the fewest words that are shown as pixels)
+    final enough = (InkLayerPainter.pixelsFrom / 121).ceil();
+    const dense = 1500;
 
     /// What the painter draws, as one line each: a picture, or pixels of that size.
     Future<List<String>> paint(InkLayerPainter painter) async {
@@ -245,7 +254,7 @@ void main() {
     Future<void> made() => Future<void>.delayed(const Duration(milliseconds: 400));
 
     test('not below the limit, and not without a size on the screen', () async {
-      final few = lines(InkLayerPainter.pixelsFrom - 1), many = lines(InkLayerPainter.pixelsFrom);
+      final few = lines(enough - 1), many = lines(enough);
       await paint(InkLayerPainter(strokes: few, pixelScale: 1));
       await paint(InkLayerPainter(strokes: many));
       await made();
@@ -254,7 +263,7 @@ void main() {
     });
 
     test('it looks as the lines do', () async {
-      final many = lines(InkLayerPainter.pixelsFrom);
+      final many = lines(dense);
       Future<Uint8List> shown() async {
         final rec = ui.PictureRecorder();
         InkLayerPainter(strokes: many, pixelScale: 1).paint(Canvas(rec), const Size(300, 200));
@@ -268,13 +277,13 @@ void main() {
       expect(await shown(), lines0);
     });
 
-    test('a line added, or another zoom, shows the lines at once and pixels again a moment later', () async {
-      final many = lines(InkLayerPainter.pixelsFrom);
+    test('a line added is drawn over the pixels there are (not the whole page line by line); another zoom shows the lines at once; pixels again a moment later', () async {
+      final many = lines(dense);
       await paint(InkLayerPainter(strokes: many, pixelScale: 1));
       await made();
       expect(await paint(InkLayerPainter(strokes: many, pixelScale: 1)), ['pixels 300x200']);
       many.add(_word(50, 50));
-      expect(await paint(InkLayerPainter(strokes: many, pixelScale: 1)), ['picture']);
+      expect(await paint(InkLayerPainter(strokes: many, pixelScale: 1)), ['pixels 300x200']); // (and the new line, as lines)
       await made();
       expect(await paint(InkLayerPainter(strokes: many, pixelScale: 1)), ['pixels 300x200']);
       expect(await paint(InkLayerPainter(strokes: many, pixelScale: 2)), ['picture']);
@@ -282,8 +291,136 @@ void main() {
       expect(await paint(InkLayerPainter(strokes: many, pixelScale: 2)), ['pixels 600x400']);
     });
 
-    test('only a few pages keep theirs, and a page that lost them is still drawn', () async {
-      final pages = [for (var p = 0; p < 7; p++) lines(InkLayerPainter.pixelsFrom, shift: p.toDouble())];
+    /// What [strokes] look like through the painter, as pixels of the screen.
+    Future<Uint8List> shownOf(List<DrawingStroke> strokes) async {
+      final rec = ui.PictureRecorder();
+      InkLayerPainter(strokes: strokes, pixelScale: 1).paint(Canvas(rec), const Size(300, 200));
+      final image = await rec.endRecording().toImage(300, 200);
+      return (await image.toByteData())!.buffer.asUint8List();
+    }
+
+    test('pixels made from the pixels there were and the lines written since look as pixels made of all the lines', () async {
+      final r = math.Random(3);
+      final page = lines(dense, shift: 0.5);
+      await paint(InkLayerPainter(strokes: page, pixelScale: 1));
+      await made();
+      // written on in three goes, the pixels made again after each (lines here and there, some over others, some in colour)
+      for (var go = 0; go < 3; go++) {
+        for (var i = 0; i < 1 + go * 40; i++) {
+          page.add(_word(r.nextDouble() * 260, r.nextDouble() * 180, color: Color(0xFF000000 | r.nextInt(0xFFFFFF)), pressure: r.nextBool()));
+        }
+        expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['pixels 300x200']);
+        expect(await shownOf(page), isNot(isEmpty));
+        await made();
+      }
+      expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['pixels 300x200']);
+      final grown = await shownOf(page);
+      // the same lines in a list of their own: its pixels are made of all of them at once. (The same lines, not copies: lines of one look
+      // that follow each other are drawn as one path, whose edges where they cross are soft once, not twice, so where a run of them is cut -
+      // between chunks, which go by which lines they are - shows at those edges. The lines written here are each in a colour of its own.)
+      final fresh = List.of(page);
+      await paint(InkLayerPainter(strokes: fresh, pixelScale: 1));
+      await made();
+      expect(await paint(InkLayerPainter(strokes: fresh, pixelScale: 1)), ['pixels 300x200']);
+      // (to the bit but for the soft edges of the lines, which pass through pixels of 8 bits once more: one step of 255 at most there)
+      final whole = await shownOf(fresh);
+      expect(grown.length, whole.length);
+      var most = 0, differ = 0;
+      for (var i = 0; i < whole.length; i++) {
+        final d = (grown[i] - whole[i]).abs();
+        if (d > 0) differ++;
+        most = math.max(most, d);
+      }
+      expect(most, lessThanOrEqualTo(2));
+      expect(differ, lessThan(whole.length ~/ 200));
+    });
+
+    /// The place drawn line by line over the pixels, in square units, from what the painter drew; null if it drew none.
+    int? redrawn(List<String> drawn) {
+      final m = drawn.map(RegExp(r'^lines in (\d+)x(\d+)$').firstMatch).nonNulls.firstOrNull;
+      return m == null ? null : int.parse(m[1]!) * int.parse(m[2]!);
+    }
+
+    test('a line erased, changed or put among the others is drawn over the pixels, line by line only where it was (the line of writing it is in); the pixels made from that are those of all the lines', () async {
+      final r = math.Random(5);
+      // six lines of writing of six words, each of three strokes that cross; each stroke in a colour of its own (strokes of one look are
+      // drawn as one path, see above)
+      final page = [
+        for (var i = 0; i < 36; i++)
+          for (var k = 0; k < 3; k++) _word(10 + (i % 6) * 48.0 + k * 3, 14 + (i ~/ 6) * 30.0 + k * 2, color: Color(0xFF000000 | r.nextInt(0xFFFFFF)), pressure: k.isEven),
+      ];
+      await paint(InkLayerPainter(strokes: page, pixelScale: 1));
+      await made();
+      Future<void> changed(String what) async {
+        final drawn = await paint(InkLayerPainter(strokes: page, pixelScale: 1));
+        expect(drawn.first, 'pixels 300x200', reason: what);
+        expect(redrawn(drawn), lessThan(300 * 200 ~/ 3), reason: what);
+        await made();
+        expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['pixels 300x200'], reason: what);
+      }
+
+      page.removeAt(40);
+      await changed('erased');
+      page[3].color = Colors.red;
+      page.add(_word(150, 120, color: Colors.blue));
+      await changed('restyled, and one added on top');
+      page.insert(10, _word(100, 46, color: Colors.green));
+      await changed('put among the others');
+      page.first.points[0] += const Offset(5, 5);
+      await changed('moved');
+      // the eraser swept through a row: each move erased what it touched, and the pixels were made only when it rested
+      for (var x = 20.0; x < 200; x += 12) {
+        page.removeWhere((s) => s.points.any((p) => (p - Offset(x, 76)).distance < 4));
+        final drawn = await paint(InkLayerPainter(strokes: page, pixelScale: 1));
+        expect(drawn.first, 'pixels 300x200');
+        expect(redrawn(drawn), lessThan(300 * 200 ~/ 3));
+      }
+      expect(page.length, lessThan(3 * 36 - 6), reason: 'the sweep erased something');
+      await made();
+      expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['pixels 300x200']);
+      final changedPixels = await shownOf(page);
+      final fresh = List.of(page);
+      await paint(InkLayerPainter(strokes: fresh, pixelScale: 1));
+      await made();
+      expect(await paint(InkLayerPainter(strokes: fresh, pixelScale: 1)), ['pixels 300x200']);
+      final whole = await shownOf(fresh);
+      // (to the bit but for the soft edges of the lines added on top, which pass through pixels of 8 bits once more)
+      var most = 0, differ = 0;
+      for (var i = 0; i < whole.length; i++) {
+        final d = (changedPixels[i] - whole[i]).abs();
+        if (d > 2) differ++;
+        most = math.max(most, d);
+      }
+      expect(most, lessThanOrEqualTo(2));
+      expect(differ, lessThan(whole.length ~/ 200));
+    });
+
+    test('lines put in another order, or half the page changed, are drawn as lines until the pixels are made again; on a page where all lines touch, only around a change', () async {
+      final page = lines(dense + 10);
+      await paint(InkLayerPainter(strokes: page, pixelScale: 1));
+      await made();
+      // (every line here touches others all across the page: the place drawn again is not grown to whole lines, only to the change)
+      page.removeAt(700);
+      final drawn = await paint(InkLayerPainter(strokes: page, pixelScale: 1));
+      expect(drawn.first, 'pixels 300x200');
+      expect(redrawn(drawn), lessThan(300 * 200 ~/ 10));
+      await made();
+      page.insert(0, page.removeAt(500));
+      expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['picture']);
+      await made();
+      expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['pixels 300x200']);
+      page.removeRange(0, page.length ~/ 2);
+      expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['picture']);
+      await made();
+      expect(await paint(InkLayerPainter(strokes: page, pixelScale: 1)), ['pixels 300x200']);
+    });
+
+    test('pages keep theirs while they fit in the budget, and a page that lost them is still drawn; pages on the screen do not take each other\'s', () async {
+      final budget = InkLayerPainter.pixelsBudget;
+      addTearDown(() => InkLayerPainter.pixelsBudget = budget);
+      InkLayerPainter.forgetPixels();
+      InkLayerPainter.pixelsBudget = 4 * 300 * 200 * 4;
+      final pages = [for (var p = 0; p < 7; p++) lines(dense, shift: p.toDouble())];
       for (final page in pages) {
         await paint(InkLayerPainter(strokes: page, pixelScale: 1));
         await made();
@@ -298,10 +435,19 @@ void main() {
       final image = await rec.endRecording().toImage(300, 200); // (with an image that was let go of, this fails)
       expect(image.width, 300);
       await made();
+      // all seven on the screen at once (each painted after every change): four have pixels, and the same four keep them
+      Future<List<bool>> shown() async => [for (final page in pages) (await paint(InkLayerPainter(strokes: page, pixelScale: 1))).first != 'picture'];
+      await shown();
+      await made();
+      final again = await shown();
+      await made();
+      expect(again.where((p) => p), hasLength(4));
+      expect(await shown(), again);
+      await made();
     });
 
     test('an infinite canvas is too big for it', () async {
-      final many = lines(InkLayerPainter.pixelsFrom);
+      final many = lines(dense);
       for (var i = 0; i < 2; i++) {
         final rec = ui.PictureRecorder();
         final canvas = _Kept(Canvas(rec));
@@ -316,7 +462,7 @@ void main() {
   group('writing in the editor', () {
     setUpAll(AppDatabase.initFfi);
 
-    testWidgets('a move of the pen builds nothing, and the line that is saved has far fewer points than the pen sent', (tester) async {
+    testWidgets('the pen going down, moving and lifting builds nothing but the lines of the page, and the line that is saved has far fewer points than the pen sent', (tester) async {
       tester.view.physicalSize = const Size(1600, 1000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -338,9 +484,21 @@ void main() {
       final active = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is ActiveInkPainter);
       final origin = tester.getTopLeft(find.byKey(const ValueKey('page-0'))) + const Offset(150, 200);
       const p = 7;
+      // (the first line on a page brings an empty page after it, which does build the editor: the line looked at is the second)
+      await tester.sendEventToBinding(PointerDownEvent(pointer: 6, position: origin + const Offset(0, 300), kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
+      for (var i = 1; i <= 20; i++) {
+        await tester.sendEventToBinding(PointerMoveEvent(pointer: 6, position: origin + Offset(i * 4.0, 300 + i.toDouble()), kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
+      }
+      await tester.sendEventToBinding(PointerUpEvent(pointer: 6, position: origin + const Offset(80, 320), kind: PointerDeviceKind.stylus));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
+      // (the bar of the editor is made anew at every build of it)
+      final bar = tester.widget(find.byType(AppBar));
+      DrawingStroke? drawn() => (tester.widget<CustomPaint>(active.first).painter! as ActiveInkPainter).stroke();
+      expect(drawn(), isNull);
       await tester.sendEventToBinding(PointerDownEvent(pointer: p, position: origin, kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
       await tester.pump();
-      expect(active, findsOneWidget);
+      expect(drawn(), isNotNull);
+      expect(identical(tester.widget(find.byType(AppBar)), bar), isTrue, reason: 'the editor was built when the pen went down');
       final painter = tester.widget<CustomPaint>(layer.first).painter;
       const moves = 300;
       for (var i = 1; i <= moves; i++) {
@@ -350,14 +508,78 @@ void main() {
       expect(identical(tester.widget<CustomPaint>(layer.first).painter, painter), isTrue, reason: 'the page was built again while the pen moved');
       await tester.sendEventToBinding(PointerUpEvent(pointer: p, position: origin + Offset(moves * 0.8, 30 * math.sin(moves / 30)), kind: PointerDeviceKind.stylus));
       await tester.pump();
-      expect(active, findsNothing);
+      expect(drawn(), isNull);
+      expect(identical(tester.widget(find.byType(AppBar)), bar), isTrue, reason: 'the editor was built when the pen lifted');
+      // the lines of the page were built again, with the line among them
+      final after = tester.widget<CustomPaint>(layer.first).painter! as InkLayerPainter;
+      expect(identical(after, painter), isFalse);
+      expect(after.skip, isNull);
+      expect(after.strokes, hasLength(2));
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-any'))).onPressed, isNotNull);
 
       await tester.pump(const Duration(seconds: 1));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1500)));
       final saved = (await tester.runAsync(() => repo.loadNote(id)))!.strokes[0]!;
-      expect(saved, hasLength(1));
-      expect(saved.single.points.length, lessThan(moves ~/ 3));
-      expect(saved.single.points.length, greaterThan(4)); // (still a curve)
+      expect(saved, hasLength(2));
+      expect(saved.last.points.length, lessThan(moves ~/ 3));
+      expect(saved.last.points.length, greaterThan(4)); // (still a curve)
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
+    });
+
+    testWidgets('the eraser builds nothing but the lines of the page, and what it erased is one step to take back', (tester) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      late NoteRepository repo;
+      late String id;
+      await tester.runAsync(() async {
+        repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+        id = await repo.createNote();
+      });
+      await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(key: ValueKey(id), noteId: id, repository: repo, stylus: StylusSettings.inMemory())));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Draw'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Draw'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
+
+      final layer = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is InkLayerPainter);
+      InkLayerPainter ink() => tester.widget<CustomPaint>(layer.first).painter! as InkLayerPainter;
+      final origin = tester.getTopLeft(find.byKey(const ValueKey('page-0'))) + const Offset(150, 200);
+      // three lines, one under the other
+      for (var n = 0; n < 3; n++) {
+        await tester.sendEventToBinding(PointerDownEvent(pointer: 10 + n, position: origin + Offset(0, n * 60.0), kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
+        for (var i = 1; i <= 20; i++) {
+          await tester.sendEventToBinding(PointerMoveEvent(pointer: 10 + n, position: origin + Offset(i * 5.0, n * 60.0 + (i.isEven ? 3 : -3)), kind: PointerDeviceKind.stylus, buttons: kPrimaryButton));
+        }
+        await tester.sendEventToBinding(PointerUpEvent(pointer: 10 + n, position: origin + Offset(100, n * 60.0), kind: PointerDeviceKind.stylus));
+        await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
+      }
+      expect(ink().strokes, hasLength(3));
+      final bar = tester.widget(find.byType(AppBar));
+      // the eraser end of the pen, down across the last two
+      await tester.sendEventToBinding(PointerDownEvent(pointer: 20, position: origin + const Offset(50, 40), kind: PointerDeviceKind.invertedStylus, buttons: kPrimaryButton));
+      await tester.pump();
+      expect(identical(tester.widget(find.byType(AppBar)), bar), isTrue, reason: 'the editor was built when the eraser went down');
+      for (var i = 1; i <= 20; i++) {
+        await tester.sendEventToBinding(PointerMoveEvent(pointer: 20, position: origin + Offset(50, 40 + i * 4.0), kind: PointerDeviceKind.invertedStylus, buttons: kPrimaryButton));
+        await tester.pump();
+      }
+      expect(ink().strokes, hasLength(1));
+      expect(identical(tester.widget(find.byType(AppBar)), bar), isTrue, reason: 'the editor was built while the eraser erased');
+      await tester.sendEventToBinding(PointerUpEvent(pointer: 20, position: origin + const Offset(50, 120), kind: PointerDeviceKind.invertedStylus));
+      await tester.pump();
+      expect(identical(tester.widget(find.byType(AppBar)), bar), isTrue, reason: 'the editor was built when the eraser lifted');
+      expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-any'))).onPressed, isNotNull);
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1500)));
+      expect((await tester.runAsync(() => repo.loadNote(id)))!.strokes[0], hasLength(1));
+      await tester.tap(find.byKey(const ValueKey('undo-any')));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
+      expect(ink().strokes, hasLength(3), reason: 'both lines the one sweep erased come back with one step');
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
     });

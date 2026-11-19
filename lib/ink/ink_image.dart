@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import '../models/canvas_models.dart';
+import '../util/apart.dart';
 import 'glm_ocr.dart';
 import 'ink_grouping.dart';
 import 'onnx_paddle_vl.dart';
@@ -243,5 +244,11 @@ Future<GlmPicture> renderInkForGlmOcr(List<DrawingStroke> strokes, {int rows = 1
   final image = await recorder.endRecording().toImage(width, height);
   final rgba = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
   image.dispose();
-  return GlmPicture(glmPatches(rgba.buffer.asUint8List(), width, height), height ~/ glmPatch, width ~/ glmPatch);
+  // (the patches are millions of sums for a wide line: made off the thread of the screen)
+  final patches = await _patchesApart(rgba.buffer.asUint8List(), width, height);
+  return GlmPicture(patches, height ~/ glmPatch, width ~/ glmPatch);
 }
+
+/// [glmPatches] in an isolate of its own. A function of its own (not a closure in the method above, which would carry the whole method's
+/// context along): only the pixels and the size are handed over.
+Future<Float32List> _patchesApart(Uint8List rgba, int width, int height) => runApart(() => glmPatches(rgba, width, height));

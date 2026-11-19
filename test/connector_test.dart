@@ -189,9 +189,15 @@ void main() {
 
     test('the link is part of what a stroke looks like, so that a change of it is seen', () {
       DrawingStroke make(StrokeLink? l) => DrawingStroke(id: 's', color: Colors.black, width: 2, points: const [Offset(0, 0), Offset(9, 9)], link: l);
-      expect(make(link()).stamp, make(link()).stamp);
-      expect(make(link()).stamp, isNot(make(null).stamp));
-      expect(make(link()).stamp, isNot(make(link(route: ConnectorRoute.elbow)).stamp));
+      final s = make(link());
+      final linked = s.stamp;
+      s.link = link(); // (the same link again)
+      expect(s.stamp, linked);
+      s.link = link(route: ConnectorRoute.elbow);
+      expect(s.stamp, isNot(linked));
+      final elbow = s.stamp;
+      s.link = null;
+      expect(s.stamp, isNot(elbow));
       expect(make(link()).copyAt(const Offset(5, 5)).link, isNull); // a copy is a plain line
     });
 

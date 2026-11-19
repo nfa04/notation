@@ -36,12 +36,25 @@ extension _EditorLayers on _FixedPageNoteEditorState {
   /// Whether the line being drawn is drawn over the lines of the usual place (else among the ordered parts, over its own layer).
   bool _activeInUsualPlace(PageStacking? s) => s == null || _currentActiveStroke == null || s.isUsualFor(StackKind.ink, _layers.indexOf(_currentActiveStroke!.layer));
 
+  /// The line being drawn, if it is drawn on [page] at this place: the usual place of [stacking], or the ordered part of the layer at
+  /// [layer] in the stack. Asked at each paint, so that the layer that paints it is there before the line begins.
+  DrawingStroke? _activeAt(int page, PageStacking? stacking, {int? layer}) {
+    final s = _currentActiveStroke;
+    if (s == null) return null;
+    final strokes = _strokesPerPage[page];
+    if (strokes == null || strokes.isEmpty || !identical(strokes.last, s)) return null;
+    if (layer == null) return _activeInUsualPlace(stacking) ? s : null;
+    return _layers.indexOf(s.layer) == layer ? s : null;
+  }
+
+  /// Whether a line can begin and end with no build of the editor: not when what is built depends on the line being drawn (the
+  /// handle of the symmetry and the guides hide while it is, a connector snaps to what it is over).
+  bool get _writesQuietly => _shape != ShapeTool.connector && !(_on(Feature.symmetry) && !_symmetry.isOff) && !_guidesShown;
+
   /// What the page shows over everything in its usual places: the parts of [stacking] that are over others, one after the other -
   /// each layer's pictures, lines (the line being drawn among them) and boxes. They take no touches (the pen and the fingers go to
   /// what is under them, the boxes excepted).
   List<Widget> _stackedAbove(PageStacking stacking, int pageIndex) {
-    final strokes = _strokesPerPage[pageIndex] ?? const <DrawingStroke>[];
-    final active = _currentActiveStroke != null && strokes.isNotEmpty && identical(strokes.last, _currentActiveStroke) ? _currentActiveStroke : null;
     final sensitivity = widget.stylus?.effectiveSensitivity ?? 0.6;
     return [
       for (final part in stacking.above) ...switch (part.kind) {
@@ -53,23 +66,25 @@ extension _EditorLayers on _FixedPageNoteEditorState {
             Positioned.fill(
               child: IgnorePointer(
                 child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: InkLayerPainter(strokes: strokes, skip: active ?? _penEditing, layers: _layers, pressureSensitivity: sensitivity, only: {part.layer}, pixelScale: _inkPixelScale),
-                    isComplex: true,
-                  ),
-                ),
-              ),
-            ),
-            if (active != null && _layers.indexOf(active.layer) == part.layer)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: ActiveInkPainter(() => _currentActiveStroke, repaint: _inkTick, pressureSensitivity: sensitivity, alongside: () => _symmetryCopies),
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: _inkRevisionOf(pageIndex),
+                    builder: (context, _, _) => CustomPaint(
+                      painter: InkLayerPainter(strokes: _strokesPerPage[pageIndex] ?? const <DrawingStroke>[], skip: _currentActiveStroke ?? _penEditing, layers: _layers, pressureSensitivity: sensitivity, only: {part.layer}, pixelScale: _inkPixelScale),
+                      isComplex: true,
                     ),
                   ),
                 ),
               ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: ActiveInkPainter(() => _activeAt(pageIndex, stacking, layer: part.layer), repaint: _inkTick, pressureSensitivity: sensitivity, alongside: () => _symmetryCopies),
+                  ),
+                ),
+              ),
+            ),
           ],
         StackKind.box => [
             for (final b in _textBoxesPerPage[pageIndex] ?? const <TextBoxWidgetModel>[])

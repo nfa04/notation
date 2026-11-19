@@ -76,6 +76,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
   Future<void> _loadCustomColors() async {
     final saved = await widget.repository.settings.penColors();
     final straighten = await widget.repository.settings.get('straighten_lines');
+    final looseness = straightenLooseness(await widget.repository.settings.get(straightenStrengthSetting));
     final onionBack = int.tryParse(await widget.repository.settings.get('onion_back') ?? '');
     final onionNext = await widget.repository.settings.get('onion_next');
     final more = await widget.repository.settings.get('draw_bar_more');
@@ -97,6 +98,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         _activeToolbarProfile = profiles.active;
         _customColors = saved;
         _straighten = straighten != '0';
+        _straightenLooseness = looseness;
         _moreTools = more == '1';
         _onionBack = (onionBack ?? 0).clamp(0, 3);
         _onionNext = onionNext == '1';
@@ -544,22 +546,29 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
     final primary = Theme.of(context).colorScheme.primary;
 
     final tools = <Widget>[
+      // (they follow the undo steps themselves: a line written builds nothing else)
       Center(
         heightFactor: 1,
-        child: IconButton(
-          key: const ValueKey('undo-button'),
-          icon: const Icon(Icons.undo_rounded, size: 22),
-          tooltip: tr('Undo'),
-          onPressed: _undoStack.canUndo ? _undoDrawing : null,
+        child: ValueListenableBuilder<int>(
+          valueListenable: _undoTick,
+          builder: (context, _, _) => IconButton(
+            key: const ValueKey('undo-button'),
+            icon: const Icon(Icons.undo_rounded, size: 22),
+            tooltip: tr('Undo'),
+            onPressed: _undoStack.canUndo ? _undoDrawing : null,
+          ),
         ),
       ),
       Center(
         heightFactor: 1,
-        child: IconButton(
-          key: const ValueKey('redo-button'),
-          icon: const Icon(Icons.redo_rounded, size: 22),
-          tooltip: tr('Redo'),
-          onPressed: _undoStack.canRedo ? _redoDrawing : null,
+        child: ValueListenableBuilder<int>(
+          valueListenable: _undoTick,
+          builder: (context, _, _) => IconButton(
+            key: const ValueKey('redo-button'),
+            icon: const Icon(Icons.redo_rounded, size: 22),
+            tooltip: tr('Redo'),
+            onPressed: _undoStack.canRedo ? _redoDrawing : null,
+          ),
         ),
       ),
       const ToolGroupDivider(width: 32, height: 24),

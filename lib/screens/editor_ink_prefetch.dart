@@ -37,7 +37,11 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
     WidgetsBinding.instance.scheduleFrameCallback((_) {
       _inkRefreshDue = false;
       if (!mounted) return;
-      if (_checkOn) _marks = _currentMarks();
+      if (_checkOn) {
+        _marks = _currentMarks();
+      } else if (_reader.checksForOthers) {
+        _currentMarks(); // (the lines that look wrong are read again here, for the guests that check: see [_currentMarks])
+      }
       _refreshInkSpelling();
       setState(() {}); // (the buttons over a selection show whether it is ready)
     });
@@ -48,7 +52,8 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
   Widget _inkProgressChip() => ValueListenableBuilder<int>(
         valueListenable: _reader.pending,
         builder: (context, waiting, _) {
-          if (waiting <= 0 || (!_inkReadsHere() && !_checkOn)) return const SizedBox.shrink();
+          // (a guest of a live session reads nothing: the host does, and its chip says so)
+          if (waiting <= 0 || !_reader.readsNow) return const SizedBox.shrink();
           final scheme = Theme.of(context).colorScheme;
           return Material(
             key: const ValueKey('ink-progress'),

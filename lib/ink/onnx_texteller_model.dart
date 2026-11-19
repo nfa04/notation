@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/widgets.dart' show WidgetsBinding, WidgetsBindingObserver;
 import '../llm/onnx_session.dart';
 import '../llm/token_picker.dart';
 import '../llm/warm_session.dart';
@@ -22,7 +23,7 @@ const List<int> texTellerHidden = [785, 768];
 /// values of one step to the next; only the scores of the next token come over to Dart. Opening the two sessions takes a
 /// moment (about 320 MB of weights), and the background reading asks for formula after formula, so they stay open for
 /// [keepOpen] after a reading and are let go of when nothing more is asked.
-class OnnxTexTeller implements ScoredTexTeller {
+class OnnxTexTeller with WidgetsBindingObserver implements ScoredTexTeller {
   final String _encoderPath;
   final String _decoderPath;
   final Duration keepOpen;
@@ -72,6 +73,10 @@ class OnnxTexTeller implements ScoredTexTeller {
   Future<TexTellerReading> _read(Float32List pixels, int maxTokens) async {
     _idle?.cancel();
     _decoderLetGo = false;
+    if (!_observing && !kIsWeb) {
+      WidgetsBinding.instance.addObserver(this);
+      _observing = true;
+    }
     // (the setting of where models run changed since the sessions were opened: opened again)
     if (_openedAt != onnxAccelerationChanges) await close();
     _openedAt = onnxAccelerationChanges;
@@ -235,12 +240,26 @@ class OnnxTexTeller implements ScoredTexTeller {
       unawaited(decoder?.close());
       _idle = Timer(_chipKeep - keepOpen, _idleClose);
     } else {
+      debugPrint('onnx: texteller let go: quiet for ${keepOpen.inSeconds} s');
       unawaited(close());
     }
   }
 
+  bool _observing = false;
+
+  /// The system is short of memory: the sessions are let go now, not when their time runs out.
+  @override
+  void didHaveMemoryPressure() {
+    debugPrint('onnx: texteller let go: the system is short of memory');
+    unawaited(close());
+  }
+
   @override
   Future<void> close() async {
+    if (_observing) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observing = false;
+    }
     _idle?.cancel();
     _idle = null;
     _decoderLetGo = false;

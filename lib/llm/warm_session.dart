@@ -351,6 +351,8 @@ Future<WarmSession> openWarmSession(String path,
           interOpNumThreads: options?.interOpNumThreads,
           useArena: options?.useArena,
           sessionConfigs: options?.sessionConfigs,
+          lowPriority: options?.lowPriority,
+          ownThread: options?.ownThread,
           freeDimensions: {...?options?.freeDimensions, pin.name: size},
         );
     final sized = OneSizeAtATime(

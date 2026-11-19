@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui show Image;
-import 'dart:ui' show Picture, PictureRecorder, PointMode;
+import 'dart:ui' show ClipOp, Picture, PictureRecorder, PointMode;
 
 import 'package:flutter/material.dart';
 import '../collab/wet_ink.dart';
@@ -387,16 +387,40 @@ typedef _InkChunk = ({int key, List<DrawingStroke> strokes});
 
 final Expando<Map<int, _InkPicture>> _pictures = Expando('ink pictures');
 
-/// The lines of a page as pixels, [scale] screen pixels to a unit: what [InkLayerPainter] shows of a page with very many lines.
+/// The lines of a page as pixels, [scale] screen pixels to a unit: what [InkLayerPainter] shows of a page with many lines.
 class _InkPixels {
   final int key;
   final double scale;
   final ui.Image image;
 
+  /// What it holds: the lines it was made of, in the order they are drawn, with their stamps and the places they covered then (and
+  /// what they all began from, see [InkLayerPainter._seedOf]). A page changed since is drawn as these pixels but for where something
+  /// changed, which is drawn line by line, and the new pixels are made the same way: as much work as what changed.
+  final int seed;
+  final List<DrawingStroke> strokes;
+  final List<int> stamps;
+  final List<Rect> extents;
+
+  /// Where each of [strokes] is among them.
+  final Map<DrawingStroke, int> index;
+
   /// Where it is kept, under [place].
   final Map<int, _InkPixels> slot;
   final int place;
-  _InkPixels(this.key, this.scale, this.image, this.slot, this.place);
+
+  /// The value of [_pixelsReady] when it was last painted: every page on the screen is painted again after it changes, so those kept
+  /// that were painted since are the ones on the screen (and are not let go of to make room for another).
+  int shown;
+
+  _InkPixels(this.key, this.scale, this.image, this.slot, this.place, {required this.seed, required this.strokes, required this.stamps, required this.extents})
+      : index = Map.identity(),
+        shown = _pixelsReady.value {
+    for (var i = 0; i < strokes.length; i++) {
+      index[strokes[i]] = i;
+    }
+  }
+
+  int get bytes => image.width * image.height * 4;
 
   void forget() {
     if (identical(slot[place], this)) slot.remove(place);
@@ -407,15 +431,49 @@ class _InkPixels {
 
 final Expando<Map<int, _InkPixels>> _pixels = Expando('ink pixels');
 
-/// Those there are, the last made last: each is the size of the page on the screen, so only as many are kept as can be on the screen.
+/// Those there are, the last made last. Each is the size of its page on the screen; together they take at most [InkLayerPainter.pixelsBudget].
 final _pixelsKept = <_InkPixels>[];
-const _pixelsMost = 4, _pixelsLargest = 4096;
+const _pixelsLargest = 4096;
 
 /// Tells that some page has its pixels now.
 final _pixelsReady = ValueNotifier<int>(0);
 
-/// The pages that wait to be made into pixels.
-final _pixelsWaiting = <(int, int), Timer>{};
+/// What changed in the lines of a page since its pixels were made: [dirty] (whole pixels, null if nothing) is drawn line by line,
+/// [under] being the lines there, and [top] are lines added over all of those the pixels hold.
+typedef _InkChanges = ({Rect? dirty, List<DrawingStroke> under, List<DrawingStroke> top});
+
+/// The pages that wait to be made into pixels, with the pixels they are made from when only some lines changed (a handle of their
+/// own, let go of when the wait ends or is given up).
+final _pixelsWaiting = <(int, int), ({Timer timer, ui.Image? base})>{};
+
+final Expando<(int, Rect)> _extents = Expando('ink extents');
+
+/// Where [stroke] can leave ink, kept while it stays as it is: a line of the pen at most its width beyond its points (pressure makes it
+/// 1.65 times as thick at most); a brush, which may glow or cast a shadow, much more; a line with text over it anywhere.
+Rect _extentOf(DrawingStroke stroke) {
+  final key = stroke.stamp;
+  final kept = _extents[stroke];
+  if (kept != null && kept.$1 == key) return kept.$2;
+  final pts = stroke.points;
+  Rect r;
+  if (stroke.label != null) {
+    r = Rect.largest;
+  } else if (pts.isEmpty) {
+    r = Rect.zero;
+  } else {
+    var l = pts.first.dx, t = pts.first.dy, rt = l, b = t;
+    for (final p in pts) {
+      if (p.dx < l) l = p.dx;
+      if (p.dx > rt) rt = p.dx;
+      if (p.dy < t) t = p.dy;
+      if (p.dy > b) b = p.dy;
+    }
+    final plain = stroke.brush == penBrushId && stroke.link == null;
+    r = Rect.fromLTRB(l, t, rt, b).inflate(plain ? stroke.width + 2 : math.max(64, stroke.width * 8));
+  }
+  _extents[stroke] = (key, r);
+  return r;
+}
 
 /// The finished lines of a page, kept as a picture that is made again only when one of them changed - not while another
 /// one is being drawn over them ([skip], drawn by an [ActiveInkPainter] above). The picture is made of chunks of lines that
@@ -434,26 +492,52 @@ class InkLayerPainter extends CustomPainter {
   final Set<int>? only;
 
   /// How many screen pixels a unit of the page is, if the page keeps its size on the screen while it is not being zoomed. A page with
-  /// [pixelsFrom] lines or more is then shown as pixels once it is at rest: a kept picture is still drawn line by line for every frame
-  /// (nothing keeps what is in a RepaintBoundary as pixels with Impeller), which with so many lines makes writing on it stutter.
+  /// [pixelsFrom] points of lines or more is then shown as pixels once it is at rest: a kept picture is still drawn line by line for
+  /// every frame (nothing keeps what is in a RepaintBoundary as pixels with Impeller), which with many lines makes writing stutter.
   final double? pixelScale;
 
-  /// From how many lines on a page is shown as pixels: below it the lines are drawn in less than a frame takes.
-  static const pixelsFrom = 1500;
+  /// From how many points of lines a page is shown as pixels (about thirty words of handwriting): below it the lines cost next to
+  /// nothing to draw, above it every page on the screen adds to every frame - a few pages of notes took 5 ms of each on a desktop.
+  static const pixelsFrom = 2000;
+
+  /// How many bytes the pixels of all pages may take (about four pages the width of a tablet's screen).
+  @visibleForTesting
+  static int pixelsBudget = 64 << 20;
+
+  /// Lets go of the pixels of every page.
+  @visibleForTesting
+  static void forgetPixels() {
+    for (final p in [..._pixelsKept]) {
+      p.forget();
+    }
+  }
 
   late final List<_InkChunk> _chunks;
-  late final int _key;
+  late final int _key, _seed, _points;
+
+  /// The lines as they were when this was made, [skip] left out: what is painted, even if the list has grown since (a line begun is
+  /// added to it with no new painter, and is painted above by an [ActiveInkPainter]).
+  late final List<DrawingStroke> _drawn;
+
+  /// [_drawn] in the order they are drawn in (of their layers).
+  late final List<DrawingStroke> _ordered;
 
   InkLayerPainter({required this.strokes, this.skip, this.pressureSensitivity = 0.6, this.layers, this.only, this.pixelScale}) : super(repaint: pixelScale == null ? null : _pixelsReady) {
-    _chunks = _chunksOf(_order(strokes, skip, layers, only), pressureSensitivity, layers, only);
+    _drawn = [for (final s in strokes) if (!identical(s, skip)) s];
+    _seed = _seedOf(pressureSensitivity, layers, only);
+    _ordered = layers == null || layers!.isPlain ? _drawn : layers!.ordered(_drawn, only: only);
+    _chunks = _chunksOf(_ordered, _seed);
     _key = Object.hashAll([for (final c in _chunks) c.key]);
+    var points = 0;
+    for (final s in _drawn) {
+      points += s.points.length;
+    }
+    _points = points;
   }
 
-  /// The lines that are drawn here, in the order they are drawn in: those of the shown layers, the bottom layer's first.
-  static List<DrawingStroke> _order(List<DrawingStroke> strokes, DrawingStroke? skip, LayerStack? layers, Set<int>? only) {
-    final others = [for (final s in strokes) if (!identical(s, skip)) s];
-    return layers == null || layers.isPlain ? others : layers.ordered(others, only: only);
-  }
+  /// What every chunk's key begins from: what changes how all of the lines look.
+  static int _seedOf(double sensitivity, LayerStack? layers, Set<int>? only) =>
+      Object.hash(sensitivity, Brushes.revision, layers?.fingerprint, only == null ? null : Object.hashAllUnordered(only));
 
   /// About how many lines a chunk holds, and the most it may.
   static const _chunkMask = 127, _chunkMost = 512;
@@ -461,8 +545,7 @@ class InkLayerPainter extends CustomPainter {
   /// [drawn] in chunks. A chunk ends after a line picked by the line itself (its identity), not by its place: erasing or adding a
   /// line changes its own chunk and leaves where the others begin and end as they were.
   /// (the line being drawn counts for nothing, so that putting the pen down changes nothing here)
-  static List<_InkChunk> _chunksOf(List<DrawingStroke> drawn, double sensitivity, LayerStack? layers, Set<int>? only) {
-    final seed = Object.hash(sensitivity, Brushes.revision, layers?.fingerprint, only == null ? null : Object.hashAllUnordered(only));
+  static List<_InkChunk> _chunksOf(List<DrawingStroke> drawn, int seed) {
     final chunks = <_InkChunk>[];
     var from = 0, h = seed;
     for (var i = 0; i < drawn.length; i++) {
@@ -477,6 +560,11 @@ class InkLayerPainter extends CustomPainter {
     return chunks;
   }
 
+  /// The most points of lines the place drawn again over the pixels is grown to hold (a line of handwriting has some hundreds).
+  static const _regrownMost = 10000;
+
+  bool get _composes => layers != null && !layers!.isPlain && layers!.composes;
+
   @override
   void paint(Canvas canvas, Size size) {
     final only = this.only;
@@ -487,9 +575,9 @@ class InkLayerPainter extends CustomPainter {
       final recorder = PictureRecorder();
       final c = Canvas(recorder);
       final chunks = <int, Picture>{};
-      if (layers != null && !layers!.isPlain && layers!.composes) {
+      if (_composes) {
         // (a see-through layer is drawn as a whole: it cannot be made of chunks of lines from the layers below and above it)
-        paintLayered(c, [for (final s in strokes) if (!identical(s, skip)) s], pressureSensitivity, layers, only: only);
+        paintLayered(c, _drawn, pressureSensitivity, layers, only: only);
       } else {
         for (final chunk in _chunks) {
           final picture = chunks[chunk.key] ??= kept?.chunks[chunk.key] ??
@@ -505,50 +593,179 @@ class InkLayerPainter extends CustomPainter {
       kept = slot[place] = (key: _key, picture: recorder.endRecording(), chunks: chunks);
     }
     final scale = pixelScale;
-    if (scale == null || strokes.length < pixelsFrom) return canvas.drawPicture(kept.picture);
+    if (scale == null || _points < pixelsFrom) return canvas.drawPicture(kept.picture);
+    final w = (size.width * scale).ceil(), h = (size.height * scale).ceil();
     final pixels = _pixels[strokes]?[place];
-    if (pixels != null && pixels.key == _key && pixels.scale == scale) {
-      // (one pixel of it to one of the screen: nothing to smooth, and it stays as sharp as the lines)
-      final w = pixels.image.width, h = pixels.image.height;
-      canvas.drawImageRect(pixels.image, Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Rect.fromLTWH(0, 0, w / scale, h / scale), Paint()..filterQuality = FilterQuality.none);
-      return;
+    if (pixels != null && pixels.scale == scale && pixels.image.width == w && pixels.image.height == h) {
+      pixels.shown = _pixelsReady.value;
+      if (pixels.key == _key) return _drawPixels(canvas, pixels.image, scale);
+      // lines written, erased or changed since the pixels were made: the pixels are drawn but where that was, which is drawn line by
+      // line (not the whole page, at every frame, until the pixels are made again), and the new pixels are made the same way
+      final changes = _changesSince(pixels, size);
+      if (changes != null) {
+        _drawOver(canvas, pixels.image, scale, changes, pressureSensitivity);
+        _pixelsSoon(place, w, h, scale, from: pixels, changes: changes);
+        return;
+      }
     }
     canvas.drawPicture(kept.picture);
-    _pixelsSoon(place, kept.picture, size, scale);
+    _pixelsSoon(place, w, h, scale, whole: kept.picture);
   }
 
-  /// Makes the page into pixels a moment after it was last painted differently (not during a zoom, which paints it every frame).
-  void _pixelsSoon(int place, Picture picture, Size size, double scale) {
-    final key = _key, list = strokes;
-    final w = (size.width * scale).ceil(), h = (size.height * scale).ceil();
+  /// One pixel of [image] to one of the screen: nothing to smooth, and it stays as sharp as the lines.
+  static void _drawPixels(Canvas canvas, ui.Image image, double scale) {
+    final w = image.width, h = image.height;
+    canvas.drawImageRect(image, Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Rect.fromLTWH(0, 0, w / scale, h / scale), Paint()..filterQuality = FilterQuality.none);
+  }
+
+  /// [image] with [changes] over it: what is in their dirty place drawn line by line instead, then the lines added on top.
+  static void _drawOver(Canvas canvas, ui.Image image, double scale, _InkChanges changes, double sensitivity) {
+    final dirty = changes.dirty;
+    if (dirty == null) {
+      _drawPixels(canvas, image, scale);
+    } else {
+      // (the place is whole pixels: no pixel is part image and part lines, so nothing shows where the two meet)
+      canvas
+        ..save()
+        ..clipRect(dirty, clipOp: ClipOp.difference, doAntiAlias: false);
+      _drawPixels(canvas, image, scale);
+      canvas
+        ..restore()
+        ..save()
+        ..clipRect(dirty, doAntiAlias: false);
+      paintStrokes(canvas, changes.under, sensitivity);
+      canvas.restore();
+    }
+    paintStrokes(canvas, changes.top, sensitivity);
+  }
+
+  /// What changed since [pixels] were made: the place of every line erased, changed or put among the others (and of what it was),
+  /// and the lines added over all of those there were; null if the order of those that stay changed, or how all lines look (the
+  /// layers, the pressure, the brushes), or if so much changed that drawing it all as lines is as quick.
+  _InkChanges? _changesSince(_InkPixels pixels, Size size) {
+    if (pixels.seed != _seed || _composes) return null;
+    final old = pixels.strokes, now = _ordered;
+    Rect? dirty;
+    void touch(Rect r) => dirty = dirty?.expandToInclude(r) ?? r;
+    var next = 0, lastKept = -1;
+    List<int>? added;
+    for (var j = 0; j < now.length; j++) {
+      final s = now[j];
+      final at = pixels.index[s];
+      if (at == null) {
+        (added ??= []).add(j);
+        continue;
+      }
+      if (at < next) return null; // (it came before one it is after now)
+      for (var k = next; k < at; k++) {
+        touch(pixels.extents[k]); // (gone)
+      }
+      if (s.stamp != pixels.stamps[at]) {
+        touch(pixels.extents[at]);
+        touch(_extentOf(s));
+      }
+      next = at + 1;
+      lastKept = j;
+    }
+    for (var k = next; k < old.length; k++) {
+      touch(pixels.extents[k]);
+    }
+    for (final j in added ?? const <int>[]) {
+      if (j < lastKept) touch(_extentOf(now[j]));
+    }
+    final top = now.sublist(lastKept + 1);
+    final page = Offset.zero & size;
+    final d = dirty?.intersect(page);
+    if (d == null || d.isEmpty) return (dirty: null, under: const [], top: top);
+    if (d.width * d.height > page.width * page.height / 2) return null;
+    final s = pixels.scale, most = page.width * page.height / 2;
+    Rect pixelled(Rect r) => Rect.fromLTRB((r.left * s).floorToDouble() / s, (r.top * s).floorToDouble() / s, (r.right * s).ceilToDouble() / s, (r.bottom * s).ceilToDouble() / s);
+    var whole = pixelled(d);
+    // grown until it cuts through no line: a line drawn only in part is smoothed a little differently from the whole of it (how is
+    // picked by how much of a path is drawn), which shows at the edges of the lines there, up to a quarter of the way to opaque. So
+    // usually the line of writing that changed is drawn again. Where lines touch each other on and on (a page scribbled full) that
+    // would be much of the page at every frame: past [_regrownMost] points it stays as it was.
+    var grown = whole;
+    for (var round = 0; round < 8; round++) {
+      var e = grown, points = 0;
+      for (var j = 0; j <= lastKept; j++) {
+        final x = _extentOf(now[j]);
+        if (!x.overlaps(e)) continue;
+        e = e.expandToInclude(x);
+        points += now[j].points.length;
+      }
+      if (points > _regrownMost) break;
+      e = pixelled(e.intersect(page));
+      if (e == grown) {
+        whole = grown;
+        break;
+      }
+      if (e.width * e.height > most) break;
+      grown = e;
+    }
+    return (dirty: whole, under: [for (var j = 0; j <= lastKept; j++) if (_extentOf(now[j]).overlaps(whole)) now[j]], top: top);
+  }
+
+  /// Makes the page into pixels a moment after it was last painted differently (not during a zoom, which paints it every frame): from
+  /// [whole], the picture of all of its lines, or from the pixels [from] with the [changes] since drawn over them.
+  void _pixelsSoon(int place, int w, int h, double scale, {Picture? whole, _InkPixels? from, _InkChanges? changes}) {
+    final key = _key, list = strokes, seed = _seed, sensitivity = pressureSensitivity;
     if (w <= 0 || h <= 0 || w > _pixelsLargest || h > _pixelsLargest) return; // (an infinite canvas: far too big for this)
+    final drawn = _ordered;
+    final stamps = [for (final s in drawn) s.stamp];
     final job = (identityHashCode(list), place);
-    _pixelsWaiting.remove(job)?.cancel();
-    _pixelsWaiting[job] = Timer(const Duration(milliseconds: 150), () async {
+    final gone = _pixelsWaiting.remove(job);
+    gone?.timer.cancel();
+    gone?.base?.dispose();
+    final base = from?.image.clone(); // (the pixels may be let go of before the wait is over)
+    final timer = Timer(const Duration(milliseconds: 150), () async {
       _pixelsWaiting.remove(job);
+      final slot = _pixels[list] ??= {};
+      if (!_roomFor(w * h * 4, slot[place])) return base?.dispose(); // (the pages on the screen hold all there may be)
       final recorder = PictureRecorder();
-      Canvas(recorder)
-        ..scale(scale)
-        ..drawPicture(picture);
+      final c = Canvas(recorder)..scale(scale);
+      if (base != null) {
+        _drawOver(c, base, scale, changes!, sensitivity);
+      } else {
+        c.drawPicture(whole!);
+      }
       final scaled = recorder.endRecording();
       try {
         final image = await scaled.toImage(w, h);
         if (_pictures[list]?[place]?.key != key) return image.dispose(); // (it changed meanwhile)
-        final slot = _pixels[list] ??= {};
+        final extents = [for (final s in drawn) _extentOf(s)];
+        if (!_roomFor(w * h * 4, slot[place], letGo: true)) return image.dispose();
         slot[place]?.forget();
-        final made = _InkPixels(key, scale, image, slot, place);
+        final made = _InkPixels(key, scale, image, slot, place, seed: seed, strokes: drawn, stamps: stamps, extents: extents);
         slot[place] = made;
         _pixelsKept.add(made);
-        while (_pixelsKept.length > _pixelsMost) {
-          _pixelsKept.first.forget();
-        }
         _pixelsReady.value++;
+        made.shown = _pixelsReady.value;
       } catch (e) {
         debugPrint('the lines of a page could not be made into pixels: $e');
       } finally {
         scaled.dispose();
+        base?.dispose();
       }
     });
+    _pixelsWaiting[job] = (timer: timer, base: base);
+  }
+
+  /// Whether [bytes] more fit in [pixelsBudget], [replacing] given back; with [letGo], the pixels of pages that are not on the screen
+  /// are let go of, oldest first, to make room. Those on the screen never are: two pages that took each other's place would each be
+  /// made again and again.
+  static bool _roomFor(int bytes, _InkPixels? replacing, {bool letGo = false}) {
+    var held = 0;
+    for (final p in _pixelsKept) {
+      if (!identical(p, replacing)) held += p.bytes;
+    }
+    for (final p in [..._pixelsKept]) {
+      if (held + bytes <= pixelsBudget) return true;
+      if (identical(p, replacing) || p.shown == _pixelsReady.value) continue;
+      held -= p.bytes;
+      if (letGo) p.forget();
+    }
+    return held + bytes <= pixelsBudget;
   }
 
   @override

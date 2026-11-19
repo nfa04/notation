@@ -23,14 +23,8 @@ extension _EditorLayout on _FixedPageNoteEditorState {
 
   Future<void> _remindAboutNote() => showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: widget.noteId, title: _titleController.text.trim().isEmpty ? tr('Untitled Note') : _titleController.text.trim());
 
-  /// The buttons of the top bar, left to right: the view, undo, the selection, the mode, what can be put on the page, the page itself,
+  /// The buttons of the top bar, left to right: the view, undo, the mode, what can be put on the page, the page itself,
   /// speech and the assistant, history and live work, and the files.
-  /// Marks [child] as part of the text selection's own area. In a browser, pressing anything outside a [SelectableRegion] takes the
-  /// focus from it and so drops its selection, before the press is finished: the Highlight button of the top bar went away under the
-  /// finger (and the words it marks were no longer selected). A [TapRegion] of the region's group is not "outside". Elsewhere the
-  /// selection is kept anyway, so this changes nothing there.
-  Widget _keepsSelection(Widget child) =>
-      TapRegion(groupId: SelectableRegion, child: child);
   List<Widget> _toolbarButtons(BuildContext context, {bool bottom = false}) {
     final sections = <String, List<Widget>>{
       'edit': [
@@ -90,116 +84,34 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         onPressed: _toggleFavorite,
       ),
       ],
-      'selection': [
-      if (_currentSelectedText != null &&
-          _currentSelectedText!.trim().isNotEmpty &&
-          _currentSelectedPageIndex != null) ...[
-          _keepsSelection(
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.yellow.shade700,
-            foregroundColor: Colors.black87,
-          ),
-          icon: const Icon(Icons.highlight, size: 16),
-          label: const Text(
-            'Highlight',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12
-            ),
-          ),
-          onPressed: () {
-            _applyHighlightOrCommentToSelection(
-              _currentSelectedPageIndex!,
-              _currentSelectedText,
-              isComment: false,
-            );
-            setState(() {
-              _currentSelectedText = null;
-              _currentSelectedPageIndex = null;
-            });
-          },
-        ),
-          ),
-          _keepsSelection(
-        PopupMenuButton<Color>(
-          key: const ValueKey('highlight-color'),
-          tooltip: tr('Highlight colour'),
-          icon: Icon(Icons.circle, size: 18, color: _highlightColor.withValues(alpha: 1)),
-          onSelected: (c) => setState(() => _highlightColor = c),
-          itemBuilder: (_) => [
-            for (final (name, color) in highlightColors)
-              PopupMenuItem(value: color, child: _keepsSelection( Row(children: [Icon(Icons.circle, color: color.withValues(alpha: 1), size: 16), const SizedBox(width: 8), Text(tr(name))])),
-                  ),
-          ],
-            ),
-        ),
-        const SizedBox(width: 8),
-          _keepsSelection(
-        OutlinedButton.icon(
-          key: const ValueKey('remove-highlight'),
-          icon: const Icon(Icons.format_color_reset, size: 16),
-          label: Text(tr('Remove highlight'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12,)),
-          onPressed: () {
-            _removeHighlightFromSelection(_currentSelectedPageIndex!, _currentSelectedText);
-            setState(() {
-              _currentSelectedText = null;
-              _currentSelectedPageIndex = null;
-            });
-          },
-        ),
-          ),
-        const SizedBox(width: 8),
-          _keepsSelection(
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Colors.white,
-          ),
-          icon: const Icon(Icons.add_comment, size: 16),
-          label: const Text(
-            'Comment',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12
-            ),
-          ),
-          onPressed: () {
-            _applyHighlightOrCommentToSelection(
-              _currentSelectedPageIndex!,
-              _currentSelectedText,
-              isComment: true,
-            );
-            setState(() {
-              _currentSelectedText = null;
-              _currentSelectedPageIndex = null;
-            });
-          },
-        ),
-          ),
-        const VerticalDivider(width: 24, indent: 12, endIndent: 12),
-      ],
-      ],
       'mode': [
       SegmentedButton<CanvasInteractionMode>(
           showSelectedIcon: false,
         segments: [
-          const ButtonSegment(
+          ButtonSegment(
             value: CanvasInteractionMode.selectText,
-            icon: Icon(Icons.select_all, size: 16),
-            label: Text('Select'),
+            // (a pointer: this is where things are picked up and moved, not "select all")
+            icon: const Icon(Icons.near_me_outlined, size: 16),
+            label: const Text('Select'),
+            tooltip: tr('Select and move what is on the page, and type in text boxes'),
           ),
-          const ButtonSegment(
+          ButtonSegment(
             value: CanvasInteractionMode.draw,
-            icon: Icon(Icons.edit, size: 16),
-            label: Text('Draw'),
+            icon: const Icon(Icons.edit, size: 16),
+            label: const Text('Draw'),
+            tooltip: tr('Write and draw with the pen'),
           ),
-          // the notebook's own text; on an imported PDF it edits the PDF's text and pictures
+          // the notebook's own text; on an imported PDF it edits the PDF's text and pictures, which is a different thing and says so
           ButtonSegment(
             value: CanvasInteractionMode.document,
             enabled: _isBlank && !_infinite || _pdfEditable,
-            icon: const Icon(Icons.article_outlined, size: 16),
-            label: const Text('Document'),
+            icon: Icon(_isBlank ? Icons.article_outlined : Icons.edit_document, size: 16),
+            label: _isBlank ? const Text('Document') : const Text('Edit PDF'),
+            tooltip: _infinite
+                ? tr('An infinite canvas has no typed text of its own: add a text box instead')
+                : !_isBlank
+                    ? (_pdfEditable ? tr('Change the text and pictures of the PDF itself') : tr('The text of a PDF cannot be changed on this device'))
+                    : tr('Type the text of the note, as in a word processor (a text box can go anywhere on a page instead)'),
           ),
         ],
         selected: {_mode},
@@ -445,22 +357,24 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         ),
         const SizedBox(width: 8),
       ],
-      if (_on(Feature.pdf) && !_infinite)
+      // (only a note without a PDF: one that has one adds more with the button below, or rearranges them in the page dialog)
+      if (_on(Feature.pdf) && !_infinite && _importedPdfName == null) ...[
       ElevatedButton.icon(
         onPressed: _isLoadingPdf ? null : _pickAndLoadPdfFile,
-        icon: _isLoadingPdf
+        icon: _importingPdf
             ? const SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator.adaptive(strokeWidth: 2),
               )
             : const Icon(Icons.folder_open_rounded, size: 16),
-        label: Text(
-          _importedPdfName != null ? 'Change PDF' : 'Import PDF',
-          style: const TextStyle(fontSize: 12),
+        label: const Text(
+          'Import PDF',
+          style: TextStyle(fontSize: 12),
         ),
       ),
       const SizedBox(width: 8),
+      ],
       if (_on(Feature.pdf) && !_infinite && _importedPdfName != null && _canShapePages) ...[
         IconButton(
           key: const ValueKey('add-pdfs-button'),
@@ -520,16 +434,14 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       ],
     };
     final shown = <Widget>[];
-    final selection = sections['selection']!;
+    // (what is done with selected text is in the menu at the selection, not here: buttons coming and going would change the bar's
+    // height while the finger is still selecting, move the page under it and select the line above)
     final ids = [for (final id in bottom ? _toolbarBottomIds() : _toolbarTopIds()) if (!_toolbarHidden.contains(id)) id];
-    // what is selected on the page gets its buttons right after the note's own (at the start of the top bar if those are hidden)
-    if (!bottom && _toolbarHidden.contains('note')) shown.addAll(selection);
     for (final id in ids) {
       final items = sections[id];
       if (items == null || items.isEmpty) continue;
       if (shown.isNotEmpty) shown.add(const VerticalDivider(width: 16, indent: 12, endIndent: 12));
       shown.addAll(items);
-      if (id == 'note') shown.addAll(selection);
     }
     if (bottom) return shown;
     return [
@@ -620,19 +532,8 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             builder: (context, _) {
               final scale = _pageScale;
               final extents = [for (var i = 0; i < _pageCount; i++) _pageExtent(i, scale)];
-              return NotificationListener<ScrollMetricsNotification>(
-              onNotification: (_) {
-                _lookForSheets();
-                return false;
-              },
-              child: CustomScrollView(
-              controller: _pageScroll,
-              physics: _penDown || _pinching
-                  ? const NeverScrollableScrollPhysics()
-                  : null,
-              // build well beyond the screen: a page takes a moment to appear
-              scrollCacheExtent: ScrollCacheExtent.pixels(math.max(3000.0, box.maxHeight * 3)),
-              slivers: [
+              _shownPageCount = extents.length;
+              final slivers = <Widget>[
                 if (_bannerImage != null)
                   SliverToBoxAdapter(child: _buildBanner()),
                 SliverPadding(
@@ -649,7 +550,24 @@ extension _EditorLayout on _FixedPageNoteEditorState {
                     ),
                   ),
                 ),
-              ],
+              ];
+              return NotificationListener<ScrollMetricsNotification>(
+              onNotification: (_) {
+                _lookForSheets();
+                return false;
+              },
+              // (the pen going down or lifting builds only this, not the pages: the same slivers are given again)
+              child: ValueListenableBuilder<bool>(
+              valueListenable: _penDownNote,
+              builder: (context, penDown, _) => CustomScrollView(
+              controller: _pageScroll,
+              physics: penDown || _pinching
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
+              // build well beyond the screen: a page takes a moment to appear
+              scrollCacheExtent: ScrollCacheExtent.pixels(math.max(3000.0, box.maxHeight * 3)),
+              slivers: slivers,
+              ),
               ),
             );
             },

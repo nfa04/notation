@@ -350,13 +350,26 @@ extension _EditorUndo on _FixedPageNoteEditorState {
         !strokes.any((s) => _layers.editable(s) && s.isNear(position, _eraserRadius))) {
       return;
     }
-    setState(() {
-      for (var i = strokes.length - 1; i >= 0; i--) {
-        if (_layers.editable(strokes[i]) && strokes[i].isNear(position, _eraserRadius)) {
-          _erased.add((page: pageIndex, index: i, stroke: strokes[i]));
-          strokes.removeAt(i);
-        }
+    for (var i = strokes.length - 1; i >= 0; i--) {
+      if (_layers.editable(strokes[i]) && strokes[i].isNear(position, _eraserRadius)) {
+        _erased.add((page: pageIndex, index: i, stroke: strokes[i]));
+        strokes.removeAt(i);
       }
-    });
+    }
+    // (only the lines of the page are built again, not the editor, unless more than they changed)
+    if (_erasesQuietly(pageIndex)) {
+      _inkChanged(pageIndex);
+    } else {
+      setState(() {});
+    }
   }
+
+  /// Whether erasing on [page] changes nothing but its lines: nothing is selected (an erased line may have been), no connector there
+  /// may have to follow a shape that went, and the page that is always left empty at the end is still where it was.
+  bool _erasesQuietly(int page) =>
+      _selection.isEmpty &&
+      _groupBoxes.isEmpty &&
+      _groupImages.isEmpty &&
+      (_infinite || _pageCount == _shownPageCount) &&
+      !(_strokesPerPage[page]?.any((s) => s.link?.isLinked ?? false) ?? false);
 }

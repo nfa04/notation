@@ -505,7 +505,7 @@ class NoteRepository {
         id: s['uid'] as String?,
         color: Color(s['color'] as int),
         width: s['width'] as double,
-        points: decodePoints(s['points'] as Uint8List),
+        points: StrokePoints.owning(decodePoints(s['points'] as Uint8List)),
         author: s['author'] as String?,
         dash: StrokeDash.byIndex(s['dash'] as int?),
         fill: s['fill'] == null ? null : Color(s['fill'] as int),

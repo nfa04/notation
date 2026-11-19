@@ -11,6 +11,15 @@ List<Offset> line(Offset a, Offset b, {int n = 12, double wob = 0, int seed = 1}
 }
 
 void main() {
+  test('moving the writing keeps its key, so it is not read again', () {
+    final a = [s(line(const Offset(100.3, 200.7), const Offset(140.1, 230.9))), s(line(const Offset(150, 200), const Offset(180, 240), seed: 2))];
+    for (final d in [const Offset(37.13, -12.77), const Offset(300.01, 411.99)]) {
+      final b = [for (final st in a) DrawingStroke(id: st.id, color: st.color, width: st.width, points: [for (final p in st.points) p + d])];
+      expect(InkCluster.keyOf(b), InkCluster.keyOf(a), reason: '$d');
+    }
+    final changed = [a[0], DrawingStroke(id: a[1].id, color: a[1].color, width: 2, points: [for (final p in a[1].points) p + const Offset(5, 0)])];
+    expect(InkCluster.keyOf(changed), isNot(InkCluster.keyOf(a)), reason: 'one stroke moved alone is other writing');
+  });
   group('lines of writing', groups);
   group('joined-up writing', joinedUp);
   for (final h in [20.0, 30.0, 40.0, 50.0]) {

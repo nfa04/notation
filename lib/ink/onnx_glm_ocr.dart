@@ -3,7 +3,7 @@ import 'dart:io' show File, Platform;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/widgets.dart' show WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 
@@ -26,7 +26,10 @@ import 'paddle_vl.dart' show withoutLoop;
 class GlmOnnxReader with WidgetsBindingObserver {
   final Duration keepOpen;
 
-  GlmOnnxReader({this.keepOpen = const Duration(seconds: 15)});
+  /// A reading comes every half minute or so while someone writes, and opening the networks took 10 to 20 s of a core on a Tab S6 Lite (and the
+  /// memory of it made Android close other apps): they stay open two minutes, long enough to write on. (If the system is short of memory
+  /// they are let go at once all the same, see [didHaveMemoryPressure]. In a browser, which has less to spare, 15 s.)
+  GlmOnnxReader({Duration? keepOpen}) : keepOpen = keepOpen ?? (kIsWeb ? const Duration(seconds: 15) : const Duration(minutes: 2));
 
   /// Where the time went, in microseconds, by step (the vision network, the prompt, and for each token: the run of the language model, the
   /// making of its inputs, the choice of the token (see [TokenPicker]), the word's row of the table): for measuring. Cleared by the
@@ -118,6 +121,7 @@ class GlmOnnxReader with WidgetsBindingObserver {
     if (_vision?.compiling != null) {
       _idle = Timer(keepOpen, _idleClose);
     } else {
+      debugPrint('onnx: glm let go: quiet for ${keepOpen.inSeconds} s');
       unawaited(close());
     }
   }
@@ -149,7 +153,10 @@ class GlmOnnxReader with WidgetsBindingObserver {
   }
 
   @override
-  void didHaveMemoryPressure() => unawaited(close());
+  void didHaveMemoryPressure() {
+    debugPrint('onnx: glm let go: the system is short of memory');
+    unawaited(close());
+  }
 }
 
 /// The size of a picture as the accelerator sees it (it makes one plan for each).
@@ -189,6 +196,7 @@ Future<Float32List> _see(WarmSession vision, GlmPicture p) async {
   try {
     final flat = await out.values.first.asFlattenedList();
     if (flat.length != wanted) throw StateError('The vision network gave ${flat.length} numbers where $wanted were expected.');
+    if (flat is Float32List) return flat; // (the plugin hands float tensors over as they are: nothing to copy)
     final features = Float32List(flat.length);
     for (var i = 0; i < flat.length; i++) {
       features[i] = (flat[i] as num).toDouble();

@@ -67,7 +67,7 @@ import '../algebra/equation_solver.dart';
 import '../algebra/mistake_card.dart';
 import '../algebra/plot.dart';
 import '../algebra/text_equation.dart';
-import '../automations/automation_service.dart' show ImageExporter, InkPreparer, NoteEditorHandle, StoreRefreshable, TitleSetter;
+import '../automations/automation_service.dart' show ImageExporter, InkPreparer, NoteEditorHandle, PdfExportStarter, StoreRefreshable, TitleSetter;
 import '../mcp/agent_editable.dart';
 import '../collab/collab_service.dart';
 import '../collab/invite.dart';
@@ -614,7 +614,7 @@ class FixedPageNoteEditor extends StatefulWidget {
   State<FixedPageNoteEditor> createState() => _FixedPageNoteEditorState();
 }
 
-class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsBindingObserver implements NoteEditorHandle, StoreRefreshable, InkPreparer, TitleSetter, ImageExporter, AgentEditable {
+class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsBindingObserver implements NoteEditorHandle, StoreRefreshable, InkPreparer, TitleSetter, ImageExporter, PdfExportStarter, AgentEditable {
   /// Reads the writing of the note in the background: ahead of time, line by line for the maths check, and for the search (see
   /// `editor_ink_prefetch.dart`).
   late final NoteInkReader _reader = NoteInkReader(
@@ -646,12 +646,18 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     onProgress: _inkProgressed,
     // (in a live session the host reads and tells the guests; a guest reads for itself only while it has no host to read for it)
     readsHere: _inkReadsHere,
+    // (the maths check of a guest reads nothing either: the host reads by lines for it, unless it cannot read formulas)
+    checkReadsHere: () => _inkReadsHere() || !(_live?.hostReadsMaths ?? false),
+    othersCheck: () => _live?.othersCheckMaths ?? false,
     share: (r) => _live?.announceReadings(r),
   );
 
   /// Whether the writing of this note is read here in the background (false for a guest that has a host).
   bool _inkReadsHere() => _live?.readsInk ?? true;
-  bool _inkWasReadingHere = true; // (to see when that changes: a host that left, a guest that was left by its host)
+
+  /// Who reads what as it was last seen (to see when that changes: a host that left, a guest that was left by its host, a guest that
+  /// switched its maths check on, a host that can or cannot read formulas).
+  (bool, bool, bool) _inkWasReadingHere = (true, false, false);
 
   /// The lines of maths that were checked, and who checks.
   final _marker = MathMarker();
@@ -694,8 +700,6 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// Where an automation wants the exported PDF, and what went wrong with it.
   String? _exportTo;
 
-  /// What the handwriting says, for the text under it in the PDF being made (see `pdf_ink_text.dart`).
-  PdfInkText? _inkText;
   String? _exportError;
 
   @override
@@ -837,18 +841,22 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   }
 
   @override
-  Future<String?> exportPdfTo(String path) async {
+  Future<String?> exportPdfTo(String path) async => await (await startPdfExport(path));
+
+  @override
+  Future<Future<String?>> startPdfExport(String path) async {
     await ready;
-    if (!mounted) return 'the note was closed';
-    _exportTo = path;
-    _exportError = null;
-    try {
-      await _exportPdf();
-    } finally {
-      _exportTo = null;
-    }
-    if (_exportError != null) return _exportError;
-    return File(path).existsSync() ? null : 'nothing was written';
+    if (!mounted) return Future<String?>.value('the note was closed');
+    final laidOut = Completer<void>();
+    final written = _exportPdf(
+      to: path,
+      prepared: () {
+        if (!laidOut.isCompleted) laidOut.complete();
+      },
+    ).then((error) => error ?? (File(path).existsSync() ? null : 'nothing was written'));
+    // (an export that ends before it gets that far, failed or not, is over as well)
+    await Future.any([laidOut.future, written]);
+    return written;
   }
 
 
@@ -1198,6 +1206,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// The files of [_pdfTable] that were opened, by path, kept open until the editor closes (a file taken out of the note can be taken back).
   final Map<String, PdfDocument> _tableDocs = {};
   bool _isLoadingPdf = false;
+  /// Only while a PDF is being picked and imported (the import button spins for that, not for exports, which also set [_isLoadingPdf]).
+  bool _importingPdf = false;
 
   String? _currentSelectedText;
 
@@ -1230,6 +1240,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   /// Lines drawn nearly straight come out straight (a setting, on by default).
   bool _straighten = true;
+
+  /// How readily lines and shapes are corrected (the setting straightenStrengthSetting): 0.5 only very neat ones .. 2 rough ones too.
+  double _straightenLooseness = 1;
 
   /// The draw bar shows its rarely used tools (guides, stabiliser, symmetry, onion skin, straightening, clearing the page, a plot).
   bool _moreTools = false;
@@ -1349,8 +1362,28 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   DateTime? _grewBoxAt;
   Offset _shapeStart = Offset.zero;
 
-  /// A pen/mouse is on the page: the list must not scroll under it.
-  bool _penDown = false;
+  /// A pen/mouse is on the page: the list must not scroll under it. Set without a setState when the pen goes down and lifts (a build of
+  /// the whole editor at each would be most of the cost of a line): only the scrolling list listens.
+  bool get _penDown => _penDownNote.value;
+  set _penDown(bool v) => _penDownNote.value = v;
+  final _penDownNote = ValueNotifier<bool>(false);
+
+  /// How many pages the page list was last built with: a line that changes that (the first on the last page, which brings an empty
+  /// page after it) needs a build of the editor.
+  int? _shownPageCount;
+
+  /// Goes up when the finished lines of a page change without a build of the editor (a line written, see [_inkChanged]): the ink
+  /// layers of that page listen to it, and nothing else is built.
+  final Map<int, ValueNotifier<int>> _inkRevisions = {};
+  ValueNotifier<int> _inkRevisionOf(int page) => _inkRevisions.putIfAbsent(page, () => ValueNotifier(0));
+
+  /// The lines of [page] changed, and nothing else that is shown: its ink layers are built again, and the change is saved as every
+  /// setState's is.
+  void _inkChanged(int page) {
+    _inkRevisions[page]?.value++;
+    _scheduleSave();
+    _observeLecture();
+  }
   /// The pointer that set [_penDown]; whichever way it ends (even where the widget that took it is gone) the flag is cleared.
   int _penPointer = -1;
 
@@ -1410,6 +1443,11 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   Offset _dragGlobal = Offset.zero;
   Timer? _dragScroll;
   int _lastPointerDown = -1;
+
+  /// The selection's menu opened by the editor itself: on a computer when the mouse lets go of a selection (Flutter opens it only on a
+  /// right click). [_menuOnUp]: whether the press that is down began a selection with the left button.
+  final _mouseMenu = ContextMenuController();
+  bool _menuOnUp = false;
 
   /// The page under [global] and the point on it in page units. Above the first
   /// page and below the last one, those pages.
@@ -1925,7 +1963,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         widget.bookmarks?.list(widget.noteId).then((marks) {
           if (mounted) _bookmarks.value = marks;
         });
-        _undoStack.onPush = _absorbMeta;
+        _undoStack.onPush = () {
+          _absorbMeta();
+          _undoTick.value++; // (the undo buttons follow it: a line written is no setState)
+        };
       });
       _warnMissingExtensionBrushes();
       if (reload) return;
@@ -2157,6 +2198,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   @override
   void dispose() {
+    _mouseMenu.remove();
     _pdfContentTimer?.cancel();
     _soundPlayer?.dispose();
     _followIds.dispose();
@@ -2195,6 +2237,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     widget.spell?.removeListener(_inkDictionaryChanged);
     _metaTimer?.cancel();
     _undoTick.dispose();
+    _penDownNote.dispose();
+    for (final n in _inkRevisions.values) {
+      n.dispose();
+    }
     _findField.dispose();
     _findFocus.dispose();
     _replaceField.dispose();

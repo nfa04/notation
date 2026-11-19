@@ -28,7 +28,7 @@ Future<List<List<int>>> readPicturesOnnx({
   required List<PaddleVlPicture> pictures,
   int maxTokens = 160,
 }) async {
-  OrtSessionOptions options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false);
+  OrtSessionOptions options() => OrtSessionOptions(intraOpNumThreads: onnxThreads, interOpNumThreads: 1, useArena: false, lowPriority: true);
 
   final features = <Float32List>[];
   final vision = await openOnnxSession(visionPath, options: options(), accelerate: !await onnxNeedsFixedShapes());

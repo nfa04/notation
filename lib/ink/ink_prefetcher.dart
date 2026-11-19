@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+
 import 'package:flutter/foundation.dart';
 
 import '../models/canvas_models.dart';
@@ -9,7 +10,13 @@ import 'ink_recognizer.dart';
 import 'math_service.dart';
 
 /// What has been read of a cluster so far.
+/// A line of a block that was read: the strokes it is made of, what it says, where it lies and the words of it that were unsure.
+typedef InkLine = ({Set<String> ids, String text, double top, List<String> unsure});
+
 class InkReading {
+  /// The lines of a block of several lines, as they were when it was read (null: one line, or not known).
+  List<InkLine>? lines;
+
   /// The cluster as text, once read.
   String? text;
 
@@ -248,16 +255,19 @@ class InkPrefetcher extends ChangeNotifier {
           r.others = null;
         }
         _keptMath.clear(); // (read by the other model)
+        _keptOthers.clear();
         for (final p in _picked.values) {
           p.latex = null;
         }
       }
       final clusters = _clusters();
+      _inherit(clusters);
       // what is not on the page any more is forgotten
       final alive = {for (final c in clusters) c.key};
       _cache.removeWhere((k, _) => !alive.contains(k));
       _forgetPicked();
       _useKept(clusters);
+      _noteMoves(clusters);
       var done = 0;
       final todo = _todo(clusters);
       onPending?.call(todo.length);
@@ -279,6 +289,55 @@ class InkPrefetcher extends ChangeNotifier {
     }
   }
 
+  /// A line taken out of a block, or put into another one, makes blocks that were not read as they are (their key is new), though the
+  /// writing in them was read a moment ago as part of the old ones. The old reading knows its lines ([InkReading.lines], made when it
+  /// was read: the strokes themselves have been moved in place by now); the lines that went into a new block are its text, which is
+  /// not read again.
+  void _inherit(List<InkCluster> clusters) {
+    if (!_hasText) return;
+    final now = {for (final c in clusters) c.key};
+    final lines = <InkLine>[];
+    for (final e in _cache.entries) {
+      if (!now.contains(e.key) && e.value.lines != null) lines.addAll(e.value.lines!);
+    }
+    if (lines.isEmpty) return;
+    for (final c in clusters) {
+      if (_cache[c.key]?.text != null || _kept.containsKey(c.key)) continue;
+      final ids = c.ids;
+      final mine = [for (final l in lines) if (l.ids.every(ids.contains)) l];
+      if (mine.isEmpty || mine.fold(0, (n, l) => n + l.ids.length) != ids.length) continue; // (it is made up of whole lines, or it is not)
+      mine.sort((a, b) => a.top.compareTo(b.top));
+      final text = mine.map((l) => l.text).join('\n');
+      final r = _cache.putIfAbsent(c.key, InkReading.new);
+      r.text = text;
+      r.unsure = [for (final w in {for (final l in mine) ...l.unsure}) if (text.contains(w)) w];
+      r.failed = false;
+      r.lines = mine.length > 1 ? mine : null;
+    }
+  }
+
+  /// Notes the lines of [c], read as [text], so that they can be used when the block is taken apart (see [_inherit]).
+  static List<InkLine>? _linesOf(InkCluster c, String text, List<String> unsure) {
+    final lines = text.split('\n');
+    if (lines.length < 2) return null;
+    final rows = rowsOf(c);
+    if (rows.length != lines.length) return null;
+    return [for (var i = 0; i < rows.length; i++) (ids: rows[i].ids, text: lines[i].trim(), top: rows[i].bounds.top, unsure: unsure)];
+  }
+
+  /// Where the blocks lay when the listeners were last told.
+  String _layout = '';
+
+  /// A block that was moved keeps its reading (its key does not depend on where it lies), so nothing is read and nothing would tell
+  /// the ones who show or keep where the writing is (underlines, marks, the saved places): they are told now.
+  void _noteMoves(List<InkCluster> clusters) {
+    final layout = [for (final c in clusters) '${c.key}@${c.page},${c.bounds.left.round()},${c.bounds.top.round()}'].join(' ');
+    if (layout == _layout) return;
+    final first = _layout.isEmpty;
+    _layout = layout;
+    if (!first && !_disposed) notifyListeners();
+  }
+
   Future<void> _read(InkCluster c) async {
     final r = _cache.putIfAbsent(c.key, InkReading.new);
     if (_nothingToRead(c)) {
@@ -292,6 +351,7 @@ class InkPrefetcher extends ChangeNotifier {
         final got = await _text!.recognizeScored(c.strokes);
         r.text = got.text.trim();
         r.unsure = got.unsure;
+        r.lines = _linesOf(c, r.text!, r.unsure);
         reads++;
       }
       if (_needsMath(c, r)) {
@@ -437,6 +497,15 @@ class InkPrefetcher extends ChangeNotifier {
   /// What conversions of selections that are not whole blocks read (by the key of the selected strokes).
   final Map<String, _Picked> _picked = {};
 
+  /// The other readings of formulas that another device made (see [lookAgain]), by the key of what was read.
+  final Map<String, List<String>> _keptOthers = {};
+
+  /// The other readings that were made of each formula (see [lookAgain]), where there are any that differ.
+  Map<String, List<String>> allOthers() => {
+        for (final e in _cache.entries)
+          if (e.value.others case final o? when o.isNotEmpty && e.value.latex != null) e.key: o,
+      };
+
   /// Takes readings that were kept from an earlier time: [texts] of blocks, [formulas] of blocks or rows, [picked] conversions of
   /// selections (key to the ids of their strokes, the text and the formula). Each is named by the key of its strokes, which names
   /// them exactly: it is there at once, as if it had just been read, and is not read again. What was read here is not replaced.
@@ -445,11 +514,13 @@ class InkPrefetcher extends ChangeNotifier {
     Map<String, String> formulas = const {},
     Map<String, String> unsure = const {},
     Map<String, ({Set<String> ids, String? text, String? latex})> picked = const {},
+    Map<String, List<String>> others = const {},
   }) {
     if (_disposed) return;
     _kept.addAll(texts);
     _keptUnsure.addAll(unsure);
     _keptMath.addAll(formulas);
+    _keptOthers.addAll(others);
     for (final e in picked.entries) {
       final p = _picked.putIfAbsent(e.key, () => _Picked(e.value.ids));
       p.text ??= e.value.text;
@@ -466,9 +537,16 @@ class InkPrefetcher extends ChangeNotifier {
       final text = _kept[c.key], latex = _keptMath[c.key];
       if (text == null && latex == null) continue;
       final r = _cache.putIfAbsent(c.key, InkReading.new);
+      // (the other readings belong to the formula they were made of: one read here, or another one, has none of them)
+      final others = _keptOthers[c.key];
+      if (others != null && r.others == null && latex != null && (r.latex == null || r.latex == latex)) {
+        r.others = others;
+        any = true;
+      }
       if (r.text == null && text != null) {
         r.text = text;
         r.unsure = _unsureWords(_keptUnsure[c.key]);
+        r.lines = _linesOf(c, text, r.unsure);
         r.failed = false;
         any = true;
       }

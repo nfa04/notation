@@ -27,7 +27,7 @@ class OnnxMathModel implements MathOcrModel {
   static Future<OnnxMathModel> open(String encoderPath, String decoderPath, {bool keepEncoder = false}) async =>
       OnnxMathModel._(encoderPath, decoderPath, keepEncoder);
 
-  static final _options = OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1, useArena: false);
+  static final _options = OrtSessionOptions(intraOpNumThreads: 4, interOpNumThreads: 1, useArena: false, lowPriority: true); // (low priority: the reading goes on in the background while the person writes)
 
   @override
   Future<Object> encode(Float32List pixels) async {

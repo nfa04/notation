@@ -188,6 +188,44 @@ void main() {
       expect(prefetch.readings().where((r) => r.block.ids.contains('bar')).single.text, '');
     });
 
+    test('a block that is moved keeps its reading, and the listeners are told where it lies now', () async {
+      final p = make(t: text);
+      await until(() => text.calls.length >= 2);
+      var told = 0;
+      p.addListener(() => told++);
+      page[0] = [
+        for (final s in page[0]!) DrawingStroke(id: s.id, color: s.color, width: s.width, points: [for (final o in s.points) o + const Offset(60, 40)]),
+      ];
+      p.changed();
+      await until(() => told > 0);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(text.calls, hasLength(2), reason: 'nothing read again');
+      expect(told, greaterThan(0));
+      expect(p.readings().map((r) => r.text), everyElement(startsWith('text of')));
+      expect(p.readings().map((r) => r.block.bounds.left).reduce((a, b) => a < b ? a : b), greaterThan(150));
+    });
+
+    test('a line moved out of a block, or into one, is not read again: the lines of the old reading are given to the new blocks', () async {
+      text = FakeReader((s) => 'one\ntwo\nthree');
+      page = {
+        0: [...word('l1', 100, 100), ...word('l2', 100, 130), ...word('l3', 100, 160)],
+      };
+      final p = make(t: text);
+      await until(() => text.calls.isNotEmpty);
+      expect(p.readings().single.text, 'one\ntwo\nthree');
+      for (final s in page[0]!.where((s) => s.id.startsWith('l3'))) {
+        for (var i = 0; i < s.points.length; i++) {
+          s.points[i] = s.points[i] + const Offset(0, 400); // (moved in place, as the editor does)
+        }
+      }
+      p.changed();
+      await until(() => p.readings().length == 2 && p.readings().every((r) => r.text != null));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(text.calls, hasLength(1), reason: 'nothing read again');
+      final byTop = p.readings().toList()..sort((a, b) => a.block.bounds.top.compareTo(b.block.bounds.top));
+      expect(byTop.map((r) => r.text), ['one\ntwo', 'three']);
+    });
+
     test('only what changed is read again', () async {
       final p = make(t: text);
       await until(() => text.calls.length >= 2);

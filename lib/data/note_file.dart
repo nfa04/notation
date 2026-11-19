@@ -331,7 +331,7 @@ Map<int, List<DrawingStroke>> decodeStrokes(Uint8List bytes) {
       if (len > 0) layer = utf8.decode(bytes.sublist(at, at + len), allowMalformed: true);
       at += len;
     }
-    out.putIfAbsent(page, () => []).add(DrawingStroke(id: id, color: color, width: width, points: points, dash: dash, fill: fill, pressures: pressures, brush: brush, layer: layer));
+    out.putIfAbsent(page, () => []).add(DrawingStroke(id: id, color: color, width: width, points: StrokePoints.owning(points), dash: dash, fill: fill, pressures: pressures, brush: brush, layer: layer));
   }
   return out;
 }
