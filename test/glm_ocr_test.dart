@@ -251,6 +251,17 @@ void main() {
         expect(again.reader, HandwritingReader.glm);
         expect(again.quality, GlmQuality.light);
         expect(again.installed, isTrue);
+
+        // how readily words are marked as uncertain: standard in the middle, kept, and handed to the reader
+        expect(hw.uncertainty, 0.5);
+        expect(glm.unsureLimit, closeTo(-0.5, 1e-9));
+        await hw.setUncertainty(1);
+        expect(glm.unsureLimit, greaterThan(-0.2)); // (often: even a slightly doubtful token marks its word)
+        await hw.setUncertainty(0);
+        expect(glm.unsureLimit, closeTo(-1.5, 1e-9));
+        expect(settings[HandwritingService.uncertaintyKey], '0.0');
+        await again.load();
+        expect(again.uncertainty, 0.0);
       });
     });
 

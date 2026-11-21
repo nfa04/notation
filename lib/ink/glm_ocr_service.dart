@@ -109,6 +109,9 @@ class GlmOcrService extends ModelFilesService {
   /// of them wrong.
   static const unsureBelow = -0.5;
 
+  /// The limit in use: [unsureBelow] unless the person moved the slider (see [HandwritingService.uncertainty]).
+  double unsureLimit = unsureBelow;
+
   /// A line is cut into pieces that are not wider than this many times their height: the network's work grows with the width.
   static const widestPiece = 24.0;
 
@@ -202,7 +205,7 @@ class GlmOcrService extends ModelFilesService {
       for (final r in tokens)
         () {
           final text = plainI(vocabulary.decode(r.tokens));
-          return isWriting(text, r.confidence) ? (text: text, unsure: vocabulary.unsureWords(r.tokens, r.logProbs, unsureBelow)) : (text: '', unsure: const <String>[]);
+          return isWriting(text, r.confidence) ? (text: text, unsure: vocabulary.unsureWords(r.tokens, r.logProbs, unsureLimit)) : (text: '', unsure: const <String>[]);
         }(),
     ];
   }

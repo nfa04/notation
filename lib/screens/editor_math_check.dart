@@ -53,16 +53,18 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
           if (m.page == pageIndex) _markBadge(m),
       ];
 
+  (IconData, Color) _verdictIcon(LineCheck c, bool doubtful) => switch (c.verdict) {
+        _ when doubtful => (Icons.help_outline, Colors.orange),
+        Verdict.right => (Icons.check_circle, Colors.green),
+        Verdict.rounded => (Icons.check_circle_outline, Colors.green),
+        Verdict.wrong => (Icons.cancel, Colors.red),
+        Verdict.lost || Verdict.widened => (Icons.warning_amber_rounded, Colors.orange),
+        null => (Icons.calculate_outlined, Colors.blueGrey),
+      };
+
   Widget _markBadge(MathMark m) {
     final c = m.check;
-    final (icon, color) = switch (c.verdict) {
-      _ when m.doubtful => (Icons.help_outline, Colors.orange),
-      Verdict.right => (Icons.check_circle, Colors.green),
-      Verdict.rounded => (Icons.check_circle_outline, Colors.green),
-      Verdict.wrong => (Icons.cancel, Colors.red),
-      Verdict.lost || Verdict.widened => (Icons.warning_amber_rounded, Colors.orange),
-      null => (Icons.calculate_outlined, Colors.blueGrey),
-    };
+    final (icon, color) = _verdictIcon(c, m.doubtful);
     final answer = c.verdict == null && c.answer != null;
     return Positioned(
       left: math.min(m.rect.right + 6, _paperWidth - (answer ? 90 : 30)),
@@ -145,8 +147,13 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
 
   /// What is known about one line, as it is told in the sheet: what was read (unless [showRead] is false: the sheet shows
   /// it in a field to correct), what is wrong and what it should be.
-  List<Widget> _markBody(String latex, LineCheck c, {bool showRead = true, bool doubtful = false}) => [
-        Text(c.isNothing ? tr('Nothing to check in this line') : (doubtful ? tr('I am not sure I read this right') : _headline(c)), style: Theme.of(context).textTheme.titleMedium),
+  List<Widget> _markBody(String latex, LineCheck c, {bool showRead = true, bool doubtful = false, bool withIcon = false}) => [
+        () {
+          final title = Text(c.isNothing ? tr('Nothing to check in this line') : (doubtful ? tr('I am not sure I read this right') : _headline(c)), style: Theme.of(context).textTheme.titleMedium);
+          if (!withIcon) return title;
+          final (icon, color) = _verdictIcon(c, doubtful);
+          return Row(children: [Icon(icon, color: color, size: 24), const SizedBox(width: 8), Expanded(child: title)]);
+        }(),
         if (doubtful) ...[
           const SizedBox(height: 4),
           Text(tr('As I read it, this is a mistake, but the writing can be read another way (below). Pick what you wrote:'), style: Theme.of(context).textTheme.bodySmall),
@@ -250,14 +257,163 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
     return mistakeCard(latex, check, headline: _headline(check), expectedLabel: _expectedLabel(check), counterLabel: _counterLabel(check), page: page);
   }
 
-  /// The sheet of a mark: the same as the sheet of the manual check, for the whole worked solution the line is in, scrolled
-  /// to the line that was tapped.
-  Future<void> _explainMark(MathMark m) => _checkSheet(
-        latex: [for (final l in m.solution) l.latex],
-        keys: [for (final l in m.solution) l.key],
-        page: m.page,
-        focus: m.index,
-      );
+  /// The button that keeps the mistake of line [i] as a flashcard (nothing when there is none to keep); it closes the sheet it is in.
+  List<Widget> _keepCardButton(BuildContext sheet, int i, int page, String latex, LineCheck check) {
+    final card = _cardFor(page, latex, check);
+    if (card == null) return const [];
+    return [
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        key: ValueKey('math-check-keep-card-$i'),
+        icon: const Icon(Icons.style_outlined),
+        label: Text(tr('Keep this mistake as a flashcard')),
+        onPressed: () async {
+          final added = await widget.cards!.addAll(widget.noteId, [card]);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(added > 0 ? tr('Kept it as a flashcard, to ask again later') : tr('This mistake is a flashcard already'))));
+          if (sheet.mounted) Navigator.pop(sheet);
+        },
+      ),
+    ];
+  }
+
+  /// Scrolls the pages so that the line of [m] is in the top half of the screen, above the card that tells about it.
+  void _showLineAbove(MathMark m) {
+    if (_infinite || !_pageScroll.hasClients) return;
+    final height = MediaQuery.of(context).size.height;
+    final y = _pageTop(m.page) + _rulerExtent + m.rect.center.dy * _pageScale;
+    final top = _pageScroll.offset;
+    if (y > top + height * 0.4 || y < top + 60) {
+      unawaited(_pageScroll.animateTo((y - height * 0.2).clamp(0.0, _pageScroll.position.maxScrollExtent), duration: const Duration(milliseconds: 200), curve: Curves.easeOut));
+    }
+  }
+
+  /// What a mark says, in a small card under the line (the line stays in sight above it): the verdict, what was read, what is wrong
+  /// and what it should be, for that line only. When the reading is doubtful the card first asks what was written, and tells the verdict
+  /// after that. "Whole solution" opens the sheet with every line of the worked solution.
+  Future<void> _explainMark(MathMark m) async {
+    final latex = [for (final l in m.solution) l.latex];
+    final keys = [for (final l in m.solution) l.key];
+    final i = m.index;
+    final edit = TextEditingController(text: latex[i] ?? '');
+    final asking = <int>{};
+    var checks = checkLines(latex);
+    var confirmed = false; // (the person said the reading is what was written)
+    var fixing = false; // (the field with the reading is open)
+    Timer? later;
+    void change(String v, StateSetter setCard) {
+      latex[i] = v.trim().isEmpty ? null : v.trim();
+      checks = checkLines(latex);
+      if (latex[i] != null) {
+        later?.cancel();
+        later = Timer(const Duration(milliseconds: 350), () {
+          _ink?.correct(keys[i], latex[i]!);
+          _refreshMarks();
+        });
+      }
+      setCard(() {});
+    }
+
+    List<String> others() => [for (final o in _ink?.othersOf(keys[i]) ?? const <String>[]) if (!sameReading(o, latex[i] ?? '')) o];
+    _showLineAbove(m);
+    var whole = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      barrierColor: Colors.black12,
+      builder: (sheet) => StatefulBuilder(
+        builder: (sheet, setCard) {
+          final c = checks[i];
+          final other = others();
+          final doubtful = c.isProblem && !confirmed && latex[i] != null && readsOtherwise(latex, i, other);
+          final theme = Theme.of(sheet);
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * 0.45),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 12 + MediaQuery.of(sheet).viewInsets.bottom),
+                child: Column(
+                  key: const ValueKey('math-check-card'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (latex[i] == null) Text(tr('A line could not be read'), style: theme.textTheme.bodyMedium),
+                    if (doubtful) ...[
+                      Row(children: [
+                        const Icon(Icons.help_outline, color: Colors.orange, size: 24),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(tr('Did you write one of these?'), style: theme.textTheme.titleMedium)),
+                      ]),
+                      const SizedBox(height: 4),
+                      Text(tr('As I read it, this is a mistake, but the writing can be read another way (below). Pick what you wrote:'), style: theme.textTheme.bodySmall),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 8, runSpacing: 4, children: [
+                        ChoiceChip(
+                          key: ValueKey('math-check-keep-reading-$i'),
+                          selected: true,
+                          label: Math.tex(latex[i]!, textStyle: const TextStyle(fontSize: 16), onErrorFallback: (_) => Text.verbatim(latex[i]!)),
+                          onSelected: (_) => setCard(() => confirmed = true),
+                        ),
+                        for (var k = 0; k < other.length; k++)
+                          ActionChip(
+                            key: ValueKey('math-check-other-$i-$k'),
+                            label: Math.tex(other[k], textStyle: const TextStyle(fontSize: 16), onErrorFallback: (_) => Text.verbatim(other[k])),
+                            onPressed: () {
+                              edit.text = other[k];
+                              change(other[k], setCard);
+                            },
+                          ),
+                      ]),
+                    ] else ...[
+                      ..._markBody(edit.text, c, withIcon: true),
+                      if (i > 0 && latex[i - 1] != null && c.isProblem && c.expected == null) ...[
+                        const SizedBox(height: 8),
+                        Opacity(opacity: 0.6, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr('The line above:'), style: theme.textTheme.labelMedium), _formula(latex[i - 1]!)])),
+                      ],
+                    ],
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      OutlinedButton.icon(
+                        key: ValueKey('math-check-fix-$i'),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: Text(tr('Fix reading')),
+                        onPressed: () => setCard(() => fixing = !fixing),
+                      ),
+                      if (latex.length > 1)
+                        TextButton(
+                          key: const ValueKey('math-check-whole'),
+                          onPressed: () {
+                            whole = true;
+                            Navigator.pop(sheet);
+                          },
+                          child: Text(tr('Whole solution')),
+                        ),
+                    ]),
+                    if (fixing) ...[
+                      const SizedBox(height: 8),
+                      _correctionField(edit, (v) => change(v, setCard), key: ValueKey('math-check-edit-$i')),
+                      _formula(edit.text),
+                      if (!doubtful) ..._otherReadings(i, [edit], latex, keys, asking, other, (v) {
+                            edit.text = v;
+                            change(v, setCard);
+                          }, setCard),
+                    ],
+                    _truthTableButton(edit.text),
+                    ..._keepCardButton(sheet, i, m.page, edit.text, c),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    later?.cancel();
+    Future<void>.delayed(const Duration(milliseconds: 600), edit.dispose); // (the card is still sliding out)
+    if (whole && mounted) {
+      await _checkSheet(latex: latex, keys: keys, page: m.page, focus: i);
+    }
+  }
 
   /// The sheet that tells how lines of maths were checked (as one worked solution): for each line what was read (in a field
   /// to correct, and the line is checked again), what is wrong and what it should be. [keys] (one for each line) say which
@@ -327,21 +483,7 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
                               edit(i, v, setSheet);
                             }, setSheet),
                             _truthTableButton(edits[i].text),
-                            if (_cardFor(page, edits[i].text, checks[i]) case final card?) ...[
-                              const SizedBox(height: 8),
-                              OutlinedButton.icon(
-                                key: ValueKey('math-check-keep-card-$i'),
-                                icon: const Icon(Icons.style_outlined),
-                                label: Text(tr('Keep this mistake as a flashcard')),
-                                onPressed: () async {
-                                  final added = await widget.cards!.addAll(widget.noteId, [card]);
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(
-                                      content: Text(added > 0 ? tr('Kept it as a flashcard, to ask again later') : tr('This mistake is a flashcard already'))));
-                                  if (context.mounted) Navigator.pop(context);
-                                },
-                              ),
-                            ],
+                            ..._keepCardButton(context, i, page, edits[i].text, checks[i]),
                           ],
                         ),
                       ),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../llm/model_files.dart';
 import '../models/canvas_models.dart';
 import 'glm_ocr_service.dart';
@@ -19,6 +21,9 @@ class HandwritingService extends InkRecognizer {
 
   /// Which vision network GLM-OCR uses (kept): see [GlmWeights].
   static const weightsKey = 'handwriting_weights';
+
+  /// How readily words are marked as uncertain (kept): 0 to 1, see [uncertainty].
+  static const uncertaintyKey = 'handwriting_uncertainty';
 
   /// GLM-OCR, the standard reader.
   final GlmOcrService glm;
@@ -45,6 +50,24 @@ class HandwritingService extends InkRecognizer {
 
   GlmQuality _quality = GlmQuality.standard;
   GlmQuality get quality => _quality;
+
+  double _uncertainty = 0.5;
+
+  /// How readily the reader marks a word as uncertain (yellow line): 0 is rarely, 1 is often, 0.5 the standard (see
+  /// [GlmOcrService.unsureBelow]). It counts for what is read from now on; what was read before keeps its marks.
+  double get uncertainty => _uncertainty;
+
+  /// The log probability under which a token makes its word uncertain: -1.5 at 0, -0.5 at 0.5, -0.17 at 1.
+  static double limitFor(double uncertainty) => GlmOcrService.unsureBelow * math.pow(3, 1 - 2 * uncertainty.clamp(0.0, 1.0)).toDouble();
+
+  Future<void> setUncertainty(double v) async {
+    v = v.clamp(0.0, 1.0);
+    if (v == _uncertainty) return;
+    _uncertainty = v;
+    glm.unsureLimit = limitFor(v);
+    await _writeSetting?.call(uncertaintyKey, v.toString());
+    notifyListeners();
+  }
 
   bool get _usesPaddle => _reader == HandwritingReader.paddle && paddle != null;
 
@@ -95,6 +118,8 @@ class HandwritingService extends InkRecognizer {
     await glm.useWeights(GlmWeights.values.where((v) => v.name == w).firstOrNull ?? GlmWeights.platformDefault);
     final q = await _readSetting?.call(qualityKey);
     _quality = GlmQuality.values.where((v) => v.name == q).firstOrNull ?? GlmQuality.standard;
+    _uncertainty = (double.tryParse(await _readSetting?.call(uncertaintyKey) ?? '') ?? 0.5).clamp(0.0, 1.0);
+    glm.unsureLimit = limitFor(_uncertainty);
     await _current.load();
     notifyListeners();
   }

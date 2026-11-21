@@ -127,16 +127,25 @@ void main() {
       expect(find.byKey(const ValueKey('math-mark-right')), findsOneWidget, reason: '2x = 8 follows');
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsOneWidget, reason: 'x = 5 does not');
 
-      // the mark says why
+      // the mark says why, in a card about that line only
       await tester.tap(find.byKey(const ValueKey('math-mark-wrong')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('math-check-sheet')), findsOneWidget);
+      expect(find.byKey(const ValueKey('math-check-card')), findsOneWidget);
+      expect(find.byKey(const ValueKey('math-check-sheet')), findsNothing);
       expect(find.text('This does not follow from the line above'), findsOneWidget);
       expect(find.text('The line above has:'), findsOneWidget);
-      // it is the sheet of the manual check: every line of the solution, not only the one that was tapped
+      expect(find.byKey(const ValueKey('math-check-edit-0')), findsNothing);
+      expect(find.byKey(const ValueKey('math-check-edit-2')), findsNothing, reason: 'the field of the reading is opened with "Fix reading"');
+      expect(find.text('This looks right'), findsNothing);
+      // "Whole solution" is the sheet of the manual check: every line of the solution
+      await tester.tap(find.byKey(const ValueKey('math-check-whole')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('math-check-card')), findsNothing);
+      expect(find.byKey(const ValueKey('math-check-sheet')), findsOneWidget);
       expect(find.byKey(const ValueKey('math-check-edit-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('math-check-edit-1')), findsOneWidget);
       expect(find.text('This looks right'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1)); // (the card's fields go once it is gone)
       await closeEditor(tester);
     });
 
@@ -149,7 +158,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('math-check-keep-card-2')));
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200))); // (the card is written to the database)
         await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('math-check-sheet')), findsNothing, reason: 'the sheet closes');
+        expect(find.byKey(const ValueKey('math-check-card')), findsNothing, reason: 'the card closes');
         expect(find.text(round == 0 ? 'Kept it as a flashcard, to ask again later' : 'This mistake is a flashcard already'), findsOneWidget);
         await tester.pump(const Duration(seconds: 5));
         await tester.pumpAndSettle();
@@ -172,18 +181,20 @@ void main() {
       await closeEditor(tester);
     });
 
-    testWidgets('what was read can be corrected in the sheet of a mark, and the line is checked again', (tester) async {
+    testWidgets('what was read can be corrected in the card of a mark, and the line is checked again', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'});
       await letRead(tester, 900);
       await tester.tap(find.byKey(const ValueKey('math-mark-wrong')));
       await tester.pumpAndSettle();
       expect(find.text('This does not follow from the line above'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('math-check-fix-2')));
+      await tester.pumpAndSettle();
       expect(tester.widget<TextField>(find.byKey(const ValueKey('math-check-edit-2'))).controller!.text, 'x = 5');
 
       await tester.enterText(find.byKey(const ValueKey('math-check-edit-2')), r'x = 4');
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
-      expect(find.text('This looks right'), findsNWidgets(2), reason: 'it was misread, and now it is right (the line above was right already)');
+      expect(find.text('This looks right'), findsOneWidget, reason: 'it was misread, and now it is right (the card is about this line)');
       expect(find.text('This does not follow from the line above'), findsNothing);
       expect(find.byKey(const ValueKey('math-mark-right')), findsNWidgets(2), reason: 'the marks behind the sheet changed too');
       expect(find.byKey(const ValueKey('math-mark-wrong')), findsNothing);
@@ -199,15 +210,28 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('math-mark-unsure')));
       await tester.pumpAndSettle();
-      expect(find.text('I am not sure I read this right'), findsOneWidget);
-      expect(find.text('Or did you write:'), findsOneWidget);
+      expect(find.text('Did you write one of these?'), findsOneWidget, reason: 'the card asks first');
+      expect(find.text('This does not follow from the line above'), findsNothing, reason: 'the verdict comes after');
       await tester.tap(find.byKey(const ValueKey('math-check-other-2-0')));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(find.byKey(const ValueKey('math-check-edit-2'))).controller!.text, 'x = 4');
-      expect(find.text('This looks right'), findsNWidgets(2));
+      expect(find.text('This looks right'), findsOneWidget);
+      expect(find.text('Did you write one of these?'), findsNothing);
       expect(find.byKey(const ValueKey('math-mark-unsure')), findsNothing);
       expect(find.byKey(const ValueKey('math-mark-right')), findsNWidgets(2));
+      await tester.pumpWidget(const SizedBox());
+      await closeEditor(tester);
+    });
+
+    testWidgets('saying that the reading is what was written shows the verdict', (tester) async {
+      await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 5'}, again: {'c': [r'x = 4']});
+      await letRead(tester, 1200);
+      await tester.tap(find.byKey(const ValueKey('math-mark-unsure')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('math-check-keep-reading-2')));
+      await tester.pumpAndSettle();
+      expect(find.text('Did you write one of these?'), findsNothing);
+      expect(find.text('This does not follow from the line above'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await closeEditor(tester);
     });
@@ -221,10 +245,12 @@ void main() {
       await closeEditor(tester);
     });
 
-    testWidgets('a line can be read again from its sheet, and says when it reads the same', (tester) async {
+    testWidgets('a line can be read again from its card, and says when it reads the same', (tester) async {
       await open(tester, {'a': r'2x + 3 = 11', 'b': r'2x = 8', 'c': r'x = 4'}, again: {'b': [r'2x = 6']});
       await letRead(tester, 900);
       await tester.tap(find.byKey(const ValueKey('math-mark-right')).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('math-check-fix-1')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('math-check-look-again-1')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('math-check-look-again-1')));

@@ -268,7 +268,7 @@ class SettingsScreen extends StatelessWidget {
         sections: [
           ..._spaced([
             if (aiSwitch != null) _AiSwitchCard(aiSwitch: aiSwitch!),
-            if (handwriting != null) _HandwritingSettings(service: handwriting!, repository: repository),
+            if (handwriting != null) _HandwritingSettings(service: handwriting!, repository: repository, features: features),
             if (math != null) _MathSettings(service: math!),
             if (ocr != null) _OcrSettings(service: ocr!),
             if (subject != null && (features?.on(Feature.pictureEdit) ?? true))
@@ -439,7 +439,10 @@ class _ModelSettings extends StatelessWidget {
   final String title;
   final String description;
 
-  const _ModelSettings({required this.service, required this.title, required this.description});
+  /// Shown between the description and the install row (e.g. an on/off switch for the feature).
+  final Widget? beforeInstall;
+
+  const _ModelSettings({required this.service, required this.title, required this.description, this.beforeInstall});
 
   @override
   Widget build(BuildContext context) {
@@ -454,6 +457,7 @@ class _ModelSettings extends StatelessWidget {
           Text.verbatim(tr('{description} It needs a model of about {size} MB.', {'description': tr(description), 'size': service.sizeMb}),
               style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
           const SizedBox(height: 12),
+          if (beforeInstall != null) ...[beforeInstall!, const SizedBox(height: 8)],
           if (downloading)
             Row(children: [
               Expanded(child: LinearProgressIndicator(value: service.progress > 0 ? service.progress : null)),
@@ -599,8 +603,9 @@ class _SpeechSettings extends StatelessWidget {
 class _HandwritingSettings extends StatelessWidget {
   final HandwritingService service;
   final NoteRepository? repository;
+  final FeatureSettings? features;
 
-  const _HandwritingSettings({required this.service, this.repository});
+  const _HandwritingSettings({required this.service, this.repository, this.features});
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -609,6 +614,19 @@ class _HandwritingSettings extends StatelessWidget {
           title: 'Handwriting',
           description: 'Select drawings with the lasso and choose "Convert handwriting to text". Reading happens on '
               'this device; nothing is sent away.',
+          beforeInstall: features == null
+              ? null
+              : ListenableBuilder(
+            listenable: features!,
+            builder: (context, _) => SwitchListTile.adaptive(
+              key: const ValueKey('handwriting-detection'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(tr('Read handwriting')),
+              subtitle: Text(tr('Off: nothing you write is read, so there is no conversion to text, no spell checking of handwriting and no search in it, and the reader does no work in the background.')),
+              value: features!.on(Feature.handwriting),
+              onChanged: (v) => features!.set(Feature.handwriting, v),
+            ),
+          ),
         ),
         ListenableBuilder(
           listenable: service,
@@ -669,6 +687,24 @@ class _HandwritingSettings extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   tr('Quick takes about two thirds of the time and reads a little less exactly. Light takes less than half of it and reads clearly less exactly: for a slow device.'),
+                  style: muted,
+                ),
+                const SizedBox(height: 12),
+                Text(tr('Marking uncertain words'), style: Theme.of(context).textTheme.titleSmall),
+                Row(children: [
+                  Text(tr('Rarely'), style: muted),
+                  Expanded(
+                    child: Slider.adaptive(
+                      key: const ValueKey('handwriting-uncertainty'),
+                      value: service.uncertainty,
+                      divisions: 10,
+                      onChanged: service.setUncertainty,
+                    ),
+                  ),
+                  Text(tr('Often'), style: muted),
+                ]),
+                Text(
+                  tr('How readily a word the reader was not sure of gets a yellow line (it may have been misread). Rarely marks only the words it was least sure of; often marks more, and more of those are right. Applies to what is read from now on.'),
                   style: muted,
                 ),
                 const SizedBox(height: 12),
