@@ -61,7 +61,10 @@ import 'calendar_view.dart';
 import 'collab_ui.dart';
 import 'assistant_panel.dart';
 import 'dashboard_view.dart';
+import 'graph_study.dart';
 import 'study_session_screen.dart';
+import '../review/study_material_reader.dart' show readPageTexts;
+import '../review/study_topics.dart';
 import '../reminders/reminder.dart' show ReminderKind;
 import '../widgets/notation_logo.dart';
 import 'folder_view.dart';
@@ -880,6 +883,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       _app.sync?.cloud?.wake();
       _app.collab?.nativeShares?.wake();
       share?.markers.resume();
+      unawaited(_app.planner?.refresh()); // (back from the calendar app: sessions moved there are followed, at most every few minutes)
       // back after a short look elsewhere: the notes are as they were; after longer (a suspended app runs no timer) they are put away
       _lockTimer?.cancel();
       final left = _leftAt;
@@ -950,6 +954,9 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     }
     _app.automations?.openEditor = _editorOf; // (a note that is open is changed through its editor)
     _graphs.addListener(_graphsChanged);
+    _app.planner?.facts = GraphStudyFacts(_graphs); // (the quizzes of study sessions)
+    // (runs of pages cut by their topics, where the person asks for it)
+    _app.planner?.topics = StudyTopicSplitter(pageTexts: (id) => readPageTexts(_app.repository.text, id), model: () => _app.ai?.provider, enabled: () => _aiOn);
     WidgetsBinding.instance.addObserver(this);
     _shortcuts.addHandler(_onShortcut);
     _app.repository.purgeTrash().catchError((Object _) => 0); // what lay in the trash for long enough
@@ -1302,6 +1309,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
                 tags: _app.tags,
                 reminders: _app.reminders,
                 calendar: CalendarAccess.of(caldav: _app.caldav, device: _app.device, ics: _app.ics),
+                planner: _app.planner,
                 isOpen: (id) => _tabs.contains(id)),
           ),
           // (every question reads all the notes: reading one more by its id is not asked about)

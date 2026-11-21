@@ -12,6 +12,11 @@ abstract class StudyCalendarAccess {
   /// The events of the calendars that are shown, from [from] to [to].
   Future<List<DayEvent>> events(DateTime from, DateTime to);
 
+  /// The events of the calendar [target] from [from] to [to], read now (not from what was kept of an earlier reading); null when that
+  /// calendar cannot be read now (it is not shown, it is gone, there is no connection or no access). What tells that a session's event
+  /// was moved or deleted in the calendar app: an empty list means there are no events, never that the reading failed.
+  Future<List<DayEvent>?> eventsIn(String target, DateTime from, DateTime to);
+
   /// The calendars a session can be written to (`phone:<id>`, or the address of a server calendar).
   Future<List<CalendarInfo>> writable();
 
@@ -44,6 +49,11 @@ class AppStudyCalendar implements StudyCalendarAccess {
         ...?await device?.events(from, to),
         ...?await ics?.events(from, to),
       ];
+
+  @override
+  Future<List<DayEvent>?> eventsIn(String target, DateTime from, DateTime to) async => target.startsWith('phone:')
+      ? await device?.readCalendarNow(target.substring('phone:'.length), from, to)
+      : await _server?.readCalendarNow(target, from, to);
 
   @override
   Future<List<CalendarInfo>> writable() async => [...?await _server?.writableCalendars(), ...?await device?.writableCalendars()];

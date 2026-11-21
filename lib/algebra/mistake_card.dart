@@ -1,6 +1,15 @@
 import '../ai/flashcards.dart';
 import 'checker.dart';
 
+/// What the front of a mistake card starts with (the line of working follows it).
+const mistakeFront = 'Find the mistake in this line of working:\n';
+
+/// Whether a card is one of a mistake ([mistakeCard]).
+bool isMistakeCard(String front) => front.startsWith(mistakeFront);
+
+/// The line of working of a mistake card's front.
+String mistakeLineOf(String front) => isMistakeCard(front) ? front.substring(mistakeFront.length) : front;
+
 String _tidy(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// A flashcard from a line of maths that was found wrong, to ask about it again later: the line is on the front ("Find the mistake"),
@@ -16,5 +25,5 @@ Flashcard? mistakeCard(String latex, LineCheck check,
   final back = StringBuffer('$headline.');
   if (expected != null) back.write('\n$expectedLabel ${_tidy(expected)}');
   if (counter != null) back.write('\n$counterLabel ${_tidy(counter)}');
-  return Flashcard('Find the mistake in this line of working:\n$line', back.toString(), page: page);
+  return Flashcard('$mistakeFront$line', back.toString(), page: page);
 }

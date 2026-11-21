@@ -3,6 +3,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../data/note_pdfs.dart';
+import '../data/note_text_repository.dart';
 import '../pdf/note_pdf_document.dart';
 import '../pdf/open_pdf.dart';
 import 'study_material.dart';
@@ -63,4 +64,19 @@ Future<NoteShape?> readNoteShape(Database db, String noteId, {PdfOutlineReader? 
     notebookPages: lastPage + 1,
     documentText: r['document_text'] as String,
   );
+}
+
+/// The words of each page of the note [noteId] that were read (zero-based page -> text): the text of its PDF and of its handwriting. What
+/// the topics of a run of pages are told by (see StudyTopicSplitter); pages that were not read are not in it.
+Future<Map<int, String>> readPageTexts(NoteTextRepository texts, String noteId) async {
+  final out = <int, String>{};
+  final pdf = await texts.pdfPages(noteId);
+  for (var i = 0; i < (pdf?.length ?? 0); i++) {
+    if (pdf![i].trim().isNotEmpty) out[i] = pdf[i];
+  }
+  for (final t in await texts.inkTexts(noteId)) {
+    if (t.text.trim().isEmpty) continue;
+    out[t.page] = out[t.page] == null ? t.text : '${out[t.page]}\n${t.text}';
+  }
+  return out;
 }

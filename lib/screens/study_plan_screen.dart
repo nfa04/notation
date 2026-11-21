@@ -8,6 +8,8 @@ import '../review/study_calendar.dart';
 import '../review/study_material.dart';
 import '../review/study_planner.dart';
 import '../review/study_schedule.dart';
+import '../review/study_topics.dart';
+import '../ai/text_provider.dart' show AiCancel;
 import '../style/platform_dialog.dart';
 import '../sync/caldav_remote.dart';
 import '../data/card_repository.dart';
@@ -126,6 +128,8 @@ class _PlanCard extends StatelessWidget {
       if (attention.clashes > 0) trCount(attention.clashes, '{n} session now clashes with an event.', '{n} sessions now clash with an event.'),
       if (attention.dropped > 0) trCount(attention.dropped, 'The to-do of {n} session was deleted.', 'The to-dos of {n} sessions were deleted.'),
       if (attention.unfinished > 0) trCount(attention.unfinished, '{n} session left work undone.', '{n} sessions left work undone.'),
+      if (attention.removed > 0)
+        trCount(attention.removed, '{n} session was deleted in your calendar: its time is kept free.', '{n} sessions were deleted in your calendar: their time is kept free.'),
       if ((attention.pace ?? 1) > 1) tr('You take about {n} % longer than the plan expected.', {'n': ((attention.pace! - 1) * 100).round()}),
       if ((attention.pace ?? 1) < 1) tr('You are about {n} % quicker than the plan expected.', {'n': ((1 - attention.pace!) * 100).round()}),
     ];
@@ -233,6 +237,11 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
   List<CalendarPlace> _places = const [];
   bool _loaded = false, _busy = false;
 
+  /// The note whose pages are being cut by topic, how far that is, and what stops it.
+  String? _splitting;
+  double? _splitDone;
+  AiCancel? _splitCancel;
+
   DateTime get _today => _day((widget.clock ?? DateTime.now)());
 
   @override
@@ -297,6 +306,35 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
     setState(() => _e = _e.copyWith(units: [..._e.units, ...units]));
   }
 
+  bool _canSplit(String noteId) => (widget.planner.topics?.ready ?? false) && StudyTopicSplitter.canSplit(_e.units, noteId);
+
+  /// Cuts the runs of pages of [noteId] by their topics (with the AI model); what was done of them is carried over page by page.
+  Future<void> _split(String noteId) async {
+    final topics = widget.planner.topics;
+    if (topics == null) return;
+    final cancel = AiCancel();
+    setState(() {
+      _splitting = noteId;
+      _splitDone = null;
+      _splitCancel = cancel;
+    });
+    try {
+      final r = await topics.split(_e.units, _e.progress, noteId, cancel: cancel, onProgress: (d) {
+        if (mounted) setState(() => _splitDone = d);
+      });
+      if (mounted) setState(() => _e = _e.copyWith(units: r.units, progress: r.progress));
+    } catch (err) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim('$err'.replaceFirst('Bad state: ', ''))));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _splitting = null;
+          _splitCancel = null;
+        });
+      }
+    }
+  }
+
   void _setUnit(StudyUnit u) => setState(() => _e = _e.copyWith(units: [for (final x in _e.units) x.id == u.id ? u : x]));
 
   Set<String>? get _cardSources => switch (_cards) { _Cards.all => null, _Cards.none => const {}, _Cards.notes => _cardNotes.toSet() };
@@ -327,10 +365,14 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
     return t == null ? null : t.hour * 60 + t.minute;
   }
 
+  /// The plan's calendar is a phone calendar of another device (this device's calendars are not it, whatever their names).
+  late final bool _elsewhere = !widget.planner.writesCalendarOf(widget.entry);
+
   String _targetLabel(CalendarTarget t) {
     if (t.make == CalendarPlace.phone) return tr('A new "Study" calendar on this device');
     if (t.make == CalendarPlace.server) return tr('A new "Study" calendar on the calendar server');
     if (t.key == null) return tr('No calendar: to-dos only');
+    if (_elsewhere && t.key == widget.entry.target.key) return tr('The calendar on your other device');
     return _calendars.where((c) => c.key == t.key).firstOrNull?.name ?? tr('The calendar chosen before');
   }
 
@@ -343,7 +385,8 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
   Widget build(BuildContext context) {
     final l = MaterialLocalizations.of(context);
     final targets = <CalendarTarget>{
-      for (final c in _calendars) CalendarTarget.calendar(c.key),
+      for (final c in _calendars)
+        if (!_elsewhere || c.key != widget.entry.target.key) CalendarTarget.calendar(c.key),
       for (final p in _places) CalendarTarget.makeAt(p),
       const CalendarTarget.none(),
       _e.target,
@@ -504,13 +547,28 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
           Row(children: [
             Expanded(child: Text.verbatim(title, style: Theme.of(context).textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis)),
             Text.verbatim(_hours(minutes), style: Theme.of(context).textTheme.bodySmall),
+            if (_splitting == noteId)
+              IconButton(
+                key: ValueKey('study-split-stop-$noteId'),
+                tooltip: tr('Stop'),
+                icon: const Icon(Icons.stop_circle_outlined),
+                onPressed: () => _splitCancel?.cancel(),
+              )
+            else if (_canSplit(noteId))
+              IconButton(
+                key: ValueKey('study-split-$noteId'),
+                tooltip: tr('Cut the pages by their topics (with AI)'),
+                icon: const Icon(Icons.auto_awesome_outlined),
+                onPressed: _splitting == null ? () => _split(noteId) : null,
+              ),
             IconButton(
               key: ValueKey('study-drop-note-$noteId'),
               tooltip: tr('Take this note out'),
               icon: const Icon(Icons.close),
-              onPressed: () => setState(() => _e = _e.copyWith(units: [for (final u in _e.units) if (u.noteId != noteId) u])),
+              onPressed: _splitting == noteId ? null : () => setState(() => _e = _e.copyWith(units: [for (final u in _e.units) if (u.noteId != noteId) u])),
             ),
           ]),
+          if (_splitting == noteId) Padding(padding: const EdgeInsets.only(right: 8, bottom: 4), child: LinearProgressIndicator(value: _splitDone)),
           for (final u in units)
             Row(key: ValueKey('study-unit-${u.id}'), children: [
               Checkbox(
@@ -584,6 +642,8 @@ class _StudyProposalPageState extends State<StudyProposalPage> {
       name = tr('A new "Study" calendar on the calendar server');
     } else if (t.key == null) {
       name = tr('No calendar: to-dos only');
+    } else if (!widget.planner.writesCalendarOf(_p.entry)) {
+      name = tr('The calendar on your other device');
     } else {
       try {
         name = (await widget.planner.calendar?.writable())?.where((c) => c.key == t.key).firstOrNull?.name ?? '';
@@ -664,6 +724,9 @@ class _StudyProposalPageState extends State<StudyProposalPage> {
             if (s.learnLeftOver == 0 && s.reviewLeftOver > 0)
               _note('study-no-review', tr('There is not enough time to go over everything a second time ({time} short).', {'time': _hours(s.reviewLeftOver)}), scheme.tertiaryContainer,
                   scheme.onTertiaryContainer),
+            if (!widget.planner.writesCalendarOf(e))
+              _note('study-elsewhere', tr('The calendar of this plan is on another device: the sessions are put in it there, the next time the app is open on it.'),
+                  scheme.surfaceContainerHighest, scheme.onSurface),
             if (_p.calendarUnread)
               _note('study-unread', tr('The calendars could not be read, so their events were not taken into account.'), scheme.tertiaryContainer, scheme.onTertiaryContainer),
             if (_existing && !_p.hasChanges) _note('study-unchanged', tr('Nothing changes.'), scheme.surfaceContainerHighest, scheme.onSurface),

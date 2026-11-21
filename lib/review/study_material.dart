@@ -47,6 +47,10 @@ class StudyUnit {
   /// Taken into the plan (the person can leave a part out).
   final bool included;
 
+  /// A run of pages cut by their number alone (its title is its pages): the material had nothing to cut it by, and it may be cut by its
+  /// topics instead (see study_topics.dart).
+  final bool plain;
+
   const StudyUnit({
     required this.id,
     required this.noteId,
@@ -56,6 +60,7 @@ class StudyUnit {
     required this.minutes,
     this.difficulty = Difficulty.medium,
     this.included = true,
+    this.plain = false,
   });
 
   bool get hasPages => fromPage != null && toPage != null;
@@ -77,6 +82,7 @@ class StudyUnit {
         minutes: minutes,
         difficulty: difficulty ?? this.difficulty,
         included: included ?? this.included,
+        plain: plain,
       );
 
   Map<String, Object?> toJson() => {
@@ -88,16 +94,21 @@ class StudyUnit {
         'min': minutes,
         'diff': difficulty.name,
         if (!included) 'off': true,
+        if (plain) 'plain': true,
       };
 
   static StudyUnit? fromJson(Object? j) {
     if (j is! Map || j['id'] is! String || j['note'] is! String) return null;
+    final from = (j['from'] as num?)?.toInt(), to = (j['to'] as num?)?.toInt();
+    final title = (j['title'] as String?) ?? '';
     return StudyUnit(
       id: j['id'] as String,
       noteId: j['note'] as String,
-      title: (j['title'] as String?) ?? '',
-      fromPage: (j['from'] as num?)?.toInt(),
-      toPage: (j['to'] as num?)?.toInt(),
+      title: title,
+      fromPage: from,
+      toPage: to,
+      // (kept before this was: a title that is its pages)
+      plain: j['plain'] == true || from != null && to != null && title == pagesTitle(from, to),
       minutes: math.max(1, (j['min'] as num?)?.toInt() ?? 10),
       difficulty: Difficulty.byName(j['diff']),
       included: j['off'] != true,
@@ -164,6 +175,7 @@ StudyUnit _pagesUnit(String noteId, int n, int from, int to, double perPage) => 
       fromPage: from,
       toPage: to,
       minutes: math.max(2, ((to - from + 1) * perPage).round()),
+      plain: true,
     );
 
 /// [pageCount] pages cut into even runs of about [pagesPerUnit] (the last run takes a short rest instead of leaving a page or two alone).
@@ -273,6 +285,7 @@ List<StudyUnit> unitsOfNote(NoteShape note) {
         fromPage: u.fromPage! + start,
         toPage: u.toPage! + start,
         minutes: u.minutes,
+        plain: true,
       ));
     }
   }

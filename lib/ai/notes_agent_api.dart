@@ -9,6 +9,7 @@ import '../extensions/manage_notes_api.dart';
 import '../extensions/notes_read_api.dart';
 import '../extensions/pdf_text.dart';
 import '../reminders/reminder_service.dart';
+import '../review/study_planner.dart';
 import '../sync/calendar_access.dart';
 
 /// What the assistant of all notes ("Ask your notes") works through: the person's notes as the database holds them (search, read, the
@@ -20,11 +21,12 @@ class NotesAgentApi extends ExtensionApi with LibraryApi, NotesReadApi, ManageNo
   final TagRepository? tags;
   final ReminderService? reminders;
   final CalendarAccess? calendar;
+  final StudyPlanner? planner;
 
   /// Whether note [id] is open in an editor (see [ManageNotesApi.isOpenNote]).
   final bool Function(String id) isOpen;
 
-  NotesAgentApi(this.repository, {this.tasks, this.tags, this.reminders, this.calendar, required this.isOpen});
+  NotesAgentApi(this.repository, {this.tasks, this.tags, this.reminders, this.calendar, this.planner, required this.isOpen});
 
   @override
   NoteRepository get notesRepository => repository;
@@ -50,6 +52,43 @@ class NotesAgentApi extends ExtensionApi with LibraryApi, NotesReadApi, ManageNo
   Future<void> addTask(String title, {String? due}) async {
     final repo = tasks ?? (throw ExtensionError('Tasks cannot be added here.'));
     await repo.createTask(title, dueDate: due == null ? null : DateTime.parse(due));
+  }
+
+  static String _day(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  @override
+  Future<List<Map<String, Object?>>> listStudyPlans() async {
+    final p = planner ?? (throw ExtensionError('Study plans cannot be looked at here.'));
+    final now = DateTime.now();
+    return [
+      for (final e in p.plans)
+        {
+          'id': e.id,
+          'name': e.name,
+          'exam': _day(e.exam),
+          'learned': (e.learned * 100).round(),
+          'next': [
+            for (final s in e.sessions.where((s) => !s.gone && s.report == null && !s.credited && s.session.start.isAfter(now)).take(3))
+              '${_day(s.session.start)} ${s.title}',
+          ],
+          'needsALook': p.attentionOf(e.id).any,
+        },
+    ];
+  }
+
+  @override
+  Future<String> replanStudyPlan(String id) async {
+    final p = planner ?? (throw ExtensionError('Study plans cannot be changed here.'));
+    final e = p.plans.where((e) => e.id == id).firstOrNull ?? (throw ExtensionError('There is no study plan with the id "$id". study.list has the ids.'));
+    final proposal = await p.propose(e);
+    if (!proposal.hasChanges) return 'The sessions of "${e.name}" are as they should be: nothing changed.';
+    var added = 0, moved = 0;
+    for (final s in proposal.sessions) {
+      if (s.change == SessionChange.added) added++;
+      if (s.change == SessionChange.changed) moved++;
+    }
+    await p.approve(proposal);
+    return 'Done: the sessions of "${e.name}" were planned again ($added new, $moved changed, ${proposal.removed.length} taken away).';
   }
 
   @override

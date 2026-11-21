@@ -45,6 +45,8 @@ bool syncedSetting(String key) =>
       'sync_signin_verifier',
     }.contains(key) ||
     key.startsWith('a11y_') ||
+    // the study plans, one key each (see StudyPlanner)
+    key.startsWith('study_plan:') ||
     // designed brushes (see BrushLibrary)
     key.startsWith('brush:') ||
     key.startsWith('stylus_') ||

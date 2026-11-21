@@ -97,8 +97,9 @@ class TaskRepository {
     return rows.map(_task).toList();
   }
 
-  Future<String> createTask(String title, {DateTime? dueDate, bool auto = false}) async {
-    final id = NoteRepository.newId();
+  /// Makes a to-do; with [id], under that id (the same to-do made on another device: it is then one to-do on the server too).
+  Future<String> createTask(String title, {DateTime? dueDate, bool auto = false, String? id}) async {
+    id ??= NoteRepository.newId();
     await _db.insert('tasks', {
       'id': id,
       'title': title,
@@ -127,7 +128,8 @@ class TaskRepository {
   /// The tasks as they are ticked off here (not the ones that arrive from the server done).
   Stream<Task> get completed => _completed.stream;
 
-  Future<void> setDone(String id, bool done) async {
+  /// Ticks the task off (or takes the tick back). With [announce] false, it is not said on [completed] (it was ticked off elsewhere).
+  Future<void> setDone(String id, bool done, {bool announce = true}) async {
     final was = done ? (await _db.query('tasks', where: 'id = ? AND done_at IS NULL AND deleted_at IS NULL', whereArgs: [id])).map(_task).firstOrNull : null;
     await _db.update(
       'tasks',
@@ -136,7 +138,7 @@ class TaskRepository {
       whereArgs: [id],
     );
     _changed();
-    if (was != null && !_completed.isClosed) _completed.add(Task(id: was.id, title: was.title, dueDate: was.dueDate, done: true, doneAt: DateTime.now(), auto: was.auto));
+    if (announce && was != null && !_completed.isClosed) _completed.add(Task(id: was.id, title: was.title, dueDate: was.dueDate, done: true, doneAt: DateTime.now(), auto: was.auto));
   }
 
   /// A task that was uploaded before is only marked deleted, until the next

@@ -317,6 +317,22 @@ class CalDavService extends ChangeNotifier {
     }
   }
 
+  /// The events of the shown calendar [href], read from the server now (not from the cache, and nothing kept stands in when it fails): null
+  /// when it cannot be read (it is not shown, it is gone from the server, or the server cannot be reached).
+  Future<List<DayEvent>?> readCalendarNow(String href, DateTime from, DateTime to) async {
+    final c = _config;
+    if (c == null || !c.eventCalendars.contains(href)) return null;
+    try {
+      final client = await _connected();
+      final calendar = _find(await client.getCalendars(), href);
+      if (calendar == null) return null;
+      return await _eventsOf(client, calendar, from, to);
+    } catch (e) {
+      debugPrint('reading the calendar $href failed: $e');
+      return null;
+    }
+  }
+
   /// One calendar's events: the server's raw answer is read and repeated here ([expandServerEvents]). A server that
   /// does not send the data in its answer is read through the package instead (no repeating events then).
   Future<List<DayEvent>> _eventsOf(CalDavClient client, Calendar calendar, DateTime from, DateTime to) async {
@@ -369,20 +385,29 @@ class CalDavService extends ChangeNotifier {
     final calendar = _find(await client.getCalendars(), calendarHref);
     if (calendar == null) throw StateError(tr('That calendar no longer exists on the server.'));
     DateTime plain(DateTime d) => DateTime.utc(d.year, d.month, d.day);
-    final created = await client.createEvent(
-      calendar,
-      CalendarEvent(
-        uid: NoteRepository.newId(),
-        calendarId: calendar.uid,
-        summary: event.title,
-        description: event.description.isEmpty ? null : event.description,
-        isAllDay: event.allDay,
-        start: event.allDay ? plain(event.start) : event.start.toUtc(),
-        end: event.allDay
-            ? (event.end == null || !plain(event.end!).isAfter(plain(event.start)) ? null : plain(event.end!))
-            : (event.end ?? event.start.add(const Duration(hours: 1))).toUtc(),
-      ),
-    );
+    final uid = event.uid ?? NoteRepository.newId();
+    final CalendarEvent created;
+    try {
+      created = await client.createEvent(
+        calendar,
+        CalendarEvent(
+          uid: uid,
+          calendarId: calendar.uid,
+          summary: event.title,
+          description: event.description.isEmpty ? null : event.description,
+          isAllDay: event.allDay,
+          start: event.allDay ? plain(event.start) : event.start.toUtc(),
+          end: event.allDay
+              ? (event.end == null || !plain(event.end!).isAfter(plain(event.start)) ? null : plain(event.end!))
+              : (event.end ?? event.start.add(const Duration(hours: 1))).toUtc(),
+        ),
+      );
+    } on ConflictException {
+      // (an event of this UID is there already: another device wrote it; the library names the file after the UID)
+      if (event.uid == null) rethrow;
+      _forgetEvents();
+      return calendar.href.resolve('$uid.ics').toString();
+    }
     _forgetEvents();
     return created.href.toString();
   }

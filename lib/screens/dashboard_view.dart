@@ -357,7 +357,11 @@ class _DashboardViewState extends State<DashboardView> {
           key: 'study-plans',
           icon: Icons.school_outlined,
           label: tr('Study plans'),
-          onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanScreen(planner: widget.planner!, repository: widget.repository, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt))),
+          onTap: () {
+            unawaited(widget.planner!.refresh(lookAtCalendar: true)); // (sessions moved or deleted in the calendar app are seen at once)
+            Navigator.push(context, MaterialPageRoute<void>(
+                builder: (_) => StudyPlanScreen(planner: widget.planner!, repository: widget.repository, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt)));
+          },
           widget: null,
         ),
       if (widget.cards != null)

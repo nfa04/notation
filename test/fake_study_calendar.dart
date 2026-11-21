@@ -8,6 +8,9 @@ class FakeStudyCalendar implements StudyCalendarAccess {
   final made = <CalendarPlace>[];
   final _calendars = [const CalendarInfo('phone:p', 'Private', null)];
   bool failWrites = false;
+
+  /// The calendars cannot be read one by one now (offline, no access).
+  bool unreadable = false;
   var _n = 0;
 
   @override
@@ -16,6 +19,14 @@ class FakeStudyCalendar implements StudyCalendarAccess {
         for (final w in written.entries)
           DayEvent(title: w.value.$2.title, start: w.value.$2.start, end: w.value.$2.end, allDay: false, calendarName: 'Study', calendarKey: w.value.$1, uid: w.key),
       ];
+
+  @override
+  Future<List<DayEvent>?> eventsIn(String target, DateTime from, DateTime to) async => unreadable
+      ? null
+      : [
+          for (final e in await events(from, to))
+            if (e.calendarKey == target) e,
+        ];
 
   @override
   Future<List<CalendarInfo>> writable() async => _calendars;

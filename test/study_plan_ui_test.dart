@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:notes/algebra/mistake_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/ai/flashcards.dart';
 import 'package:notes/data/app_database.dart';
@@ -6,10 +7,13 @@ import 'package:notes/data/card_repository.dart';
 import 'package:notes/data/note_repository.dart';
 import 'package:notes/data/settings_repository.dart';
 import 'package:notes/data/task_repository.dart';
+import 'package:notes/graph/study.dart';
 import 'package:notes/review/study_calendar.dart';
 import 'package:notes/review/study_material.dart';
 import 'package:notes/review/study_planner.dart';
+import 'package:notes/review/study_practice.dart';
 import 'package:notes/review/study_schedule.dart';
+import 'package:notes/review/study_topics.dart';
 import 'package:notes/screens/review_view.dart';
 import 'package:notes/screens/study_plan_screen.dart';
 import 'package:notes/screens/study_session_screen.dart';
@@ -17,6 +21,7 @@ import 'package:notes/sync/caldav_remote.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'fake_study_calendar.dart';
+import 'support/fake_model.dart';
 
 void main() {
   setUpAll(AppDatabase.initFfi);
@@ -56,7 +61,7 @@ void main() {
     expect(planner.plans, isNotEmpty, reason: 'approved (before: $before)');
   }
 
-  Future<void> open(WidgetTester tester, {Size size = const Size(1000, 1400), bool withCards = true}) async {
+  Future<void> open(WidgetTester tester, {Size size = const Size(1000, 1400), bool withCards = true, bool outline = true}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -79,7 +84,7 @@ void main() {
                 noteId: id,
                 title: 'Biology notes',
                 pdfPages: 30,
-                pdfOutline: const [(title: 'Cells', level: 1, page: 0), (title: 'Genetics', level: 1, page: 10), (title: 'Evolution', level: 1, page: 20)],
+                pdfOutline: outline ? const [(title: 'Cells', level: 1, page: 0), (title: 'Genetics', level: 1, page: 10), (title: 'Evolution', level: 1, page: 20)] : const [],
               ),
           now: () => now);
       await planner.load();
@@ -296,6 +301,52 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a session\'s practice: the lines that were wrong (with what was wrong, and their page) and the quiz on the part\'s facts', (tester) async {
+    await open(tester);
+    final facts = _Facts([for (var i = 0; i < 4; i++) (noteId: noteId, page: i, fact: StudyFact('Cell $i', 'Cells do thing $i.'))]);
+    late StudyPlanEntry plan;
+    await tester.runAsync(() async {
+      await cards.addAll(noteId, [Flashcard('${mistakeFront}a+b=ab', 'Not a product.', page: 3)]);
+      planner.facts = facts;
+      final units = await planner.unitsOf(noteId);
+      plan = await planner.approve(await planner.propose(planner.draft(name: 'Biology', exam: DateTime(2026, 6, 12)).copyWith(units: units, cardSources: () => const {})));
+    });
+    final s = plan.sessions.firstWhere((s) => s.session.items.any((i) => i.kind == WorkKind.mistakes));
+    final m = s.session.items.indexWhere((i) => i.kind == WorkKind.mistakes), q = s.session.items.indexWhere((i) => i.kind == WorkKind.quiz);
+    expect(q, m + 1);
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => openStudySession(context, planner, plan.id, s.key, cards: cards, onOpenNoteAt: (id, page) => opened.add((id, page)), clock: () => now),
+          child: const Text('go'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(find.text('Do the lines you got wrong again: Cells'), findsOneWidget);
+    expect(find.text('Quiz yourself: Cells'), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey('session-quiz-$q')));
+    await until(tester, () => facts.asked.isNotEmpty);
+    expect(facts.asked.single, ('Cells', 4));
+    expect(planner.running?.key, s.key, reason: 'opening a piece of work starts the clock');
+
+    await tester.tap(find.byKey(ValueKey('session-mistakes-$m')));
+    await until(tester, () => find.byKey(const ValueKey('mistake-0')).evaluate().isNotEmpty);
+    expect(find.byKey(const ValueKey('mistake-back-0')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('mistake-show-0')));
+    await tester.pump();
+    expect(find.text('Not a product.'), findsOneWidget);
+    expect(find.text('Open page 4'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mistake-open-0')));
+    await tester.pumpAndSettle();
+    expect(opened.single, (noteId, 3));
+    expect(find.text('go'), findsOneWidget, reason: 'the session is left for the note, its clock goes on');
+    expect(planner.running?.key, s.key);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('the dashboard\'s card offers today\'s session and says how long it has been studied', (tester) async {
     await open(tester);
     await makePlan(tester);
@@ -320,4 +371,45 @@ void main() {
     expect(find.byKey(const ValueKey('study-session-card')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('a PDF without a table of contents is cut by its topics with the AI model, when the person asks for it', (tester) async {
+    await open(tester, outline: false);
+    final model = FakeModel('1-12 | Cells\n13-30 | Genetics');
+    planner.topics = StudyTopicSplitter(pageTexts: (_) async => {for (var p = 0; p < 30; p++) p: 'The text of page ${p + 1} of the course'}, model: () => model, enabled: () => true);
+    await tester.tap(find.byKey(const ValueKey('new-study-plan')));
+    await tester.pump();
+    await real(tester, 4);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('study-add-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('pick-note-$noteId')));
+    await tester.pumpAndSettle();
+    await real(tester, 3);
+    expect(find.text('Pages 1-8'), findsOneWidget, reason: 'cut by page number');
+    await tester.tap(find.byKey(ValueKey('study-split-$noteId')));
+    await until(tester, () => find.text('Genetics').evaluate().isNotEmpty);
+    expect(find.byKey(ValueKey('study-unit-$noteId#p0')), findsOneWidget);
+    expect(find.byKey(ValueKey('study-unit-$noteId#p12')), findsOneWidget);
+    expect(find.text('Pages 1-8'), findsNothing);
+    expect(find.text('48 min'), findsOneWidget, reason: 'twelve pages at four minutes');
+    expect(find.byKey(ValueKey('study-split-$noteId')), findsNothing, reason: 'nothing is cut by page number any more');
+    expect(model.prompts.single.user, contains('Page 30: The text of page 30'));
+  });
+
+}
+
+/// Facts of graphs; the quizzes asked for are kept (the title, and how many facts).
+class _Facts implements StudyFactSource {
+  final List<FactSpot> spots;
+  final asked = <(String, int)>[];
+  _Facts(this.spots);
+
+  @override
+  bool get canQuiz => true;
+
+  @override
+  Future<List<FactSpot>> facts() async => spots;
+
+  @override
+  Future<void> quiz(BuildContext context, String title, List<StudyFact> facts, {CardRepository? cards}) async => asked.add((title, facts.length));
+
 }

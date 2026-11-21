@@ -256,6 +256,26 @@ class DeviceCalendarService extends ChangeNotifier {
     }
   }
 
+  /// The events of the shown phone calendar [id], read now (not from the cache): null when it cannot be read (it is not shown, it is gone
+  /// from the phone, or there is no access).
+  Future<List<DayEvent>?> readCalendarNow(String id, DateTime from, DateTime to) async {
+    final api = _api;
+    if (api == null || !_selected.contains(id)) return null;
+    try {
+      if (!await api.hasAccess()) return null;
+      // (read again: a calendar deleted on the phone has no events, which must not read as "every event was deleted")
+      final calendars = await api.calendars();
+      for (final c in calendars) {
+        _known[c.id] = c;
+      }
+      if (!calendars.any((c) => c.id == id)) return null;
+      return [for (final e in await api.events(from, to, [id])) _toDayEvent(e)];
+    } catch (e) {
+      debugPrint('reading the phone calendar $id failed: $e');
+      return null;
+    }
+  }
+
   DayEvent _toDayEvent(PhoneEvent e) {
     final calendar = _known[e.calendarId];
     DateTime day(DateTime d) => DateTime(d.year, d.month, d.day);

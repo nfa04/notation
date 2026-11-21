@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show BuildContext;
 import 'package:notes/ai/flashcards.dart';
+import 'package:notes/algebra/mistake_card.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/card_repository.dart';
 import 'package:notes/data/settings_repository.dart';
@@ -7,7 +9,9 @@ import 'package:notes/data/task_repository.dart';
 import 'package:notes/review/study_plan.dart';
 import 'package:notes/review/study_calendar.dart';
 import 'package:notes/review/study_material.dart';
+import 'package:notes/graph/study.dart';
 import 'package:notes/review/study_planner.dart';
+import 'package:notes/review/study_practice.dart';
 import 'package:notes/review/study_schedule.dart';
 import 'package:notes/sync/caldav_remote.dart';
 
@@ -372,6 +376,94 @@ void main() {
       now = DateTime(next.year, next.month, next.day, 8);
       expect(planner.current()!.session.session.start, next);
     });
+
+    test('the maths mistakes kept of a part and a quiz on its facts are done right after its going over, as time of their own', () async {
+      final plain = await planner.propose(await biology());
+      await cards.addAll('n1', [
+        Flashcard('${mistakeFront}a+b=ab', 'Not a product.', page: 3),
+        Flashcard('${mistakeFront}x^2=2x', 'The power was lost.', page: 12),
+        const Flashcard('What is a cell?', 'A unit of life.', page: 2),
+      ]);
+      final source = _Facts([for (var i = 0; i < 3; i++) (noteId: 'n1', page: 1 + i, fact: StudyFact('Cell $i', 'Cells do thing $i.'))]);
+      planner.facts = source;
+      final p = await planner.propose(await biology());
+      final units = {for (final u in p.entry.units) u.title: u};
+      final cells = units['Cells']!, genetics = units['Genetics']!;
+
+      // right after the part's going over (in the order of the work), mistakes first, never cut in two; extra time, the going over keeps its own
+      final flat = [for (final x in p.sessions) ...x.session.items];
+      int at(WorkKind kind, StudyUnit u) => flat.indexWhere((i) => i.kind == kind && i.unitId == u.id);
+      final lastReview = flat.lastIndexWhere((i) => i.kind == WorkKind.review && i.unitId == cells.id);
+      expect(flat[lastReview].to, closeTo(1, 1e-6));
+      expect((at(WorkKind.mistakes, cells), at(WorkKind.quiz, cells)), (lastReview + 1, lastReview + 2));
+      expect([for (final i in flat) if (i.unitId == cells.id && i.kind.index >= WorkKind.mistakes.index) (i.kind, i.minutes)], [(WorkKind.mistakes, 5), (WorkKind.quiz, 10)]);
+      int minutesOf(StudyProposal x, WorkKind kind) => [for (final y in x.sessions) ...y.session.items].where((i) => i.kind == kind).fold(0, (n, i) => n + i.minutes);
+      expect(minutesOf(p, WorkKind.review), closeTo(minutesOf(plain, WorkKind.review), 3));
+      expect(minutesOf(p, WorkKind.mistakes), 5 + 5);
+      expect(at(WorkKind.mistakes, genetics), greaterThan(flat.lastIndexWhere((i) => i.kind == WorkKind.review && i.unitId == genetics.id)));
+      expect(at(WorkKind.quiz, genetics), -1, reason: 'no facts of its pages');
+      expect(at(WorkKind.mistakes, units['Evolution']!), -1);
+      expect(itemText(flat[lastReview + 1], cells), 'Do the lines you got wrong again: Cells');
+
+      expect([for (final c in await planner.mistakesOf(cells)) mistakeLineOf(c.card.front)], ['a+b=ab']);
+      expect(await planner.factsOf(cells), hasLength(3));
+
+      // without a model there is no quiz
+      source.ready = false;
+      final again = await planner.propose(await biology());
+      expect([for (final s in again.sessions) ...s.session.items.where((i) => i.kind == WorkKind.quiz)], isEmpty);
+      expect(await planner.factsOf(cells), isEmpty);
+    });
+
+    test('a session moved in the calendar app goes with it, to-do too, and stays there; one deleted there is said and its time kept free', () async {
+      final e = await planner.approve(await planner.propose(await biology()));
+      final a = e.sessions[2], b = e.sessions[4];
+      final moved = DateTime(a.session.start.year, a.session.start.month, a.session.start.day, 7);
+      final ev = calendar.written[a.eventId]!;
+      calendar.written[a.eventId!] = (ev.$1, NewEvent(title: ev.$2.title, start: moved, end: moved.add(const Duration(minutes: 30)), description: ev.$2.description));
+      calendar.written.remove(b.eventId);
+
+      // a calendar that cannot be read says nothing
+      calendar.unreadable = true;
+      await planner.refresh(lookAtCalendar: true);
+      expect(planner.plans.single.sessions.where((s) => s.gone || s.moved), isEmpty);
+      expect(planner.attentionOf(e.id).any, isFalse);
+
+      calendar.unreadable = false;
+      await planner.refresh(lookAtCalendar: true);
+      var plan = planner.plans.single;
+      final m = plan.sessions.firstWhere((s) => s.taskId == a.taskId);
+      expect((m.session.start, m.session.minutes, m.moved, m.gone), (moved, 30, true, false));
+      expect(m.session.items, a.session.items);
+      final task = (await tasks.listTasks()).firstWhere((t) => t.id == a.taskId);
+      expect((task.title, task.dueDate), ('07:00 ${a.title}', DateTime(moved.year, moved.month, moved.day)));
+      expect(planner.startOfTask(a.taskId!), moved);
+      final g = plan.sessions.firstWhere((s) => s.taskId == b.taskId);
+      expect(g.gone, isTrue);
+      expect(planner.startOfTask(b.taskId!), isNull, reason: 'no reminder for it');
+      final attention = planner.attentionOf(e.id);
+      expect((attention.removed, attention.clashes, attention.any), (1, 0, true));
+      expect(plan.blocked, contains((start: b.session.start, end: b.session.end)));
+
+      // made again: the moved one stays with its work, nothing is put at the deleted time, and that to-do goes once approved
+      final p = await planner.propose(plan);
+      expect(p.removed.map((r) => r.taskId), isNot(contains(a.taskId)));
+      expect(p.removed.map((r) => r.taskId), contains(b.taskId));
+      expect(p.sessions.where((s) => s.session.start.isBefore(b.session.end) && s.session.end.isAfter(b.session.start)), isEmpty);
+      bool sameWork(SessionItem x, SessionItem y) => x.kind == y.kind && x.unitId == y.unitId && (x.from - y.from).abs() < 1e-6;
+      for (final item in a.session.items.where((i) => i.kind == WorkKind.learn)) {
+        expect(p.sessions.where((s) => s.session.items.any((i) => sameWork(i, item))), isEmpty, reason: 'its work is not planned twice');
+      }
+      await planner.approve(p);
+      plan = planner.plans.single;
+      expect(plan.sessions.where((s) => s.taskId == a.taskId).single.session.start, moved);
+      expect(plan.sessions.where((s) => s.taskId == a.taskId).single.skipped, isFalse);
+      final left = await tasks.listTasks();
+      expect(left.any((t) => t.id == b.taskId), isFalse);
+      expect(left.any((t) => t.id == a.taskId), isTrue);
+      await planner.refresh(lookAtCalendar: true);
+      expect(planner.attentionOf(e.id).any, isFalse);
+    });
   });
 
   test('a plan is read back from what was kept, and a damaged one is left out', () {
@@ -409,4 +501,20 @@ void main() {
     expect(e.blocked.single.start, DateTime(2026, 6, 2, 9));
     expect(StudyPlanEntry.fromJson({'id': 'x', 'exam': '2026-06-06', 'v': 2, 'cards': []})!.cardSources, isEmpty);
   });
+}
+
+/// Facts of graphs, and whether a model could make a quiz of them.
+class _Facts implements StudyFactSource {
+  final List<FactSpot> spots;
+  bool ready = true;
+  _Facts(this.spots);
+
+  @override
+  bool get canQuiz => ready;
+
+  @override
+  Future<List<FactSpot>> facts() async => spots;
+
+  @override
+  Future<void> quiz(BuildContext context, String title, List<StudyFact> facts, {CardRepository? cards}) async {}
 }

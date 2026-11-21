@@ -54,6 +54,12 @@ enum WorkKind {
 
   /// The day of the exam: a short last look.
   lastLook,
+
+  /// The lines of maths of a unit that were found wrong (and kept as flashcards): worked again.
+  mistakes,
+
+  /// A quiz on the facts of a unit (the knowledge graph's quiz).
+  quiz,
 }
 
 /// One thing to do in a session: a share ([from] to [to], 0..1) of the learning or the going-over of a unit, or the cards.
@@ -121,6 +127,16 @@ class StudySchedule {
 
   bool get fits => learnLeftOver == 0 && reviewLeftOver == 0;
 }
+
+/// What there is to practise in a unit besides learning and going over it: the maths mistakes that were kept as flashcards and are not
+/// known well yet, and whether there are enough facts of it in a knowledge graph for a quiz.
+typedef UnitPractice = ({int mistakes, bool quiz});
+
+/// The practice of a unit as pieces of work: a few minutes a mistake (5 to 15), and 10 minutes for a quiz.
+List<(WorkKind, int)> practiceMinutes(UnitPractice p) => [
+      if (p.mistakes > 0) (WorkKind.mistakes, (3 * p.mistakes).clamp(5, 15)),
+      if (p.quiz) (WorkKind.quiz, 10),
+    ];
 
 /// How much of a unit's learning and going-over is done (0..1 each).
 typedef UnitProgress = ({double learned, double reviewed});
@@ -193,6 +209,8 @@ class _Piece {
 /// the card plan gives it); on the day of the exam there is one short last look before [examTime] (minutes after midnight; null: any time
 /// in the window). [progress] is what is done of each unit already. A unit that does not fit is said, with the minutes that are missing.
 /// [speed] is how long the person takes compared with the estimate (1.2: a fifth longer), measured on the sessions done so far.
+/// [practice] is what there is to practise in a unit besides going over it ([practiceMinutes]): it is done right after the going over (in
+/// the same session when there is room, never cut in two) and, like the going over, cut back first when time is short.
 StudySchedule scheduleStudy({
   required DateTime now,
   required DateTime exam,
@@ -204,6 +222,7 @@ StudySchedule scheduleStudy({
   Map<DateTime, int> cardMinutes = const {},
   bool lastLook = true,
   double speed = 1,
+  Map<String, UnitPractice> practice = const {},
 }) {
   final today = DateTime(now.year, now.month, now.day), examDay = DateTime(exam.year, exam.month, exam.day);
   if (examDay.isBefore(today)) return const StudySchedule([]);
@@ -229,7 +248,15 @@ StudySchedule scheduleStudy({
   for (final u in units.where((u) => u.included)) {
     final p = progress[u.id] ?? (learned: 0.0, reviewed: 0.0);
     if (p.learned < 0.999) learn.add(_Piece(WorkKind.learn, u, p.learned.clamp(0, 1), 1, (u.learnMinutes * speed * (1 - p.learned.clamp(0, 1))).round()));
-    if (p.reviewed < 0.999) review.add(_Piece(WorkKind.review, u, p.reviewed.clamp(0, 1), 1, (u.reviewMinutes * speed * (1 - p.reviewed.clamp(0, 1))).round()));
+    if (p.reviewed < 0.999) {
+      review.add(_Piece(WorkKind.review, u, p.reviewed.clamp(0, 1), 1, (u.reviewMinutes * speed * (1 - p.reviewed.clamp(0, 1))).round()));
+      final extra = practice[u.id];
+      if (extra != null) {
+        for (final (kind, minutes) in practiceMinutes(extra)) {
+          review.add(_Piece(kind, u, 0, 1, (minutes * speed).round()));
+        }
+      }
+    }
   }
   final learnNeed = learn.fold<int>(0, (n, p) => n + p.minutes), reviewNeed = review.fold<int>(0, (n, p) => n + p.minutes);
   final needed = learnNeed + reviewNeed;
@@ -239,7 +266,7 @@ StudySchedule scheduleStudy({
   final queue = <_Piece>[
     ...learn,
     for (final p in review)
-      if (reviewScale > 0) _Piece(p.kind, p.unit, p.from, p.to, math.max(1, (p.minutes * reviewScale).round())),
+      if (reviewScale > 0) _Piece(p.kind, p.unit, p.from, p.to, math.max(p.kind == WorkKind.review ? 1 : 5, (p.minutes * reviewScale).round())),
   ];
   final work = queue.fold<int>(0, (n, p) => n + p.minutes);
   // the share of each day's time that is used, so that the work is spread over all of it
@@ -276,6 +303,7 @@ StudySchedule scheduleStudy({
             queue.removeAt(0);
             continue;
           }
+          if (p.kind != WorkKind.learn && p.kind != WorkKind.review) break; // (practice is not cut in two: the next session)
           if (room < 10) break; // not worth starting
           // a share of it: by whole pages where it has pages
           var share = room / left * (p.to - p.from);
@@ -322,7 +350,7 @@ StudySchedule scheduleStudy({
   }
 
   final learnLeft = queue.where((p) => p.kind == WorkKind.learn).fold<int>(0, (n, p) => n + p.left);
-  final reviewLeft = reviewNeed - reviewKept + queue.where((p) => p.kind == WorkKind.review).fold<int>(0, (n, p) => n + p.left);
+  final reviewLeft = reviewNeed - reviewKept + queue.where((p) => p.kind != WorkKind.learn).fold<int>(0, (n, p) => n + p.left);
   return StudySchedule(
     sessions,
     learnLeftOver: learnLeft,
@@ -340,6 +368,10 @@ String itemText(SessionItem item, StudyUnit? unit) {
       return tr('Flashcards that are due (about {n} min)', {'n': item.minutes});
     case WorkKind.lastLook:
       return tr('A last look at what is weak');
+    case WorkKind.mistakes:
+      return tr('Do the lines you got wrong again: {part}', {'part': unit?.title ?? tr('A part that was taken out of the plan')});
+    case WorkKind.quiz:
+      return tr('Quiz yourself: {part}', {'part': unit?.title ?? tr('A part that was taken out of the plan')});
     case WorkKind.learn:
     case WorkKind.review:
       final title = unit?.title ?? tr('A part that was taken out of the plan');

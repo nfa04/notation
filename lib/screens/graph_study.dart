@@ -4,11 +4,47 @@ import '../ai/ai_prompt.dart';
 import '../ai/flashcards.dart';
 import '../data/card_repository.dart';
 import '../ai/text_provider.dart';
+import '../graph/graph_model.dart';
 import '../graph/graph_service.dart';
 import '../graph/study.dart';
+import '../review/study_practice.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import 'flashcard_view.dart';
+
+/// The facts of the kept graphs (those made of facts), for the quizzes of study sessions. They are read again only when a graph changed.
+class GraphStudyFacts implements StudyFactSource {
+  final GraphService service;
+  ({int stamp, List<FactSpot> facts})? _kept;
+
+  GraphStudyFacts(this.service);
+
+  @override
+  bool get canQuiz => service.canStudy;
+
+  @override
+  Future<List<FactSpot>> facts() async {
+    await service.refresh();
+    final graphs = [for (final g in service.graphs) if (g.mode == 'facts') g];
+    final stamp = Object.hashAll([for (final g in graphs) (g.id, g.updatedAt)]); // (only within this run)
+    final kept = _kept;
+    if (kept != null && kept.stamp == stamp) return kept.facts;
+    final out = <FactSpot>[];
+    for (final g in graphs) {
+      final graph = await service.load(g.id);
+      if (graph == null) continue;
+      for (final n in graph.nodes) {
+        if (n.kind == GraphNodeKind.fact && n.detail.isNotEmpty && n.noteId != null) out.add((noteId: n.noteId!, page: n.page, fact: StudyFact(n.label, n.detail)));
+      }
+    }
+    _kept = (stamp: stamp, facts: out);
+    return out;
+  }
+
+  @override
+  Future<void> quiz(BuildContext context, String title, List<StudyFact> facts, {CardRepository? cards}) =>
+      showGraphStudy(context, service: service, title: title, facts: facts, tool: StudyTool.quiz, cards: cards);
+}
 
 /// Which study tool opens first.
 enum StudyTool { cards, quiz, ask }

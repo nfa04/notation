@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
+import 'package:flutter_math_fork/flutter_math.dart' show Math;
 
+import '../algebra/mistake_card.dart';
 import '../data/card_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
@@ -100,6 +102,28 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
     if (_mine == null) await _planner.begin(widget.planId, widget.sessionKey);
     if (!mounted) return;
     await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReviewScreen(cards: widget.cards!, sources: plan.cardSources, clock: widget.clock)));
+  }
+
+  /// The maths mistakes of [unit] to do again; one of them can open its page (the session's screen is left, as for a note).
+  Future<void> _mistakes(StudyUnit unit) async {
+    if (_mine == null) await _planner.begin(widget.planId, widget.sessionKey);
+    final cards = await _planner.mistakesOf(unit);
+    if (!mounted) return;
+    final open = await Navigator.push<int?>(
+        context, MaterialPageRoute(builder: (_) => _MistakesPage(title: unit.title, mistakes: cards, canOpen: widget.onOpenNoteAt != null)));
+    if (open != null && mounted) _openNote(unit.noteId, open);
+  }
+
+  Future<void> _quiz(StudyUnit unit) async {
+    if (_mine == null) await _planner.begin(widget.planId, widget.sessionKey);
+    final facts = await _planner.factsOf(unit);
+    if (!mounted) return;
+    if (facts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('There is nothing to make a quiz of now: it needs facts of this part in a knowledge graph, and an AI model.')));
+      return;
+    }
+    await _planner.facts!.quiz(context, unit.title, facts, cards: widget.cards);
   }
 
   void _toReport(BookedSession s) {
@@ -205,6 +229,10 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
           key: ValueKey('session-open-$i'), tooltip: tr('Open the note'), icon: const Icon(Icons.open_in_new), onPressed: () => _openNote(unit.noteId, pageOf(item, unit)));
     } else if (item.kind == WorkKind.cards && widget.cards != null) {
       action = IconButton(key: ValueKey('session-cards-$i'), tooltip: tr('Review the cards'), icon: const Icon(Icons.style_outlined), onPressed: () => _reviewCards(plan));
+    } else if (item.kind == WorkKind.mistakes && unit != null) {
+      action = IconButton(key: ValueKey('session-mistakes-$i'), tooltip: tr('Show the lines'), icon: const Icon(Icons.edit_note), onPressed: () => _mistakes(unit));
+    } else if (item.kind == WorkKind.quiz && unit != null && _planner.facts != null) {
+      action = IconButton(key: ValueKey('session-quiz-$i'), tooltip: tr('Start the quiz'), icon: const Icon(Icons.quiz_outlined), onPressed: () => _quiz(unit));
     }
     return Row(children: [
       Expanded(
@@ -375,4 +403,67 @@ class _StudySessionCardState extends State<StudySessionCard> {
           );
         },
       );
+}
+
+/// The lines of maths of a part that were found wrong, to work again: each line, and on demand what was wrong with it. Closes with the
+/// page of a line when it is to be opened.
+class _MistakesPage extends StatefulWidget {
+  final String title;
+  final List<ReviewCard> mistakes;
+  final bool canOpen;
+
+  const _MistakesPage({required this.title, required this.mistakes, required this.canOpen});
+
+  @override
+  State<_MistakesPage> createState() => _MistakesPageState();
+}
+
+class _MistakesPageState extends State<_MistakesPage> {
+  final _shown = <int>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: Text.verbatim(widget.title, maxLines: 2)),
+      body: widget.mistakes.isEmpty
+          ? Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('There are no mistakes left to do again here.', key: const ValueKey('mistakes-none'), textAlign: TextAlign.center)))
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                Text('Work each line again without looking, then check what was wrong.', style: TextStyle(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 12),
+                for (final (i, m) in widget.mistakes.indexed)
+                  Card(
+                    key: ValueKey('mistake-$i'),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Math.tex(mistakeLineOf(m.card.front), textStyle: const TextStyle(fontSize: 18), onErrorFallback: (_) => Text.verbatim(mistakeLineOf(m.card.front))),
+                        ),
+                        if (_shown.contains(i)) ...[
+                          const SizedBox(height: 8),
+                          Text.verbatim(m.card.back, key: ValueKey('mistake-back-$i')),
+                        ],
+                        const SizedBox(height: 4),
+                        Wrap(spacing: 8, children: [
+                          if (!_shown.contains(i))
+                            TextButton(key: ValueKey('mistake-show-$i'), onPressed: () => setState(() => _shown.add(i)), child: Text('What was wrong?')),
+                          if (widget.canOpen && m.card.page != null)
+                            TextButton.icon(
+                              key: ValueKey('mistake-open-$i'),
+                              onPressed: () => Navigator.pop(context, m.card.page),
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                              label: Text.verbatim(tr('Open page {n}', {'n': m.card.page! + 1})),
+                            ),
+                        ]),
+                      ]),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
 }
