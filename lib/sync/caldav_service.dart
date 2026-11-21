@@ -387,6 +387,19 @@ class CalDavService extends ChangeNotifier {
     return created.href.toString();
   }
 
+  /// Makes a calendar on the server and shows it (its events are then read with the others); its key is its address.
+  Future<CalendarInfo> createEventCalendar(String name, {String? color}) async {
+    final c = _config;
+    if (c == null) throw StateError(tr('The calendar server is not connected.'));
+    final created = await (await _connected()).createCalendar(name, color: color);
+    final href = created.href.toString();
+    final shown = {...c.eventCalendars, href};
+    await _settings.set(_kEventCals, jsonEncode(shown.toList()));
+    _config = CalDavConfig(serverUrl: c.serverUrl, username: c.username, taskCalendar: c.taskCalendar, eventCalendars: shown);
+    _forgetEvents();
+    return CalendarInfo(href, created.displayName, created.color);
+  }
+
   /// Removes the event at [href] (what [createEvent] returned); one that is gone already is fine.
   Future<void> deleteEvent(String calendarHref, String href) async {
     final client = await _connected();

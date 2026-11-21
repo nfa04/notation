@@ -37,6 +37,9 @@ abstract class PhoneCalendarApi {
 
   /// Removes an event (one that is gone already is fine).
   Future<void> deleteEvent(String eventId);
+
+  /// Makes a new calendar (on the phone's own account) and returns its id.
+  Future<String> createCalendar(String name, {String? color});
 }
 
 /// An event of a calendar on the phone, as the plugin gives it.
@@ -105,6 +108,9 @@ class PluginPhoneCalendarApi implements PhoneCalendarApi {
           : (event.end ?? event.start.add(const Duration(hours: 1))),
     );
   }
+
+  @override
+  Future<String> createCalendar(String name, {String? color}) => _p.createCalendar(name: name, colorHex: color);
 
   @override
   Future<void> deleteEvent(String eventId) async {
@@ -200,6 +206,16 @@ class DeviceCalendarService extends ChangeNotifier {
     _cache.clear();
     notifyListeners();
     return id;
+  }
+
+  /// Makes a calendar on the phone and shows it (its events are then read like those of the other calendars that are shown).
+  Future<CalendarInfo> createCalendar(String name, {String? color}) async {
+    final api = _api;
+    if (api == null || !await api.requestAccess()) throw StateError(tr('This device has no calendars to write to.'));
+    final id = await api.createCalendar(name, color: color);
+    _known[id] = PhoneCalendar(id: id, name: name, color: color);
+    await setSelected({..._selected, id});
+    return CalendarInfo('phone:$id', name, color);
   }
 
   Future<void> deleteEvent(String eventId) async {

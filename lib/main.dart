@@ -7,6 +7,8 @@ import 'spelling/spell_service.dart';
 import 'images/subject_service.dart';
 import 'scan/ocr_service.dart';
 import 'shortcuts/shortcut_service.dart';
+import 'review/study_calendar.dart';
+import 'review/study_material_reader.dart';
 import 'review/study_planner.dart';
 import 'style/accessibility.dart';
 import 'templates/templates.dart';
@@ -308,7 +310,11 @@ Future<void> _start() async {
     _withKeystore('The AI provider in the cloud', cloudModel.load()),
     aiSwitch.load(),
   ]);
-  final mirror = TaskCalendarMirror(settings, tasks, caldav: caldav, device: device);
+  final cards = CardRepository(db);
+  // (before the mirror's first run: the to-dos of study sessions are kept off its calendar)
+  final planner = StudyPlanner(settings, cards, tasks, calendar: AppStudyCalendar(caldav: caldav, device: device, ics: ics), readNote: (id) => readNoteShape(db, id));
+  await planner.load();
+  final mirror = TaskCalendarMirror(settings, tasks, caldav: caldav, device: device)..keepOff = planner.ownsTask;
   await mirror.load();
   caldav.addListener(mirror.runSoon); // after a sync: what came from the server may be due
   mirror.runSoon();
@@ -398,10 +404,7 @@ Future<void> _start() async {
     sync.wake();
     nativeShares.wake(); // (and the rooms of the shares the person works on live)
   });
-  final cards = CardRepository(db);
   final tags = TagRepository(db);
-  final planner = StudyPlanner(settings, cards, tasks);
-  await planner.load();
   planner.start();
   final capture = CaptureService(repository: repository, supportDirectory: noteFiles.supportDirectory)
     ..onCaptured = (c) async {
