@@ -14,6 +14,7 @@ import 'reminder.dart';
 class ReminderService extends ChangeNotifier {
   static const tasksKey = 'reminders_tasks';
   static const timeKey = 'reminders_task_time';
+  static const studyKey = 'reminders_study';
 
   /// How far ahead, and how many, notifications are handed to the system (iOS keeps 64 at most).
   static const _horizon = Duration(days: 30);
@@ -30,6 +31,10 @@ class ReminderService extends ChangeNotifier {
   /// Opens what a notification was about: a note, or the calendar for a task.
   void Function(ReminderKind kind, String? refId)? onOpen;
 
+  /// When the study session whose to-do is the given task starts (null: the task is not a session's). Such a to-do is announced at
+  /// the session's start rather than in the morning of its day.
+  DateTime? Function(String taskId)? studyStart;
+
   ReminderService({
     required this.reminders,
     this.tasks,
@@ -42,6 +47,7 @@ class ReminderService extends ChangeNotifier {
         _now = clock ?? DateTime.now;
 
   bool _tasksOn = true;
+  bool _studyOn = true;
   int _taskMinutes = 9 * 60;
   bool _available = false;
   bool _allowed = false;
@@ -53,6 +59,9 @@ class ReminderService extends ChangeNotifier {
   /// Whether the due dates of tasks are announced.
   bool get tasksOn => _tasksOn;
 
+  /// Whether study sessions are announced when they start.
+  bool get studyOn => _studyOn;
+
   /// The time of day (minutes after midnight) a task is announced on its due date.
   int get taskMinutes => _taskMinutes;
 
@@ -62,6 +71,7 @@ class ReminderService extends ChangeNotifier {
 
   Future<void> load() async {
     _tasksOn = await _read(tasksKey) != '0';
+    _studyOn = await _read(studyKey) != '0';
     _taskMinutes = int.tryParse(await _read(timeKey) ?? '')?.clamp(0, 24 * 60 - 1) ?? 9 * 60;
     notifyListeners();
   }
@@ -111,6 +121,13 @@ class ReminderService extends ChangeNotifier {
     await reconcile();
   }
 
+  Future<void> setStudyOn(bool on) async {
+    _studyOn = on;
+    await _write(studyKey, on ? '1' : '0');
+    notifyListeners();
+    await reconcile();
+  }
+
   Future<void> setTaskMinutes(int minutes) async {
     _taskMinutes = minutes.clamp(0, 24 * 60 - 1);
     await _write(timeKey, '$_taskMinutes');
@@ -142,29 +159,34 @@ class ReminderService extends ChangeNotifier {
     final repo = tasks;
     if (repo == null) return;
     final everything = await reminders.all();
-    final existing = {for (final r in everything) if (r.kind == ReminderKind.task && r.auto) r.refId: r};
-    final wanted = <String, Task>{};
+    final existing = {for (final r in everything) if ((r.kind == ReminderKind.task || r.kind == ReminderKind.study) && r.auto) r.refId: r};
+    final wanted = <String, ({Task task, ReminderKind kind, DateTime at})>{};
     final open = <String>{};
     for (final t in await repo.listTasks()) {
       if (t.done) continue;
       open.add(t.id);
-      if (_tasksOn && t.dueDate != null) wanted[t.id] = t;
+      final session = studyStart?.call(t.id);
+      if (session != null) {
+        if (_studyOn) wanted[t.id] = (task: t, kind: ReminderKind.study, at: session);
+      } else if (_tasksOn && t.dueDate != null) {
+        final due = t.dueDate!;
+        wanted[t.id] = (task: t, kind: ReminderKind.task, at: DateTime(due.year, due.month, due.day, _taskMinutes ~/ 60, _taskMinutes % 60));
+      }
     }
     // a reminder the person set for a task goes with the task once it is done or deleted
     for (final r in everything) {
       if (r.kind == ReminderKind.task && !r.auto && r.refId != null && !open.contains(r.refId)) await reminders.remove(r.id);
     }
     for (final e in existing.entries) {
-      if (!wanted.containsKey(e.key)) await reminders.remove(e.value.id);
+      if (wanted[e.key]?.kind != e.value.kind) await reminders.remove(e.value.id);
     }
-    for (final t in wanted.values) {
-      final due = t.dueDate!;
-      final at = DateTime(due.year, due.month, due.day, _taskMinutes ~/ 60, _taskMinutes % 60);
+    for (final w in wanted.values) {
+      final t = w.task;
       final have = existing[t.id];
-      if (have == null) {
-        await reminders.add(kind: ReminderKind.task, refId: t.id, title: t.title, at: at, auto: true);
-      } else if (have.at != at || have.title != t.title) {
-        await reminders.update(have.id, title: t.title, at: at);
+      if (have == null || have.kind != w.kind) {
+        await reminders.add(kind: w.kind, refId: t.id, title: t.title, at: w.at, auto: true);
+      } else if (have.at != w.at || have.title != t.title) {
+        await reminders.update(have.id, title: t.title, at: w.at);
       }
     }
   }
@@ -222,6 +244,7 @@ class ReminderService extends ChangeNotifier {
         ReminderKind.note => tr('Time to look at this note'),
         ReminderKind.task => tr('A task is due'),
         ReminderKind.review => tr('Time for your weekly review'),
+        ReminderKind.study => tr('Your study session starts now'),
         ReminderKind.custom => tr('Reminder'),
       };
 

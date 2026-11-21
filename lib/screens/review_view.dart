@@ -77,6 +77,9 @@ class ReviewScreen extends StatefulWidget {
   /// Reviews only the cards of this source (a note); null: all of them.
   final String? source;
 
+  /// Reviews only the cards of these sources (a study plan's notes); null: as [source] says.
+  final Set<String>? sources;
+
   /// Tells what time it is (tests move it); null: the clock.
   final DateTime Function()? clock;
 
@@ -84,7 +87,7 @@ class ReviewScreen extends StatefulWidget {
   final StudyPlanner? planner;
   final NoteRepository? repository;
 
-  const ReviewScreen({super.key, required this.cards, this.source, this.clock, this.planner, this.repository});
+  const ReviewScreen({super.key, required this.cards, this.source, this.sources, this.clock, this.planner, this.repository});
 
   @override
   State<ReviewScreen> createState() => _ReviewScreenState();
@@ -105,7 +108,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Future<void> _load() async {
-    final due = await widget.cards.due(now: _now(), source: widget.source);
+    final sources = widget.sources;
+    final due = sources == null
+        ? await widget.cards.due(now: _now(), source: widget.source)
+        : [for (final s in sources) ...await widget.cards.due(now: _now(), source: s)];
+    if (sources != null) {
+      // as from one source: the longest due first, and in the order they were made where they are due at once
+      final order = {for (final (i, c) in due.indexed) c.id: i};
+      due.sort((a, b) {
+        final byDue = a.schedule.due!.compareTo(b.schedule.due!);
+        return byDue != 0 ? byDue : order[a.id]!.compareTo(order[b.id]!);
+      });
+    }
     if (!mounted) return;
     setState(() {
       _queue = [...due];
@@ -158,7 +172,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               icon: const Icon(Icons.event_available_outlined),
               onPressed: () {
                 final planner = widget.planner!, repository = widget.repository!, clock = widget.clock;
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanScreen(planner: planner, repository: repository, clock: clock)));
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanScreen(planner: planner, repository: repository, clock: clock, cards: widget.cards)));
               },
             ),
         ],

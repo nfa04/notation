@@ -61,6 +61,7 @@ import 'calendar_view.dart';
 import 'collab_ui.dart';
 import 'assistant_panel.dart';
 import 'dashboard_view.dart';
+import 'study_session_screen.dart';
 import '../reminders/reminder.dart' show ReminderKind;
 import '../widgets/notation_logo.dart';
 import 'folder_view.dart';
@@ -960,6 +961,14 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         _go(index: 3, note: id);
       } else if (kind == ReminderKind.task) {
         _go(index: 2);
+      } else if (kind == ReminderKind.study && id != null && _app.planner != null) {
+        final found = _app.planner!.findByTask(id);
+        if (found == null) {
+          _go(index: 2); // (a session that is not in a plan any more: its to-do)
+        } else {
+          openStudySession(context, _app.planner!, found.plan.id, found.session.key,
+              cards: _f(Feature.flashcards) ? _app.cards : null, onOpenNoteAt: (note, page) => _openAtPage(note, page));
+        }
       } else if (kind == ReminderKind.review && _app.review != null) {
         // the review is offered on the dashboard, where its button is
         _go(index: 0).then((_) {
@@ -1344,6 +1353,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           tags: _app.tags,
           automations: _app.automations,
           planner: _f(Feature.calendar) ? _app.planner : null,
+          onOpenNoteAt: (id, page) => _openAtPage(id, page),
           collab: _app.collab,
           repository: _app.repository,
           noteFiles: _f(Feature.noteFiles) ? _app.noteFiles : null,

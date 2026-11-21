@@ -192,6 +192,7 @@ class _Piece {
 /// time there is rather than crammed into the first days. Each day that has a session also has [cardMinutes] for that day's cards (as
 /// the card plan gives it); on the day of the exam there is one short last look before [examTime] (minutes after midnight; null: any time
 /// in the window). [progress] is what is done of each unit already. A unit that does not fit is said, with the minutes that are missing.
+/// [speed] is how long the person takes compared with the estimate (1.2: a fifth longer), measured on the sessions done so far.
 StudySchedule scheduleStudy({
   required DateTime now,
   required DateTime exam,
@@ -202,6 +203,7 @@ StudySchedule scheduleStudy({
   List<Busy> busy = const [],
   Map<DateTime, int> cardMinutes = const {},
   bool lastLook = true,
+  double speed = 1,
 }) {
   final today = DateTime(now.year, now.month, now.day), examDay = DateTime(exam.year, exam.month, exam.day);
   if (examDay.isBefore(today)) return const StudySchedule([]);
@@ -226,8 +228,8 @@ StudySchedule scheduleStudy({
   final learn = <_Piece>[], review = <_Piece>[];
   for (final u in units.where((u) => u.included)) {
     final p = progress[u.id] ?? (learned: 0.0, reviewed: 0.0);
-    if (p.learned < 0.999) learn.add(_Piece(WorkKind.learn, u, p.learned.clamp(0, 1), 1, (u.learnMinutes * (1 - p.learned.clamp(0, 1))).round()));
-    if (p.reviewed < 0.999) review.add(_Piece(WorkKind.review, u, p.reviewed.clamp(0, 1), 1, (u.reviewMinutes * (1 - p.reviewed.clamp(0, 1))).round()));
+    if (p.learned < 0.999) learn.add(_Piece(WorkKind.learn, u, p.learned.clamp(0, 1), 1, (u.learnMinutes * speed * (1 - p.learned.clamp(0, 1))).round()));
+    if (p.reviewed < 0.999) review.add(_Piece(WorkKind.review, u, p.reviewed.clamp(0, 1), 1, (u.reviewMinutes * speed * (1 - p.reviewed.clamp(0, 1))).round()));
   }
   final learnNeed = learn.fold<int>(0, (n, p) => n + p.minutes), reviewNeed = review.fold<int>(0, (n, p) => n + p.minutes);
   final needed = learnNeed + reviewNeed;

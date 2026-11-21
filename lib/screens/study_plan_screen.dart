@@ -10,7 +10,9 @@ import '../review/study_planner.dart';
 import '../review/study_schedule.dart';
 import '../style/platform_dialog.dart';
 import '../sync/caldav_remote.dart';
+import '../data/card_repository.dart';
 import 'note_picker_dialog.dart';
+import 'study_session_screen.dart';
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -30,7 +32,11 @@ class StudyPlanScreen extends StatelessWidget {
   final NoteRepository repository;
   final DateTime Function()? clock;
 
-  const StudyPlanScreen({super.key, required this.planner, required this.repository, this.clock});
+  /// For the sessions' screen: the flashcards, and opening a note at a page.
+  final CardRepository? cards;
+  final OpenNoteAt? onOpenNoteAt;
+
+  const StudyPlanScreen({super.key, required this.planner, required this.repository, this.clock, this.cards, this.onOpenNoteAt});
 
   DateTime _now() => (clock ?? DateTime.now)();
 
@@ -64,7 +70,9 @@ class StudyPlanScreen extends StatelessWidget {
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                  children: [for (final p in planner.plans) _PlanCard(planner: planner, repository: repository, entry: p, now: _now(), clock: clock)],
+                  children: [
+                    for (final p in planner.plans) _PlanCard(planner: planner, repository: repository, entry: p, now: _now(), clock: clock, cards: cards, onOpenNoteAt: onOpenNoteAt),
+                  ],
                 ),
         ),
       );
@@ -76,8 +84,10 @@ class _PlanCard extends StatelessWidget {
   final StudyPlanEntry entry;
   final DateTime now;
   final DateTime Function()? clock;
+  final CardRepository? cards;
+  final OpenNoteAt? onOpenNoteAt;
 
-  const _PlanCard({required this.planner, required this.repository, required this.entry, required this.now, this.clock});
+  const _PlanCard({required this.planner, required this.repository, required this.entry, required this.now, this.clock, this.cards, this.onOpenNoteAt});
 
   Future<void> _again(BuildContext context) async {
     final proposal = await planner.propose(entry);
@@ -106,12 +116,18 @@ class _PlanCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final days = entry.exam.difference(_day(now)).inDays;
     final next = entry.sessions.where((s) => s.session.start.isAfter(now) && !s.credited).firstOrNull;
+    // the session to open: the one being studied or today's, else the next one
+    final current = planner.current();
+    final open = current != null && current.plan.id == entry.id ? current.session : next;
     final attention = planner.attentionOf(entry.id);
     final reasons = [
       if (attention.unbooked) tr('The sessions are not in your calendar yet.'),
       if (attention.missed > 0) trCount(attention.missed, '{n} session went by without being ticked off.', '{n} sessions went by without being ticked off.'),
       if (attention.clashes > 0) trCount(attention.clashes, '{n} session now clashes with an event.', '{n} sessions now clash with an event.'),
       if (attention.dropped > 0) trCount(attention.dropped, 'The to-do of {n} session was deleted.', 'The to-dos of {n} sessions were deleted.'),
+      if (attention.unfinished > 0) trCount(attention.unfinished, '{n} session left work undone.', '{n} sessions left work undone.'),
+      if ((attention.pace ?? 1) > 1) tr('You take about {n} % longer than the plan expected.', {'n': ((attention.pace! - 1) * 100).round()}),
+      if ((attention.pace ?? 1) < 1) tr('You are about {n} % quicker than the plan expected.', {'n': ((1 - attention.pace!) * 100).round()}),
     ];
     return Card(
       key: ValueKey('study-plan-${entry.id}'),
@@ -156,6 +172,17 @@ class _PlanCard extends StatelessWidget {
                 next == null ? tr('No session to come') : tr('Next: {when}, {what}', {'when': '${l.formatMediumDate(next.session.start)} ${_time(context, next.session.start)}', 'what': next.title}),
                 key: ValueKey('study-next-${entry.id}'),
               ),
+              if (open != null)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: ValueKey('study-open-${entry.id}'),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    onPressed: () => openStudySession(context, planner, entry.id, open.key, cards: cards, onOpenNoteAt: onOpenNoteAt, clock: clock),
+                    icon: const Icon(Icons.play_circle_outline),
+                    label: Text.verbatim(planner.running?.key == open.key && planner.running?.planId == entry.id ? tr('Go on with the session') : tr('Open the session')),
+                  ),
+                ),
               if (reasons.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Container(

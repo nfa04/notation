@@ -11,6 +11,9 @@ enum ReminderKind {
 
   /// The weekly review: tapping the notification offers to make it.
   review,
+
+  /// A session of a study plan, at its start ([Reminder.refId] is its to-do); tapping the notification opens the session.
+  study,
 }
 
 /// How often a reminder comes again.

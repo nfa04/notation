@@ -20,6 +20,76 @@ DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
 String _clock(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+/// How a session felt, as said at its end.
+enum SessionFeeling { easy, fine, hard }
+
+/// What the person said at the end of a session: how long they studied, which of its items they did, and how it went.
+class SessionReport {
+  /// Minutes studied (the time of the session's clock, pauses left out).
+  final int spent;
+
+  /// The items of the session (by their place in it) that were done.
+  final Set<int> done;
+  final SessionFeeling feeling;
+
+  const SessionReport({required this.spent, required this.done, this.feeling = SessionFeeling.fine});
+
+  Map<String, Object?> toJson() => {'min': spent, 'done': done.toList()..sort(), 'feel': feeling.name};
+
+  static SessionReport? fromJson(Object? j) {
+    if (j is! Map) return null;
+    return SessionReport(
+      spent: (j['min'] as num?)?.toInt() ?? 0,
+      done: {for (final i in (j['done'] as List?) ?? const []) if (i is int) i},
+      feeling: SessionFeeling.values.where((f) => f.name == j['feel']).firstOrNull ?? SessionFeeling.fine,
+    );
+  }
+}
+
+/// The session that is being studied now: since when, and how long it was paused.
+class RunningSession {
+  final String planId, key;
+  final DateTime started;
+
+  /// Paused since then (null: it runs), and the seconds of the pauses before.
+  final DateTime? pausedAt;
+  final int pausedSeconds;
+
+  /// The items (by their place in the session) ticked off so far.
+  final Set<int> checked;
+
+  const RunningSession(this.planId, this.key, this.started, {this.pausedAt, this.pausedSeconds = 0, this.checked = const {}});
+
+  RunningSession _with({DateTime? Function()? pausedAt, int? pausedSeconds, Set<int>? checked}) => RunningSession(planId, key, started,
+      pausedAt: pausedAt == null ? this.pausedAt : pausedAt(), pausedSeconds: pausedSeconds ?? this.pausedSeconds, checked: checked ?? this.checked);
+
+  bool get paused => pausedAt != null;
+
+  Duration elapsed(DateTime now) {
+    final d = (pausedAt ?? now).difference(started) - Duration(seconds: pausedSeconds);
+    return d.isNegative ? Duration.zero : d;
+  }
+
+  Map<String, Object?> toJson() => {
+        'plan': planId,
+        'key': key,
+        'start': started.toIso8601String(),
+        if (pausedAt != null) 'paused': pausedAt!.toIso8601String(),
+        'pauses': pausedSeconds,
+        if (checked.isNotEmpty) 'checked': checked.toList()..sort(),
+      };
+
+  static RunningSession? fromJson(Object? j) {
+    if (j is! Map || j['plan'] is! String || j['key'] is! String) return null;
+    final start = DateTime.tryParse('${j['start']}');
+    if (start == null) return null;
+    return RunningSession(j['plan'] as String, j['key'] as String, start,
+        pausedAt: j['paused'] == null ? null : DateTime.tryParse('${j['paused']}'),
+        pausedSeconds: (j['pauses'] as num?)?.toInt() ?? 0,
+        checked: {for (final i in (j['checked'] as List?) ?? const []) if (i is int) i});
+  }
+}
+
 /// A session that was put on the calendar: what was planned, and the to-do and the event it became.
 class BookedSession {
   final PlannedSession session;
@@ -32,15 +102,21 @@ class BookedSession {
   /// Its work counts as done (its to-do was ticked off).
   final bool credited;
 
-  /// It went by without being done and the plan was made again since (it is not reported again).
+  /// It went by without being done (or with work left), and the plan was made again since (it is not reported again).
   final bool skipped;
 
-  const BookedSession(this.session, this.title, {this.taskId, this.eventId, this.eventTarget, this.credited = false, this.skipped = false});
+  /// What was said at its end (null: it was not studied with the session's screen).
+  final SessionReport? report;
+
+  const BookedSession(this.session, this.title, {this.taskId, this.eventId, this.eventTarget, this.credited = false, this.skipped = false, this.report});
 
   String get key => session.key;
 
-  BookedSession copyWith({bool? credited, bool? skipped}) =>
-      BookedSession(session, title, taskId: taskId, eventId: eventId, eventTarget: eventTarget, credited: credited ?? this.credited, skipped: skipped ?? this.skipped);
+  /// It was studied, and some of its items were not done.
+  bool get unfinished => report != null && session.items.indexed.any((i) => !report!.done.contains(i.$1));
+
+  BookedSession copyWith({bool? credited, bool? skipped, SessionReport? report}) => BookedSession(session, title,
+      taskId: taskId, eventId: eventId, eventTarget: eventTarget, credited: credited ?? this.credited, skipped: skipped ?? this.skipped, report: report ?? this.report);
 
   Map<String, Object?> toJson() => {
         'start': session.start.toIso8601String(),
@@ -52,6 +128,7 @@ class BookedSession {
         if (eventTarget != null) 'cal': eventTarget,
         if (credited) 'done': true,
         if (skipped) 'skip': true,
+        if (report != null) 'report': report!.toJson(),
       };
 
   static BookedSession? fromJson(Object? j) {
@@ -66,6 +143,7 @@ class BookedSession {
       eventTarget: j['cal'] as String?,
       credited: j['done'] == true,
       skipped: j['skip'] == true,
+      report: SessionReport.fromJson(j['report']),
     );
   }
 }
@@ -122,6 +200,9 @@ class StudyPlanEntry {
   /// The to-dos a plan made before sessions had times (day -> task), taken away once the plan is made again.
   final Map<String, String> legacyTasks;
 
+  /// How long the person takes compared with the estimates, as it was when the sessions were planned (1: as estimated).
+  final double speed;
+
   const StudyPlanEntry({
     required this.id,
     required this.name,
@@ -139,6 +220,7 @@ class StudyPlanEntry {
     this.sessions = const [],
     this.blocked = const [],
     this.legacyTasks = const {},
+    this.speed = 1,
   });
 
   StudyTime get time => StudyTime.daily(StudyWindow(windowStart, windowEnd), daysOff: daysOff, maxPerDay: maxPerDay, sessionLength: sessionLength);
@@ -169,6 +251,7 @@ class StudyPlanEntry {
     List<BookedSession>? sessions,
     List<Busy>? blocked,
     Map<String, String>? legacyTasks,
+    double? speed,
   }) =>
       StudyPlanEntry(
         id: id,
@@ -187,6 +270,7 @@ class StudyPlanEntry {
         sessions: sessions ?? this.sessions,
         blocked: blocked ?? this.blocked,
         legacyTasks: legacyTasks ?? this.legacyTasks,
+        speed: speed ?? this.speed,
       );
 
   Map<String, Object?> toJson() => {
@@ -207,6 +291,7 @@ class StudyPlanEntry {
         'sessions': [for (final s in sessions) s.toJson()],
         'blocked': [for (final b in blocked) [b.start.toIso8601String(), b.end.toIso8601String()]],
         if (legacyTasks.isNotEmpty) 'tasks': legacyTasks,
+        if (speed != 1) 'speed': speed,
       };
 
   /// A plan as it was kept; one kept before sessions had times (only flashcards, a to-do a day) is read with its to-dos kept aside.
@@ -240,6 +325,7 @@ class StudyPlanEntry {
             (start: DateTime.parse('${b[0]}'), end: DateTime.parse('${b[1]}')),
       ],
       legacyTasks: {for (final e in ((j['tasks'] as Map?) ?? const {}).entries) '${e.key}': '${e.value}'},
+      speed: (j['speed'] as num?)?.toDouble() ?? 1,
     );
   }
 }
@@ -290,9 +376,16 @@ class PlanAttention {
   /// Nothing is booked yet (a plan from before sessions had times, or one whose writing failed).
   final bool unbooked;
 
-  const PlanAttention({this.missed = 0, this.clashes = 0, this.dropped = 0, this.unbooked = false});
+  /// Sessions that were studied with work left over.
+  final int unfinished;
 
-  bool get any => missed > 0 || clashes > 0 || dropped > 0 || unbooked;
+  /// How long the person takes is not what the plan was made with any more: 1.25 is a quarter longer than then, 0.8 a fifth quicker
+  /// (null: about the same).
+  final double? pace;
+
+  const PlanAttention({this.missed = 0, this.clashes = 0, this.dropped = 0, this.unbooked = false, this.unfinished = 0, this.pace});
+
+  bool get any => missed > 0 || clashes > 0 || dropped > 0 || unbooked || unfinished > 0 || pace != null;
 }
 
 /// The plans for exams. A plan is made from the material and the hours given, shown as a proposal and only put on the calendar (as
@@ -301,6 +394,15 @@ class PlanAttention {
 /// changed once approved.
 class StudyPlanner extends ChangeNotifier {
   static const _key = 'study_plans';
+  static const _runningKey = 'study_session_running';
+
+  /// The minutes of estimate the measured pace starts from, so that one session does not swing it (it counts as that much study at
+  /// the estimated pace); and how far it may go.
+  static const _paceWeight = 60;
+  static const _slowest = 1.8, _quickest = 0.6;
+
+  /// How much the pace must have changed since the plan was made before it is said.
+  static const _paceNoticed = 0.15;
 
   final SettingsRepository _settings;
   final CardRepository _cards;
@@ -311,6 +413,7 @@ class StudyPlanner extends ChangeNotifier {
   final Future<NoteShape?> Function(String noteId)? readNote;
   final DateTime Function() _now;
   List<StudyPlanEntry> _plans = [];
+  RunningSession? _running;
   final Map<String, PlanAttention> _attention = {};
   StreamSubscription<void>? _sub;
   Timer? _soon, _daily;
@@ -323,6 +426,9 @@ class StudyPlanner extends ChangeNotifier {
 
   List<StudyPlanEntry> get plans => List.unmodifiable(_plans);
 
+  /// The session that is being studied now (null: none).
+  RunningSession? get running => _running;
+
   PlanAttention attentionOf(String planId) => _attention[planId] ?? const PlanAttention();
 
   /// Whether [taskId] is the to-do of a session (such a to-do is not put on the calendar a second time by the task mirror).
@@ -333,6 +439,13 @@ class StudyPlanner extends ChangeNotifier {
       _plans = [for (final j in jsonDecode(await _settings.get(_key) ?? '[]') as List) ?StudyPlanEntry.fromJson(j)];
     } catch (_) {
       _plans = [];
+    }
+    try {
+      final r = await _settings.get(_runningKey);
+      _running = r == null ? null : RunningSession.fromJson(jsonDecode(r));
+      if (_running != null && find(_running!.planId, _running!.key) == null) _running = null;
+    } catch (_) {
+      _running = null;
     }
     notifyListeners();
   }
@@ -387,7 +500,7 @@ class StudyPlanner extends ChangeNotifier {
     return {for (final s in plan.sessions) if (!s.examDay) _day(s.day): s.minutes};
   }
 
-  bool _done(BookedSession s, Map<String, Task> tasks) => s.credited || (s.taskId != null && tasks[s.taskId]?.done == true);
+  bool _done(BookedSession s, Map<String, Task> tasks) => s.credited || s.report != null || (s.taskId != null && tasks[s.taskId]?.done == true);
 
   /// The booked sessions of [e] that stay whatever the new plan is: those that began already, and those that are done.
   List<BookedSession> _kept(StudyPlanEntry e, Map<String, Task> tasks) => [for (final s in e.sessions) if (!s.session.start.isAfter(_now()) || _done(s, tasks)) s];
@@ -398,6 +511,7 @@ class StudyPlanner extends ChangeNotifier {
     final now = _now();
     final tasks = {for (final t in await _tasks.listTasks()) t.id: t};
     e = _credit(e, tasks);
+    e = e.copyWith(speed: speedOf(e));
     final kept = _kept(e, tasks);
     final until = DateTime(e.exam.year, e.exam.month, e.exam.day + 1);
     var events = <DayEvent>[];
@@ -431,6 +545,7 @@ class StudyPlanner extends ChangeNotifier {
       time: e.time,
       busy: busy,
       cardMinutes: await _cardMinutes(e),
+      speed: e.speed,
     );
     final booked = {for (final s in e.sessions) if (!kept.contains(s)) s.key: s};
     final proposed = <ProposedSession>[];
@@ -443,13 +558,15 @@ class StudyPlanner extends ChangeNotifier {
     return StudyProposal(e, schedule, proposed, removed: booked.values.toList(), events: events, calendarUnread: unread);
   }
 
-  /// [e] with the work of the sessions whose to-do was ticked off counted in (once: such a session is marked as counted).
+  /// [e] with the work of the sessions that were done counted in (once: such a session is marked as counted). A session studied with its
+  /// screen counts the items that were said to be done; one whose to-do was ticked off counts all of them.
   StudyPlanEntry _credit(StudyPlanEntry e, Map<String, Task> tasks) {
     if (!e.sessions.any((s) => !s.credited && _done(s, tasks))) return e;
     final out = {...e.progress};
     for (final s in e.sessions) {
       if (s.credited || !_done(s, tasks)) continue;
-      for (final i in s.session.items) {
+      for (final (n, i) in s.session.items.indexed) {
+        if (s.report != null && !s.report!.done.contains(n)) continue;
         if (i.unitId == null) continue;
         final p = out[i.unitId!] ?? (learned: 0.0, reviewed: 0.0);
         final share = i.to - i.from;
@@ -523,8 +640,8 @@ class StudyPlanner extends ChangeNotifier {
       }
     }
 
-    // the sessions that stay: those that began and those that are done; one that went by undone is not reported again
-    final kept = [for (final s in _kept(e, tasks)) s.credited ? s : s.copyWith(skipped: true)];
+    // the sessions that stay: those that began and those that are done; one that went by undone (or left work) is not reported again
+    final kept = [for (final s in _kept(e, tasks)) s.credited && !s.unfinished ? s : s.copyWith(skipped: true)];
     final booked = {for (final s in e.sessions) if (!kept.any((k) => k.key == s.key)) s.key: s};
     for (final s in p.removed) {
       await unbook(s);
@@ -637,11 +754,167 @@ class StudyPlanner extends ChangeNotifier {
         dropped: upcoming.where((s) => s.taskId != null && !tasks.containsKey(s.taskId)).length,
         clashes: clashes,
         unbooked: entry.sessions.isEmpty,
+        unfinished: entry.sessions.where((s) => s.unfinished && !s.skipped).length,
+        pace: _paceChange(entry, upcoming.isNotEmpty),
       );
     }
     _plans = next;
     if (changed) await _save();
     notifyListeners();
+  }
+
+  /// How long the person takes compared with the estimates of [e], from the sessions studied with their screen: the minutes spent
+  /// against the minutes planned for what was done. It starts at 1 and moves as sessions are reported, within limits.
+  double speedOf(StudyPlanEntry e) {
+    var spent = 0, planned = 0;
+    for (final s in e.sessions) {
+      final r = s.report;
+      if (r == null || r.done.isEmpty) continue;
+      spent += r.spent;
+      for (final (n, i) in s.session.items.indexed) {
+        if (r.done.contains(n)) planned += i.minutes;
+      }
+    }
+    if (planned == 0) return 1;
+    final speed = ((spent + _paceWeight) / (planned + _paceWeight)).clamp(_quickest, _slowest);
+    return (speed * 100).round() / 100;
+  }
+
+  double? _paceChange(StudyPlanEntry e, bool sessionsToCome) {
+    if (!sessionsToCome) return null;
+    final change = speedOf(e) / e.speed;
+    return (change - 1).abs() > _paceNoticed ? change : null;
+  }
+
+  /// The plan and the session of [key] in it.
+  ({StudyPlanEntry plan, BookedSession session})? find(String planId, String key) {
+    final plan = _plans.where((p) => p.id == planId).firstOrNull;
+    final session = plan?.sessions.where((s) => s.key == key).firstOrNull;
+    return session == null ? null : (plan: plan!, session: session);
+  }
+
+  /// The session whose to-do is [taskId].
+  ({StudyPlanEntry plan, BookedSession session})? findByTask(String taskId) {
+    for (final p in _plans) {
+      for (final s in p.sessions) {
+        if (s.taskId == taskId) return (plan: p, session: s);
+      }
+    }
+    return null;
+  }
+
+  /// When the session of the to-do [taskId] starts, for its reminder (null: it is not a session's to-do, or the session was studied).
+  DateTime? startOfTask(String taskId) {
+    final f = findByTask(taskId);
+    return f == null || f.session.report != null || f.session.credited ? null : f.session.session.start;
+  }
+
+  /// The session to offer now: the one that is being studied, or else today's next one that is not over (by more than an hour) and was
+  /// not studied yet.
+  ({StudyPlanEntry plan, BookedSession session})? current() {
+    final r = _running;
+    if (r != null) {
+      final f = find(r.planId, r.key);
+      if (f != null) return f;
+    }
+    final now = _now();
+    ({StudyPlanEntry plan, BookedSession session})? best;
+    for (final p in _plans) {
+      for (final s in p.sessions) {
+        final start = s.session.start;
+        if (s.credited || s.report != null || s.skipped) continue;
+        if (_day(start) != _day(now) || s.session.end.add(const Duration(hours: 1)).isBefore(now)) continue;
+        if (best == null || start.isBefore(best.session.session.start)) best = (plan: p, session: s);
+      }
+    }
+    return best;
+  }
+
+  Future<void> _saveRunning() async {
+    final r = _running;
+    if (r == null) {
+      await _settings.remove(_runningKey);
+    } else {
+      await _settings.set(_runningKey, jsonEncode(r.toJson()));
+    }
+  }
+
+  /// Starts the clock of a session (another that was running is let go: one is studied at a time).
+  Future<void> begin(String planId, String key) async {
+    if (_running?.planId == planId && _running?.key == key) return;
+    _running = RunningSession(planId, key, _now());
+    await _saveRunning();
+    notifyListeners();
+  }
+
+  /// Stops the clock for a while, or lets it run again.
+  Future<void> pause(bool pause) async {
+    final r = _running;
+    if (r == null || r.paused == pause) return;
+    final now = _now();
+    _running = pause ? r._with(pausedAt: () => now) : r._with(pausedAt: () => null, pausedSeconds: r.pausedSeconds + now.difference(r.pausedAt!).inSeconds);
+    await _saveRunning();
+    notifyListeners();
+  }
+
+  /// Ticks off the item [index] of the running session, or takes the tick back.
+  Future<void> check(int index, bool done) async {
+    final r = _running;
+    if (r == null) return;
+    _running = r._with(checked: done ? {...r.checked, index} : ({...r.checked}..remove(index)));
+    await _saveRunning();
+    notifyListeners();
+  }
+
+  /// Lets go of the running session without saying anything about it.
+  Future<void> abandon() async {
+    _running = null;
+    await _saveRunning();
+    notifyListeners();
+  }
+
+  /// Ends the session [key] of the plan [planId] with what was said about it: its to-do is ticked off, the items that were done count,
+  /// and the parts it was about become a step harder (it felt hard) or easier (it felt easy). Returns the parts whose difficulty changed.
+  /// The plan is not made again here; the plan says when it should be ([attentionOf]).
+  Future<List<StudyUnit>> finish(String planId, String key, SessionReport report) async {
+    final f = find(planId, key);
+    if (f == null) return const [];
+    var e = f.plan;
+    final s = f.session;
+    if (s.taskId != null) {
+      final t = (await _tasks.listTasks()).where((t) => t.id == s.taskId).firstOrNull;
+      if (t != null && !t.done) await _tasks.setDone(t.id, true);
+    }
+    final changed = <StudyUnit>[];
+    if (report.feeling != SessionFeeling.fine) {
+      final ids = {
+        for (final (n, i) in s.session.items.indexed)
+          if (report.done.contains(n) && i.unitId != null && (i.kind == WorkKind.learn || i.kind == WorkKind.review)) i.unitId!,
+      };
+      final step = report.feeling == SessionFeeling.hard ? 1 : -1;
+      final units = <StudyUnit>[];
+      for (final u in e.units) {
+        final to = u.difficulty.index + step;
+        if (ids.contains(u.id) && to >= 0 && to < Difficulty.values.length) {
+          changed.add(u.copyWith(difficulty: Difficulty.values[to]));
+          units.add(changed.last);
+        } else {
+          units.add(u);
+        }
+      }
+      e = e.copyWith(units: units);
+    }
+    e = e.copyWith(sessions: [for (final x in e.sessions) x.key == key ? x.copyWith(report: report) : x]);
+    e = _credit(e, {for (final t in await _tasks.listTasks()) t.id: t});
+    _plans = [for (final p in _plans) p.id == planId ? e : p];
+    if (_running?.planId == planId && _running?.key == key) {
+      _running = null;
+      await _saveRunning();
+    }
+    await _save();
+    notifyListeners();
+    await refresh();
+    return changed;
   }
 
   @override

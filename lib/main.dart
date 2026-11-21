@@ -412,7 +412,9 @@ Future<void> _start() async {
       await events.emit(AppEvent(AutomationEvent.captureReceived.name,
           noteId: c.noteId, title: c.title, folderId: info?.folderId, data: eventVars({'kind': c.kind, 'url': c.url, 'site': c.site})));
     };
-  final reminders = ReminderService(reminders: ReminderRepository(db), tasks: tasks, sink: LocalNotificationSink(), read: settings.get, write: settings.set);
+  final reminders = ReminderService(reminders: ReminderRepository(db), tasks: tasks, sink: LocalNotificationSink(), read: settings.get, write: settings.set)
+    ..studyStart = planner.startOfTask; // (a session's to-do is announced at the session's start)
+  planner.addListener(() => unawaited(reminders.reconcile())); // (the plans' sessions change after their to-dos are made)
   final ai = AiService(settings: settings, providers: [summaryModel, cloudModel]);
   await ai.load();
   // turning AI off also lets go of the models in memory

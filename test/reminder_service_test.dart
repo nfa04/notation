@@ -191,6 +191,41 @@ void main() {
       service.dispose();
     });
 
+    test('the to-do of a study session is announced at the session\'s start, opens the session, and can be turned off', () async {
+      final sink = FakeSink();
+      final service = make(sink);
+      final session = await tasks.createTask('16:00 Biology: Cells', dueDate: DateTime(2026, 3, 1));
+      final other = await tasks.createTask('Hand in report', dueDate: DateTime(2026, 3, 1));
+      var start = DateTime(2026, 3, 1, 16);
+      service.studyStart = (id) => id == session ? start : null;
+      await service.load();
+      await service.start();
+      var list = await service.upcoming();
+      expect({for (final r in list) r.refId: (r.kind, r.at)}, {other: (ReminderKind.task, DateTime(2026, 3, 1, 9)), session: (ReminderKind.study, start)});
+
+      // the session moved (the plan was made again)
+      start = DateTime(2026, 3, 1, 17);
+      await service.reconcile();
+      expect((await service.upcoming()).firstWhere((r) => r.refId == session).at, start);
+
+      now = DateTime(2026, 3, 1, 17, 1);
+      await service.reconcile();
+      expect(sink.shown.map((s) => s.$3), contains('study:$session'));
+      ReminderKind? opened;
+      String? ref;
+      service.onOpen = (k, id) => (opened, ref) = (k, id);
+      sink.tap!('study:$session');
+      expect((opened, ref), (ReminderKind.study, session));
+
+      // turned off: only the sessions' reminders go
+      now = DateTime(2026, 3, 1, 8);
+      start = DateTime(2026, 3, 2, 16);
+      await service.setStudyOn(false);
+      expect((await service.upcoming()).map((r) => r.refId), isNot(contains(session)));
+      expect(store[ReminderService.studyKey], '0');
+      service.dispose();
+    });
+
     test('a reminder the person set for a task goes when the task is done or deleted', () async {
       final sink = FakeSink();
       final service = make(sink);

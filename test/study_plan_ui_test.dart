@@ -9,8 +9,10 @@ import 'package:notes/data/task_repository.dart';
 import 'package:notes/review/study_calendar.dart';
 import 'package:notes/review/study_material.dart';
 import 'package:notes/review/study_planner.dart';
+import 'package:notes/review/study_schedule.dart';
 import 'package:notes/screens/review_view.dart';
 import 'package:notes/screens/study_plan_screen.dart';
+import 'package:notes/screens/study_session_screen.dart';
 import 'package:notes/sync/caldav_remote.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -27,6 +29,8 @@ void main() {
   late String noteId;
   // Monday 1 June 2026, 8 o'clock
   var now = DateTime(2026, 6, 1, 8);
+  // the notes the sessions opened, at their pages
+  final opened = <(String, int?)>[];
 
   Future<void> real(WidgetTester tester, [int times = 6]) async {
     for (var i = 0; i < times; i++) {
@@ -57,6 +61,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     now = DateTime(2026, 6, 1, 8);
+    opened.clear();
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       for (final t in ['settings', 'tasks', 'review_cards', 'notes']) {
@@ -79,7 +84,8 @@ void main() {
           now: () => now);
       await planner.load();
     });
-    await tester.pumpWidget(MaterialApp(home: StudyPlanScreen(planner: planner, repository: notes, clock: () => now)));
+    await tester.pumpWidget(MaterialApp(
+        home: StudyPlanScreen(planner: planner, repository: notes, clock: () => now, cards: cards, onOpenNoteAt: (id, page) => opened.add((id, page)))));
     await real(tester, 2);
   }
 
@@ -231,6 +237,87 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: ReviewScreen(cards: cards, clock: () => now)));
     await real(tester, 2);
     expect(find.byKey(const ValueKey('study-plans')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a session: opened from the plan, its clock, its note at the page, and at the end what was done and how it went', (tester) async {
+    await open(tester);
+    await makePlan(tester);
+    await approve(tester);
+    final plan = planner.plans.single;
+    // (a day with something to learn; the plan opens that day's session)
+    final s = plan.sessions.firstWhere((s) => s.session.items.any((i) => i.kind == WorkKind.learn));
+    final learn = s.session.items.indexWhere((i) => i.kind == WorkKind.learn);
+    now = s.session.start.subtract(const Duration(hours: 2));
+    await tester.runAsync(planner.refresh); // (the list is shown anew at the new time)
+    await tester.pump();
+    await tester.tap(find.byKey(ValueKey('study-open-${plan.id}')));
+    await tester.pumpAndSettle();
+    expect(find.text('00:00'), findsOneWidget);
+    expect(find.byKey(const ValueKey('session-start')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('session-start')));
+    await until(tester, () => planner.running != null);
+    now = now.add(const Duration(minutes: 7));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('07:00'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('session-item-$learn')));
+    await until(tester, () => planner.running!.checked.contains(learn));
+
+    // the note opens at the part's page; the clock goes on, and the plan offers to go on with the session
+    final unit = plan.unit(s.session.items[learn].unitId!)!;
+    await tester.tap(find.byKey(ValueKey('session-open-$learn')));
+    await tester.pumpAndSettle();
+    expect(opened.single, (noteId, pageOf(s.session.items[learn], unit)));
+    expect(find.text('Go on with the session'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('study-open-${plan.id}')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(find.byKey(ValueKey('session-item-$learn'))).value, isTrue, reason: 'the tick is kept');
+
+    now = now.add(const Duration(minutes: 33));
+    await tester.tap(find.byKey(const ValueKey('session-finish')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('session-minutes'))).controller!.text, '40');
+    expect(tester.widget<CheckboxListTile>(find.byKey(ValueKey('session-done-$learn'))).value, isTrue);
+    await tester.tap(find.byKey(const ValueKey('session-feel-hard')));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const ValueKey('session-save')));
+    await tester.tap(find.byKey(const ValueKey('session-save')));
+    await until(tester, () => find.byKey(const ValueKey('session-saved')).evaluate().isNotEmpty);
+    expect(find.textContaining('1 of ${s.session.items.length} done, in 40 minutes.'), findsOneWidget);
+    expect(find.textContaining('now counts as harder.'), findsOneWidget);
+    final kept = planner.plans.single;
+    expect(kept.sessions.firstWhere((x) => x.key == s.key).report!.spent, 40);
+    expect(kept.learned, greaterThan(0));
+    expect(planner.running, isNull);
+    await tester.tap(find.byKey(const ValueKey('session-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('study-plan-${plan.id}')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the dashboard\'s card offers today\'s session and says how long it has been studied', (tester) async {
+    await open(tester);
+    await makePlan(tester);
+    await approve(tester);
+    final s = planner.plans.single.sessions.first;
+    now = DateTime(s.session.start.year, s.session.start.month, s.session.start.day, 8);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: StudySessionCard(planner: planner, cards: cards, clock: () => now))));
+    await tester.pump();
+    expect(find.text(s.title), findsOneWidget);
+    expect(find.textContaining('Today at '), findsOneWidget);
+    await tester.runAsync(() => planner.begin(planner.plans.single.id, s.key));
+    now = now.add(const Duration(minutes: 12));
+    await tester.pump();
+    expect(find.text('Studying for 12 min'), findsOneWidget);
+    expect(find.text('Go on'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('study-session-open')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('session-clock')), findsOneWidget);
+    // a day without sessions: no card
+    await tester.runAsync(() => planner.abandon());
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: StudySessionCard(planner: planner, clock: () => DateTime(2026, 7, 1)))));
+    expect(find.byKey(const ValueKey('study-session-card')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -282,6 +282,96 @@ void main() {
       expect(again.plans, isEmpty);
       again.dispose();
     });
+
+    test('a session studied with its screen: the clock leaves out pauses, the ticks are kept, and only what was done counts', () async {
+      final e = await planner.approve(await planner.propose(await biology()));
+      final s = e.sessions.firstWhere((s) => s.session.items.where((i) => i.kind == WorkKind.learn).length >= 2);
+      final first = s.session.items.indexWhere((i) => i.kind == WorkKind.learn);
+      final second = s.session.items.indexWhere((i) => i.kind == WorkKind.learn, first + 1);
+      now = s.session.start;
+      await planner.begin(e.id, s.key);
+      now = now.add(const Duration(minutes: 10));
+      await planner.pause(true);
+      now = now.add(const Duration(minutes: 30));
+      expect(planner.running!.elapsed(now), const Duration(minutes: 10), reason: 'paused');
+      await planner.pause(false);
+      now = now.add(const Duration(minutes: 20));
+      await planner.check(first, true);
+      expect(planner.running!.elapsed(now), const Duration(minutes: 30));
+      expect(planner.current()!.session.key, s.key, reason: 'the session being studied is the one offered');
+
+      // closing the app keeps the clock and the ticks
+      final reopened = StudyPlanner(SettingsRepository(db), cards, tasks, calendar: calendar, now: () => now);
+      await reopened.load();
+      expect((reopened.running!.key, reopened.running!.elapsed(now)), (s.key, const Duration(minutes: 30)));
+      expect(reopened.running!.checked, {first});
+      reopened.dispose();
+
+      final a = s.session.items[first], b = s.session.items[second];
+      final before = planner.plans.single.unit(a.unitId!)!.difficulty;
+      final changed = await planner.finish(e.id, s.key, SessionReport(spent: 30, done: {first}, feeling: SessionFeeling.hard));
+      final kept = planner.plans.single;
+      final booked = kept.sessions.firstWhere((x) => x.key == s.key);
+      expect(booked.report!.done, {first});
+      expect(booked.credited, isTrue);
+      expect((await tasks.listTasks()).firstWhere((t) => t.id == s.taskId).done, isTrue, reason: 'its to-do is ticked off');
+      expect(planner.running, isNull);
+      // (the sessions before it were not done: only its own share counts)
+      expect(kept.progress[a.unitId]!.learned, closeTo(a.to - a.from, 1e-6), reason: 'what was done counts');
+      expect(kept.progress[b.unitId]?.learned ?? 0, 0, reason: 'what was not done does not');
+      expect(changed.map((u) => u.id), [a.unitId]);
+      expect(kept.unit(a.unitId!)!.difficulty.index, before.index + 1, reason: 'it felt hard');
+      expect(kept.unit(b.unitId!)!.difficulty, Difficulty.medium, reason: 'not done: not judged');
+      expect(planner.attentionOf(e.id).unfinished, 1);
+      expect(planner.speedOf(kept), closeTo((30 + 60) / (a.minutes + 60), 0.01));
+      expect(planner.startOfTask(s.taskId!), isNull, reason: 'no reminder for a session that was studied');
+
+      // made again: the work left comes again, and the session is not reported again
+      final p = await planner.propose(kept);
+      expect([for (final x in p.sessions) for (final i in x.session.items) if (i.unitId == b.unitId && i.kind == WorkKind.learn) i.from].first,
+          closeTo(kept.progress[b.unitId]?.learned ?? 0, 1e-6));
+      await planner.approve(p);
+      await planner.refresh();
+      expect(planner.attentionOf(e.id).unfinished, 0);
+    });
+
+    test('the pace of the sessions makes the rest take longer, and is said until the plan is made with it', () async {
+      final e = await planner.approve(await planner.propose(await biology()));
+      final s = e.sessions.first;
+      now = s.session.start;
+      final needed = (await planner.propose(e)).schedule.needed;
+      final planned = s.session.items.fold<int>(0, (n, i) => n + i.minutes);
+      now = s.session.end;
+      await planner.finish(e.id, s.key, SessionReport(spent: planned * 3, done: {for (var i = 0; i < s.session.items.length; i++) i}));
+      final kept = planner.plans.single;
+      expect(planner.speedOf(kept), closeTo(1.8, 1e-9), reason: 'three times as long, but within the limit');
+      expect(planner.attentionOf(e.id).pace, closeTo(1.8, 1e-9));
+      final p = await planner.propose(kept);
+      expect(p.entry.speed, closeTo(1.8, 1e-9));
+      expect(p.schedule.needed, greaterThan(needed * 1.3), reason: 'the work left, at the pace measured');
+      await planner.approve(p);
+      await planner.refresh();
+      expect(planner.attentionOf(e.id).pace, isNull, reason: 'the plan is made with it now');
+      expect(planner.plans.single.speed, closeTo(1.8, 1e-9));
+    });
+
+    test('today\'s session is offered and has its reminder at its start; another day\'s is not offered', () async {
+      final e = await planner.approve(await planner.propose(await biology()));
+      final first = e.sessions.first;
+      final day = first.session.start.day;
+      now = DateTime(2026, 6, day, 8);
+      expect(planner.current()!.session.key, first.key);
+      expect(planner.startOfTask(first.taskId!), first.session.start);
+      expect(planner.startOfTask('not a session'), isNull);
+      expect(planner.findByTask(first.taskId!)!.session.key, first.key);
+      // after the day's sessions (and an hour more) nothing is offered until the next day
+      final lastToday = e.sessions.lastWhere((s) => s.session.start.day == day);
+      now = lastToday.session.end.add(const Duration(hours: 2));
+      expect(planner.current(), isNull);
+      final next = e.sessions.firstWhere((s) => s.session.start.day > day).session.start;
+      now = DateTime(next.year, next.month, next.day, 8);
+      expect(planner.current()!.session.session.start, next);
+    });
   });
 
   test('a plan is read back from what was kept, and a damaged one is left out', () {
