@@ -4200,4 +4200,5 @@ const spanishTexts = <String, String>{
   '{n} % learnt': '{n} % aprendido',
   'Studying now': 'Estudiando ahora',
   'Next up': 'A continuación',
+  '+{n} % ready for the exam: now {m} %.': '+{n} % listo para el examen: ahora {m} %.',
 };

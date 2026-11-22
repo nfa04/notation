@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../review/study_planner.dart';
 import '../review/study_progress.dart';
 
 /// A bar with two layers: [value] in the full colour on top of [behind] in a light one (for a part: what was gone over on top of what was
@@ -196,4 +197,51 @@ class _DiagramPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DiagramPainter old) => old.points != points || old.today != today || old.planned != planned || old.actual != actual;
+}
+
+/// The seven days of the week of [today]: a mark for each day with sessions (all done, some done, missed, to come), a dot for today.
+class WeekStrip extends StatelessWidget {
+  final List<BookedSession> sessions;
+  final DateTime today;
+
+  const WeekStrip({super.key, required this.sessions, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = MaterialLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final monday = DateTime(today.year, today.month, today.day - (today.weekday - 1));
+    return Row(key: const ValueKey('plan-week'), children: [
+      for (var i = 0; i < 7; i++)
+        Expanded(
+          child: Builder(builder: (context) {
+            final d = DateTime(monday.year, monday.month, monday.day + i);
+            final of = [for (final s in sessions) if (!s.gone && !s.skipped || s.credited) if (DateUtils.isSameDay(s.session.start, d)) s];
+            final done = of.where((s) => s.credited).length;
+            final isToday = DateUtils.isSameDay(d, today);
+            final (IconData?, Color) mark = of.isEmpty
+                ? (null, scheme.outlineVariant)
+                : done == of.length
+                    ? (Icons.check_circle, scheme.primary)
+                    : done > 0
+                        ? (Icons.timelapse, scheme.primary)
+                        : d.isBefore(today)
+                            ? (Icons.circle_outlined, scheme.tertiary)
+                            : (Icons.radio_button_unchecked, scheme.outline);
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              Text.verbatim(l.narrowWeekdays[d.weekday % 7], style: theme.textTheme.labelSmall),
+              const SizedBox(height: 4),
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: isToday ? BoxDecoration(shape: BoxShape.circle, border: Border.all(color: scheme.primary, width: 2)) : null,
+                child: mark.$1 == null ? Text.verbatim('${d.day}', style: theme.textTheme.labelSmall) : Icon(mark.$1, size: 20, color: mark.$2),
+              ),
+            ]);
+          }),
+        ),
+    ]);
+  }
 }

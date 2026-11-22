@@ -10,6 +10,8 @@ import '../l10n/text.dart';
 import '../review/study_generate.dart';
 import '../review/study_material.dart';
 import '../review/study_planner.dart';
+import '../review/study_progress.dart';
+import 'study_progress_widgets.dart';
 import '../review/study_schedule.dart';
 import 'review_view.dart';
 import 'study_plan_screen.dart';
@@ -127,6 +129,8 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
     await _planner.facts!.quiz(context, unit.title, facts, cards: widget.cards);
   }
 
+  ({double before, double now, PlanProgress progress})? _gain;
+
   void _toReport(BookedSession s) {
     final r = _mine;
     _minutes.text = '${r == null ? s.session.minutes : (r.elapsed(_now()).inSeconds / 60).round().clamp(1, 24 * 60)}';
@@ -138,11 +142,16 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
     final spent = int.tryParse(_minutes.text.trim());
     if (spent == null || spent < 0) return;
     setState(() => _saving = true);
+    final before = _planner.find(widget.planId, widget.sessionKey);
+    final readyBefore = before == null ? null : PlanProgress.of(before.plan, _now()).readiness;
     final changed = await _planner.finish(widget.planId, widget.sessionKey, SessionReport(spent: spent, done: _done, feeling: _feeling));
     if (!mounted) return;
+    final after = _planner.find(widget.planId, widget.sessionKey);
+    final standing = after == null ? null : PlanProgress.of(after.plan, _now());
     setState(() {
       _saving = false;
       _changed = changed;
+      _gain = standing == null || !standing.hasParts || readyBefore == null ? null : (before: readyBefore, now: standing.readiness, progress: standing);
       _step = _Step.done;
     });
   }
@@ -315,6 +324,9 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
     final pace = attention.pace;
     final lines = [
       if (report != null) tr('{done} of {all} done, in {n} minutes.', {'done': report.done.length, 'all': s.session.items.length, 'n': report.spent}),
+      if (_gain != null && _gain!.now > _gain!.before + 0.004)
+        tr('+{n} % ready for the exam: now {m} %.', {'n': ((_gain!.now - _gain!.before) * 100).round().clamp(1, 100), 'm': (_gain!.now * 100).round()}),
+      if (_gain != null) PlanProgressBlock.paceText(_gain!.progress),
       for (final u in _changed)
         _feeling == SessionFeeling.hard ? tr('"{part}" now counts as harder.', {'part': u.title}) : tr('"{part}" now counts as easier.', {'part': u.title}),
       if (pace != null && pace > 1) tr('You take about {n} % longer than the plan expected.', {'n': ((pace - 1) * 100).round()}),

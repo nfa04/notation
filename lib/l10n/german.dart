@@ -4234,4 +4234,5 @@ const germanTexts = <String, String>{
   '{n} % learnt': '{n} % gelernt',
   'Studying now': 'Du lernst gerade',
   'Next up': 'Als Nächstes',
+  '+{n} % ready for the exam: now {m} %.': '+{n} % bereit für die Prüfung: jetzt {m} %.',
 };

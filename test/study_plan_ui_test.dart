@@ -177,6 +177,7 @@ void main() {
     expect(find.byKey(const ValueKey('plan-progress')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-next-up')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-diagram')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-week')), findsOneWidget);
     expect(find.text('Not started'), findsWidgets);
     expect(find.byKey(ValueKey('plan-part-${plan.units.first.id}')), findsOneWidget);
     final first = plan.sessions.first;
@@ -316,6 +317,7 @@ void main() {
     await until(tester, () => find.byKey(const ValueKey('session-saved')).evaluate().isNotEmpty);
     expect(find.textContaining('1 of ${s.session.items.length} done, in 40 minutes.'), findsOneWidget);
     expect(find.textContaining('now counts as harder.'), findsOneWidget);
+    expect(find.textContaining('ready for the exam: now'), findsOneWidget);
     final kept = planner.plans.single;
     expect(kept.sessions.firstWhere((x) => x.key == s.key).report!.spent, 40);
     expect(kept.learned, greaterThan(0));

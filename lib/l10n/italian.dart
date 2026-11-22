@@ -4200,4 +4200,5 @@ const italianTexts = <String, String>{
   '{n} % learnt': '{n} % imparato',
   'Studying now': 'Stai studiando',
   'Next up': 'Prossima',
+  '+{n} % ready for the exam: now {m} %.': '+{n} % pronto per l\'esame: ora {m} %.',
 };
