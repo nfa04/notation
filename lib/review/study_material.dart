@@ -197,12 +197,10 @@ final _word = RegExp(r'[\p{L}\p{N}]+', unicode: true);
 
 int _words(String text) => _word.allMatches(text).length;
 
-/// The sections of a written document by its headings (of the level that cuts it best), each as long as its words take to study. Text
-/// before the first heading is a section of its own ([lead] is what it is called) when it has at least 50 words. A document without
-/// headings is one section ([lead]), or several of about half an hour each when it is long. Empty when there is nothing to study.
-List<StudyUnit> unitsFromText(String noteId, String text, {String? lead, int idFrom = 0}) {
-  lead ??= tr('Introduction');
-  final lines = text.split('\n');
+/// How many words [text] has.
+int wordCount(String text) => _words(text);
+
+List<({int line, int level, String title})> _headsOf(List<String> lines) {
   final heads = <({int line, int level, String title})>[];
   var inCode = false;
   for (var i = 0; i < lines.length; i++) {
@@ -216,6 +214,41 @@ List<StudyUnit> unitsFromText(String noteId, String text, {String? lead, int idF
     final title = m.group(2)!.replaceAll(RegExp(r'[*_`]'), '').trim();
     if (title.isNotEmpty) heads.add((line: i, level: m.group(1)!.length, title: title));
   }
+  return heads;
+}
+
+/// The text of the part [title] of a written document, as [unitsFromText] cut it: the words under the heading of that name (up to the
+/// next heading that cuts), the words before the first heading (any other name), or one of the even parts ("name (2/3)") of a long text
+/// without headings. The whole text when nothing fits.
+String textOfSection(String text, String title) {
+  final lines = text.split('\n');
+  final heads = _headsOf(lines);
+  final part = RegExp(r'^(.*) \((\d+)/(\d+)\)$').firstMatch(title);
+  if (heads.isEmpty) {
+    if (part == null) return text;
+    final words = text.split(RegExp(r'\s+'));
+    final n = int.parse(part[3]!), i = int.parse(part[2]!) - 1;
+    if (n < 1 || i < 0 || i >= n) return text;
+    return words.sublist(i * words.length ~/ n, (i + 1) * words.length ~/ n).join(' ');
+  }
+  final level = _cutLevel(heads.map((h) => h.level));
+  final cuts = [for (final h in heads) if (h.level <= level) h];
+  for (var i = 0; i < cuts.length; i++) {
+    if (cuts[i].title != title) continue;
+    final end = i + 1 < cuts.length ? cuts[i + 1].line : lines.length;
+    return lines.sublist(cuts[i].line + 1, end).join('\n');
+  }
+  final before = lines.sublist(0, cuts.first.line).join('\n');
+  return before.trim().isEmpty ? text : before;
+}
+
+/// The sections of a written document by its headings (of the level that cuts it best), each as long as its words take to study. Text
+/// before the first heading is a section of its own ([lead] is what it is called) when it has at least 50 words. A document without
+/// headings is one section ([lead]), or several of about half an hour each when it is long. Empty when there is nothing to study.
+List<StudyUnit> unitsFromText(String noteId, String text, {String? lead, int idFrom = 0}) {
+  lead ??= tr('Introduction');
+  final lines = text.split('\n');
+  final heads = _headsOf(lines);
   int minutesOf(int words) => math.max(2, (words / studyWordsPerMinute).round());
   var n = idFrom;
   final out = <StudyUnit>[];

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../ai/text_provider.dart' show AiCancel;
 import '../data/card_repository.dart';
 import '../data/note_repository.dart';
 import '../data/settings_repository.dart';
@@ -12,6 +13,7 @@ import '../graph/study.dart';
 import '../l10n/language.dart';
 import '../sync/caldav_remote.dart';
 import 'study_calendar.dart';
+import 'study_generate.dart';
 import 'study_material.dart';
 import 'study_plan.dart';
 import 'study_practice.dart';
@@ -256,6 +258,9 @@ class StudyPlanEntry {
   /// not be reached); the next device that can reach them deletes them.
   final List<StrayEvent> strays;
 
+  /// What was made for the parts (unit id -> summary points and number of cards, see [StudyMaterialMaker]).
+  final Map<String, UnitMaterial> material;
+
   const StudyPlanEntry({
     required this.id,
     required this.name,
@@ -278,6 +283,7 @@ class StudyPlanEntry {
     this.approval,
     this.approvedAfter,
     this.strays = const [],
+    this.material = const {},
   });
 
   StudyTime get time => StudyTime.daily(StudyWindow(windowStart, windowEnd), daysOff: daysOff, maxPerDay: maxPerDay, sessionLength: sessionLength);
@@ -313,6 +319,7 @@ class StudyPlanEntry {
     String? approval,
     String? approvedAfter,
     List<StrayEvent>? strays,
+    Map<String, UnitMaterial>? material,
   }) =>
       StudyPlanEntry(
         id: id,
@@ -336,6 +343,7 @@ class StudyPlanEntry {
         approval: approval ?? this.approval,
         approvedAfter: approvedAfter ?? this.approvedAfter,
         strays: strays ?? this.strays,
+        material: material ?? this.material,
       );
 
   Map<String, Object?> toJson() => {
@@ -361,6 +369,7 @@ class StudyPlanEntry {
         if (approval != null) 'approval': approval,
         if (approvedAfter != null) 'after': approvedAfter,
         if (strays.isNotEmpty) 'strays': _straysJson(strays),
+        if (material.isNotEmpty) 'material': {for (final e in material.entries) e.key: e.value.toJson()},
       };
 
   /// A plan as it was kept; one kept before sessions had times (only flashcards, a to-do a day) is read with its to-dos kept aside.
@@ -399,6 +408,10 @@ class StudyPlanEntry {
       approval: j['approval'] as String?,
       approvedAfter: j['after'] as String?,
       strays: strayEventsOf(j['strays']),
+      material: {
+        for (final e in ((j['material'] as Map?) ?? const {}).entries)
+          '${e.key}': ?UnitMaterial.fromJson(e.value),
+      },
     );
   }
 }
@@ -513,6 +526,9 @@ class StudyPlanner extends ChangeNotifier {
 
   /// The facts of the knowledge graphs, for the quizzes of the sessions (null: none; set once the graphs are there).
   StudyFactSource? facts;
+
+  /// Makes the summaries and cards of a plan's parts (null: cannot).
+  StudyMaterialMaker? maker;
 
   /// What cuts a run of pages by its topics with an AI model, where the person asks for it (null: no AI in this app).
   StudyTopicSplitter? topics;
@@ -723,6 +739,8 @@ class StudyPlanner extends ChangeNotifier {
     if (reports.isNotEmpty) {
       e = e.copyWith(sessions: [for (final s in e.sessions) s.report == null && reports[s.taskId] != null ? s.copyWith(report: reports[s.taskId]) : s]);
     }
+    final extra = {for (final x in lose.material.entries) if (!e.material.containsKey(x.key) && e.unit(x.key) != null) x.key: x.value};
+    if (extra.isNotEmpty) e = e.copyWith(material: {...e.material, ...extra});
     final blocked = [...e.blocked, for (final b in lose.blocked) if (!e.blocked.any((x) => x.start == b.start && x.end == b.end)) b];
     if (blocked.length != e.blocked.length) e = e.copyWith(blocked: blocked);
     final atOnce = of(win.approval) != of(lose.approval) && of(win.approvedAfter) != of(lose.approval) && of(lose.approvedAfter) != of(win.approval);
@@ -959,10 +977,13 @@ class StudyPlanner extends ChangeNotifier {
       cards.addAll(await _cards.all(source: id));
     }
     final spots = await _factSpots();
+    // (a part with a summary has the points of it to make a quiz of, when a quiz can be made now)
+    final canQuiz = facts?.canQuiz ?? false;
+    bool quizOf(StudyUnit u) => factsIn(u, spots).length >= quizFacts || canQuiz && (e.material[u.id]?.points.length ?? 0) >= quizFacts;
     return {
       for (final u in e.units)
         if (u.included)
-          if ((mistakes: mistakesIn(u, cards).length, quiz: factsIn(u, spots).length >= quizFacts) case final p when p.mistakes > 0 || p.quiz) u.id: p,
+          if ((mistakes: mistakesIn(u, cards).length, quiz: quizOf(u)) case final p when p.mistakes > 0 || p.quiz) u.id: p,
     };
   }
 
@@ -980,8 +1001,72 @@ class StudyPlanner extends ChangeNotifier {
   /// The maths mistakes of [u] to do again (see [mistakesIn]).
   Future<List<ReviewCard>> mistakesOf(StudyUnit u) async => mistakesIn(u, await _cards.all(source: u.noteId));
 
-  /// The facts of [u] in the knowledge graphs (none when a quiz cannot be made now).
-  Future<List<StudyFact>> factsOf(StudyUnit u) async => factsIn(u, await _factSpots());
+  /// The facts of [u] in the knowledge graphs, or else the points of its [material] (none when a quiz cannot be made now).
+  Future<List<StudyFact>> factsOf(StudyUnit u, {UnitMaterial? material}) async {
+    final graph = factsIn(u, await _factSpots());
+    if (graph.length >= quizFacts || material == null || !(facts?.canQuiz ?? false)) return graph;
+    return [for (final p in material.points) StudyFact(u.title, p)];
+  }
+
+  /// Whether summaries and cards can be made now.
+  bool get canMakeMaterial => maker?.ready ?? false;
+
+  /// The minutes each included part of [e] has in all, from now to the exam (see [shareMinutes]).
+  Map<String, int> _shares(StudyPlanEntry e) {
+    final units = [for (final u in e.units) if (u.included) u];
+    return shareMinutes(
+      today: _now(),
+      exam: e.exam,
+      daysOff: e.daysOff,
+      perDay: e.maxPerDay,
+      windowMinutes: math.max(0, e.windowEnd - e.windowStart),
+      weights: {for (final u in units) u.id: u.learnMinutes},
+    );
+  }
+
+  /// [e] with the summary and the flashcards made of the parts that have none yet (all parts with [again]), as much of each as the
+  /// words of the part and the time to the exam call for ([materialBudget]). The cards are kept with the note's other cards (they
+  /// are part of the plan's cards from then on) and the summaries go in the plan, which is kept once it is approved. A part with too
+  /// little text read is left as it is. With [cancel] cancelled, what was made so far is kept. A [StateError] says why when nothing
+  /// could be made.
+  Future<({StudyPlanEntry entry, int units, int cards, int skipped})> makeMaterial(StudyPlanEntry e,
+      {bool again = false, AiCancel? cancel, void Function(double done)? onProgress}) async {
+    final m = maker;
+    if (m == null || !m.ready) throw StateError(tr('No AI model is ready.'));
+    m.forget();
+    final shares = _shares(e);
+    final todo = [for (final u in e.units) if (u.included && (again || !e.material.containsKey(u.id))) u];
+    final material = {...e.material};
+    var cards = 0, made = 0, skipped = 0;
+    for (final (i, u) in todo.indexed) {
+      if (cancel?.cancelled ?? false) break;
+      final passages = await m.passagesOf(u);
+      final budget = materialBudget(
+        words: wordCount(passages.replaceAll(RegExp(r'\[Page \d+\]'), '')),
+        learnMinutes: u.learnMinutes,
+        reviewMinutes: u.reviewMinutes,
+        minutesAvailable: shares[u.id] ?? 0,
+      );
+      if (budget.points == 0 && budget.cards == 0) {
+        skipped++;
+      } else {
+        final r = await m.make(u, passages, budget, cancel: cancel);
+        if (cancel?.cancelled ?? false) break;
+        if (r.material.isEmpty) {
+          skipped++;
+        } else {
+          material[u.id] = r.material;
+          made++;
+          if (r.cards.isNotEmpty) cards += await _cards.addAll(u.noteId, r.cards);
+        }
+      }
+      onProgress?.call((i + 1) / todo.length);
+    }
+    if (made == 0 && skipped > 0 && todo.length == skipped) {
+      throw StateError(tr('There is too little text on these pages to make anything of: their handwriting or their PDF may not have been read yet.'));
+    }
+    return (entry: e.copyWith(material: material), units: made, cards: cards, skipped: skipped);
+  }
 
   /// [e] with the work of the sessions that were done counted in (once: such a session is marked as counted). A session studied with its
   /// screen counts the items that were said to be done; one whose to-do was ticked off counts all of them.

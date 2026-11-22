@@ -7,6 +7,7 @@ import '../algebra/mistake_card.dart';
 import '../data/card_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../review/study_generate.dart';
 import '../review/study_material.dart';
 import '../review/study_planner.dart';
 import '../review/study_schedule.dart';
@@ -94,7 +95,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
   }
 
   void _openNote(String noteId, int? page) {
-    Navigator.pop(context); // (the clock goes on: the session is found again on the dashboard)
+    Navigator.popUntil(context, (r) => r.isFirst); // (the clock goes on: the session is found again on the dashboard)
     widget.onOpenNoteAt!(noteId, page);
   }
 
@@ -114,13 +115,13 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
     if (open != null && mounted) _openNote(unit.noteId, open);
   }
 
-  Future<void> _quiz(StudyUnit unit) async {
+  Future<void> _quiz(StudyUnit unit, UnitMaterial? material) async {
     if (_mine == null) await _planner.begin(widget.planId, widget.sessionKey);
-    final facts = await _planner.factsOf(unit);
+    final facts = await _planner.factsOf(unit, material: material);
     if (!mounted) return;
     if (facts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('There is nothing to make a quiz of now: it needs facts of this part in a knowledge graph, and an AI model.')));
+          content: Text('There is nothing to make a quiz of now: it needs a summary of this part (or its facts in a knowledge graph), and an AI model.')));
       return;
     }
     await _planner.facts!.quiz(context, unit.title, facts, cards: widget.cards);
@@ -224,15 +225,25 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
   Widget _item(BuildContext context, StudyPlanEntry plan, int i, SessionItem item, bool checked) {
     final unit = item.unitId == null ? null : plan.unit(item.unitId!);
     Widget? action;
-    if (unit != null && widget.onOpenNoteAt != null && (item.kind == WorkKind.learn || item.kind == WorkKind.review)) {
+    final summary = unit == null ? null : plan.material[unit.id];
+    if (unit != null && summary != null && summary.points.isNotEmpty && (item.kind == WorkKind.learn || item.kind == WorkKind.review)) {
       action = IconButton(
+          key: ValueKey('session-summary-$i'),
+          tooltip: tr('Read the summary'),
+          icon: const Icon(Icons.summarize_outlined),
+          onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudySummaryPage(title: unit.title, points: summary.points))));
+    }
+    Widget? open;
+    if (unit != null && widget.onOpenNoteAt != null && (item.kind == WorkKind.learn || item.kind == WorkKind.review)) {
+      open = IconButton(
           key: ValueKey('session-open-$i'), tooltip: tr('Open the note'), icon: const Icon(Icons.open_in_new), onPressed: () => _openNote(unit.noteId, pageOf(item, unit)));
-    } else if (item.kind == WorkKind.cards && widget.cards != null) {
+    }
+    if (item.kind == WorkKind.cards && widget.cards != null) {
       action = IconButton(key: ValueKey('session-cards-$i'), tooltip: tr('Review the cards'), icon: const Icon(Icons.style_outlined), onPressed: () => _reviewCards(plan));
     } else if (item.kind == WorkKind.mistakes && unit != null) {
       action = IconButton(key: ValueKey('session-mistakes-$i'), tooltip: tr('Show the lines'), icon: const Icon(Icons.edit_note), onPressed: () => _mistakes(unit));
     } else if (item.kind == WorkKind.quiz && unit != null && _planner.facts != null) {
-      action = IconButton(key: ValueKey('session-quiz-$i'), tooltip: tr('Start the quiz'), icon: const Icon(Icons.quiz_outlined), onPressed: () => _quiz(unit));
+      action = IconButton(key: ValueKey('session-quiz-$i'), tooltip: tr('Start the quiz'), icon: const Icon(Icons.quiz_outlined), onPressed: () => _quiz(unit, plan.material[unit.id]));
     }
     return Row(children: [
       Expanded(
@@ -247,6 +258,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
         ),
       ),
       ?action,
+      ?open,
     ]);
   }
 
@@ -464,6 +476,35 @@ class _MistakesPageState extends State<_MistakesPage> {
                   ),
               ],
             ),
+    );
+  }
+}
+
+/// The summary of a part: its points.
+class StudySummaryPage extends StatelessWidget {
+  final String title;
+  final List<String> points;
+
+  const StudySummaryPage({super.key, required this.title, required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text.verbatim(title, maxLines: 2)),
+      body: ListView(
+        key: const ValueKey('summary-list'),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          for (final p in points)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Padding(padding: const EdgeInsets.only(top: 2, right: 8), child: Text.verbatim('•')),
+                Expanded(child: Text.verbatim(p)),
+              ]),
+            ),
+        ],
+      ),
     );
   }
 }

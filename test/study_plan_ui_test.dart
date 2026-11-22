@@ -9,6 +9,7 @@ import 'package:notes/data/settings_repository.dart';
 import 'package:notes/data/task_repository.dart';
 import 'package:notes/graph/study.dart';
 import 'package:notes/review/study_calendar.dart';
+import 'package:notes/review/study_generate.dart';
 import 'package:notes/review/study_material.dart';
 import 'package:notes/review/study_planner.dart';
 import 'package:notes/review/study_practice.dart';
@@ -156,7 +157,31 @@ void main() {
     expect(find.byKey(ValueKey('study-plan-${plan.id}')), findsOneWidget);
     expect(find.textContaining('14 days left'), findsOneWidget);
     expect(find.textContaining('Next: '), findsOneWidget);
-    expect(find.text('0 % of the material learnt'), findsOneWidget);
+    expect(find.text('0 %'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a plan can be viewed: its parts and every session by day, and the list says how far each plan is', (tester) async {
+    await open(tester);
+    await makePlan(tester);
+    await approve(tester);
+    final plan = planner.plans.single;
+    expect(find.textContaining('sessions done'), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-progress')), findsOneWidget);
+    expect(find.text('ready for the exam'), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-pace')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('study-detail-${plan.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('plan-detail')), findsOneWidget);
+    expect(find.text('Parts'), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-progress')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-next-up')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-diagram')), findsOneWidget);
+    expect(find.text('Not started'), findsWidgets);
+    expect(find.byKey(ValueKey('plan-part-${plan.units.first.id}')), findsOneWidget);
+    final first = plan.sessions.first;
+    await tester.scrollUntilVisible(find.byKey(ValueKey('plan-session-${first.key}')), 200, scrollable: find.descendant(of: find.byKey(const ValueKey('plan-detail')), matching: find.byType(Scrollable)).first);
+    expect(find.byKey(ValueKey('plan-session-${first.key}')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -393,6 +418,75 @@ void main() {
     expect(find.text('48 min'), findsOneWidget, reason: 'twelve pages at four minutes');
     expect(find.byKey(ValueKey('study-split-$noteId')), findsNothing, reason: 'nothing is cut by page number any more');
     expect(model.prompts.single.user, contains('Page 30: The text of page 30'));
+  });
+
+
+  testWidgets('summaries and flashcards are made for the parts when the person asks, and a session reads the summary and opens the note from anywhere', (tester) async {
+    await open(tester, outline: false);
+    final model = FakeModel()
+      ..respond = (p) => p.system.contains('flashcards') ? 'Q: What is a cell?\nA: The unit of life.\n\nQ: What makes ATP?\nA: Mitochondria.\n\nQ: What is a membrane?\nA: A barrier.' : '- A cell is the unit of life.\n- Mitochondria make ATP.\n- A membrane is a barrier.';
+    planner.maker = StudyMaterialMaker(
+        pageTexts: (_) async => {for (var p = 0; p < 30; p++) p: 'The text of page ${p + 1} of the course about cells and their membranes'},
+        documentText: (_) async => '',
+        model: () => model,
+        enabled: () => true);
+    await tester.tap(find.byKey(const ValueKey('new-study-plan')));
+    await tester.pump();
+    await real(tester, 4);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('study-make')), findsNothing, reason: 'no parts yet: nothing to make');
+    await tester.tap(find.byKey(const ValueKey('study-add-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('pick-note-$noteId')));
+    await tester.pumpAndSettle();
+    await real(tester, 3);
+    final before = (await tester.runAsync(() => cards.all(source: noteId)))!.length;
+    await tester.ensureVisible(find.byKey(const ValueKey('study-make')));
+    await tester.tap(find.byKey(const ValueKey('study-make')));
+    await until(tester, () => find.byKey(const ValueKey('study-made')).evaluate().isNotEmpty);
+    expect(find.text('Made for 4 parts and 3 new flashcards.'), findsOneWidget, reason: 'the same three cards of every part are one card each');
+    expect(find.byKey(const ValueKey('study-make-again')), findsOneWidget);
+    expect((await tester.runAsync(() => cards.all(source: noteId)))!.length, before + 3);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a session shows the summary of its part, and the note opens above every screen that was open', (tester) async {
+    await open(tester);
+    late StudyPlanEntry plan;
+    await tester.runAsync(() async {
+      final units = await planner.unitsOf(noteId);
+      final draft = planner.draft(name: 'Biology', exam: DateTime(2026, 6, 12)).copyWith(units: units, cardSources: () => const {});
+      plan = await planner.approve(await planner.propose(draft.copyWith(material: {for (final u in units) u.id: const UnitMaterial(points: ['A cell is the unit of life.', 'Mitochondria make ATP.'], cards: 2)})));
+    });
+    expect(plan.material, isNotEmpty);
+    final s = plan.sessions.first;
+    final i = s.session.items.indexWhere((x) => x.kind == WorkKind.learn);
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                  builder: (_) => StudyPlanScreen(planner: planner, repository: notes, clock: () => now, cards: cards, onOpenNoteAt: (id, page) => opened.add((id, page))))),
+          child: const Text('plans'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('plans'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('study-open-${plan.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('session-summary-$i')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('session-summary-$i')));
+    await tester.pumpAndSettle();
+    expect(find.text('Mitochondria make ATP.'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('session-open-$i')));
+    await tester.pumpAndSettle();
+    expect(opened, isNotEmpty);
+    expect(find.text('plans'), findsOneWidget, reason: 'the session and the plans are both left: the note is what shows');
+    await tester.pumpWidget(const SizedBox());
   });
 
 }

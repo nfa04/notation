@@ -14,6 +14,9 @@ import '../style/platform_dialog.dart';
 import '../sync/caldav_remote.dart';
 import '../data/card_repository.dart';
 import 'note_picker_dialog.dart';
+import '../review/study_progress.dart';
+import 'study_plan_detail.dart';
+import 'study_progress_widgets.dart';
 import 'study_session_screen.dart';
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -97,6 +100,9 @@ class _PlanCard extends StatelessWidget {
     await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => StudyProposalPage(planner: planner, proposal: proposal)));
   }
 
+  void _view(BuildContext context) =>
+      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanDetail(planner: planner, planId: entry.id, clock: clock, cards: cards, onOpenNoteAt: onOpenNoteAt)));
+
   Future<void> _delete(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -133,9 +139,25 @@ class _PlanCard extends StatelessWidget {
       if ((attention.pace ?? 1) > 1) tr('You take about {n} % longer than the plan expected.', {'n': ((attention.pace! - 1) * 100).round()}),
       if ((attention.pace ?? 1) < 1) tr('You are about {n} % quicker than the plan expected.', {'n': ((1 - attention.pace!) * 100).round()}),
     ];
+    final progress = PlanProgress.of(entry, now);
+    final booked = entry.sessions;
+    final doneCount = booked.where((s) => s.credited).length;
+    final leftMinutes = booked.where((s) => !s.credited && s.session.end.isAfter(now)).fold<int>(0, (n, s) => n + s.session.minutes);
+    final parts = entry.units.where((u) => u.included).length;
+    final summaries = entry.units.where((u) => u.included && entry.material.containsKey(u.id)).length;
+    final facts = [
+      if (booked.isNotEmpty) tr('{done} of {all} sessions done', {'done': doneCount, 'all': booked.length}),
+      if (booked.isNotEmpty) tr('{time} still to study', {'time': _hours(leftMinutes)}),
+      if (parts > 0) trCount(parts, '{n} part', '{n} parts'),
+      if (summaries > 0) trCount(summaries, '{n} summary', '{n} summaries'),
+    ];
     return Card(
       key: ValueKey('study-plan-${entry.id}'),
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+       key: ValueKey('study-view-${entry.id}'),
+       onTap: () => _view(context),
+       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 4, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -167,26 +189,31 @@ class _PlanCard extends StatelessWidget {
                   : trCount(days, '{n} day left: the exam is on {day}', '{n} days left: the exam is on {day}').replaceAll('{day}', l.formatMediumDate(entry.exam))),
               if (entry.units.any((u) => u.included)) ...[
                 const SizedBox(height: 8),
-                LinearProgressIndicator(value: entry.learned, minHeight: 6, borderRadius: BorderRadius.circular(3)),
-                const SizedBox(height: 4),
-                Text.verbatim(tr('{n} % of the material learnt', {'n': (entry.learned * 100).round()}), style: Theme.of(context).textTheme.bodySmall),
+                PlanProgressBlock(progress: progress, barHeight: 6),
               ],
+              if (facts.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text.verbatim(facts.join(' · '), style: Theme.of(context).textTheme.bodySmall)),
               const SizedBox(height: 6),
               Text.verbatim(
                 next == null ? tr('No session to come') : tr('Next: {when}, {what}', {'when': '${l.formatMediumDate(next.session.start)} ${_time(context, next.session.start)}', 'what': next.title}),
                 key: ValueKey('study-next-${entry.id}'),
               ),
+              Wrap(spacing: 8, children: [
+                TextButton.icon(
+                  key: ValueKey('study-detail-${entry.id}'),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                  onPressed: () => _view(context),
+                  icon: const Icon(Icons.list_alt_outlined),
+                  label: Text('View the plan'),
+                ),
               if (open != null)
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: TextButton.icon(
+                  TextButton.icon(
                     key: ValueKey('study-open-${entry.id}'),
                     style: TextButton.styleFrom(padding: EdgeInsets.zero),
                     onPressed: () => openStudySession(context, planner, entry.id, open.key, cards: cards, onOpenNoteAt: onOpenNoteAt, clock: clock),
                     icon: const Icon(Icons.play_circle_outline),
                     label: Text.verbatim(planner.running?.key == open.key && planner.running?.planId == entry.id ? tr('Go on with the session') : tr('Open the session')),
                   ),
-                ),
+              ]),
               if (reasons.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Container(
@@ -204,6 +231,7 @@ class _PlanCard extends StatelessWidget {
             ]),
           ),
         ]),
+      ),
       ),
     );
   }
@@ -241,6 +269,12 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
   String? _splitting;
   double? _splitDone;
   AiCancel? _splitCancel;
+
+  /// Whether summaries and cards are being made, how far that is, what stops it, and what the last run made.
+  bool _making = false;
+  double? _madeDone;
+  AiCancel? _makeCancel;
+  String? _madeText;
 
   DateTime get _today => _day((widget.clock ?? DateTime.now)());
 
@@ -335,6 +369,42 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
     }
   }
 
+  /// Makes the summaries and the flashcards of the parts that have none (with the AI model), as much as the words and the time call for.
+  bool _autoMake = true;
+
+  Future<void> _make({bool again = false}) async {
+    final cancel = AiCancel();
+    setState(() {
+      _making = true;
+      _madeDone = null;
+      _makeCancel = cancel;
+      _madeText = null;
+    });
+    try {
+      final r = await widget.planner.makeMaterial(_e, again: again, cancel: cancel, onProgress: (d) {
+        if (mounted) setState(() => _madeDone = d);
+      });
+      final counts = await widget.planner.sourceCounts();
+      if (!mounted) return;
+      setState(() {
+        _e = r.entry;
+        _cardCounts = counts;
+        _madeText = r.units == 0
+            ? tr('Nothing was made.')
+            : tr('Made for {parts} and {cards}.', {'parts': trCount(r.units, '{n} part', '{n} parts'), 'cards': trCount(r.cards, '{n} new flashcard', '{n} new flashcards')});
+      });
+    } catch (err) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim('$err'.replaceFirst('Bad state: ', ''))));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _making = false;
+          _makeCancel = null;
+        });
+      }
+    }
+  }
+
   void _setUnit(StudyUnit u) => setState(() => _e = _e.copyWith(units: [for (final x in _e.units) x.id == u.id ? u : x]));
 
   Set<String>? get _cardSources => switch (_cards) { _Cards.all => null, _Cards.none => const {}, _Cards.notes => _cardNotes.toSet() };
@@ -350,6 +420,8 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
   Future<void> _see() async {
     setState(() => _busy = true);
     try {
+      if (_autoMake && widget.planner.canMakeMaterial && _e.units.any((u) => u.included && !_e.material.containsKey(u.id))) await _make();
+      if (!mounted) return;
       final draft = _e.copyWith(name: _name.text.trim(), cardSources: () => _cardSources);
       final proposal = await widget.planner.propose(draft);
       if (!mounted) return;
@@ -452,6 +524,46 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                     ],
                     onChanged: (v) => setState(() => _cards = v ?? _cards),
                   ),
+
+                  if (_e.units.isNotEmpty) ...[
+                    _heading(tr('Summaries and flashcards')),
+                    Text(
+                      'Made from the pages with the AI: a summary and flashcards for each part, as many as its length and the time until the exam call for. The sessions use them, and the parts get a quiz.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (widget.planner.canMakeMaterial)
+                      SwitchListTile(
+                        key: const ValueKey('study-make-auto'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        value: _autoMake,
+                        onChanged: (v) => setState(() => _autoMake = v),
+                        title: Text('Make them when I look at the plan'),
+                      ),
+                    const SizedBox(height: 8),
+                    Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [
+                      if (_making)
+                        OutlinedButton.icon(key: const ValueKey('study-make-stop'), onPressed: () => _makeCancel?.cancel(), icon: const Icon(Icons.stop_circle_outlined), label: Text('Stop'))
+                      else
+                        FilledButton.tonalIcon(
+                          key: const ValueKey('study-make'),
+                          onPressed: widget.planner.canMakeMaterial && _splitting == null ? () => _make() : null,
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          label: Text(_e.units.any((u) => u.included && !_e.material.containsKey(u.id)) ? 'Make them' : 'Make them again'),
+                        ),
+                      if (!_making && _e.material.isNotEmpty && !_e.units.any((u) => u.included && !_e.material.containsKey(u.id)))
+                        TextButton(key: const ValueKey('study-make-again'), onPressed: widget.planner.canMakeMaterial ? () => _make(again: true) : null, child: Text('Make all new')),
+                    ]),
+                    if (_making) Padding(padding: const EdgeInsets.only(top: 8), child: LinearProgressIndicator(value: _madeDone)),
+                    if (!widget.planner.canMakeMaterial && !_making)
+                      Padding(padding: const EdgeInsets.only(top: 4), child: Text(widget.planner.maker?.enabled() == false ? 'The AI is switched off. Switch it on in the settings to get summaries and flashcards.' : 'No AI model is ready. Download or connect one in the AI settings to get summaries and flashcards.', style: Theme.of(context).textTheme.bodySmall)),
+                    if (_madeText != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text.verbatim(_madeText!, key: const ValueKey('study-made'))),
+                    if (_e.material.isNotEmpty && _madeText == null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text.verbatim(tr('{parts} have a summary.', {'parts': trCount(_e.units.where((u) => _e.material.containsKey(u.id)).length, '{n} part', '{n} parts')})),
+                      ),
+                  ],
 
                   _heading(tr('When to study')),
                   Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [

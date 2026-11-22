@@ -64,6 +64,7 @@ import 'dashboard_view.dart';
 import 'graph_study.dart';
 import 'study_session_screen.dart';
 import '../review/study_material_reader.dart' show readPageTexts;
+import '../review/study_generate.dart';
 import '../review/study_topics.dart';
 import '../reminders/reminder.dart' show ReminderKind;
 import '../widgets/notation_logo.dart';
@@ -957,6 +958,13 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     _app.planner?.facts = GraphStudyFacts(_graphs); // (the quizzes of study sessions)
     // (runs of pages cut by their topics, where the person asks for it)
     _app.planner?.topics = StudyTopicSplitter(pageTexts: (id) => readPageTexts(_app.repository.text, id), model: () => _app.ai?.provider, enabled: () => _aiOn);
+    // (the summaries and cards of a plan's parts, where the person asks for them)
+    _app.planner?.maker = StudyMaterialMaker(
+      pageTexts: (id) => readPageTexts(_app.repository.text, id),
+      documentText: (id) async => (await _app.planner?.readNote?.call(id))?.documentText ?? '',
+      model: () => _app.ai?.provider,
+      enabled: () => _aiOn,
+    );
     WidgetsBinding.instance.addObserver(this);
     _shortcuts.addHandler(_onShortcut);
     _app.repository.purgeTrash().catchError((Object _) => 0); // what lay in the trash for long enough

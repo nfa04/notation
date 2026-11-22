@@ -87,7 +87,10 @@ class ReviewScreen extends StatefulWidget {
   final StudyPlanner? planner;
   final NoteRepository? repository;
 
-  const ReviewScreen({super.key, required this.cards, this.source, this.sources, this.clock, this.planner, this.repository});
+  /// Opens a note at a page (from the study plans); null: the plans cannot open notes.
+  final void Function(String noteId, int? page)? onOpenNoteAt;
+
+  const ReviewScreen({super.key, required this.cards, this.source, this.sources, this.clock, this.planner, this.repository, this.onOpenNoteAt});
 
   @override
   State<ReviewScreen> createState() => _ReviewScreenState();
@@ -172,7 +175,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               icon: const Icon(Icons.event_available_outlined),
               onPressed: () {
                 final planner = widget.planner!, repository = widget.repository!, clock = widget.clock;
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanScreen(planner: planner, repository: repository, clock: clock, cards: widget.cards)));
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanScreen(planner: planner, repository: repository, clock: clock, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt)));
               },
             ),
         ],
