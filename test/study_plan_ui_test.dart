@@ -178,6 +178,7 @@ void main() {
     expect(find.byKey(const ValueKey('plan-next-up')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-diagram')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-week')), findsOneWidget);
+    expect(find.byKey(ValueKey('plan-part-sessions-${plan.units.first.id}')), findsOneWidget);
     expect(find.text('Not started'), findsWidgets);
     expect(find.byKey(ValueKey('plan-part-${plan.units.first.id}')), findsOneWidget);
     final first = plan.sessions.first;

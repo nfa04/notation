@@ -4201,4 +4201,7 @@ const frenchTexts = <String, String>{
   'Studying now': 'En cours',
   'Next up': 'Prochaine séance',
   '+{n} % ready for the exam: now {m} %.': '+{n} % prêt pour l\'examen : maintenant {m} %.',
+  'Learn': 'Apprendre',
+  'Go over': 'Réviser',
+  'Mistakes': 'Erreurs',
 };

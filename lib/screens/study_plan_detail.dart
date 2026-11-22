@@ -120,6 +120,39 @@ class StudyPlanDetail extends StatelessWidget {
     );
   }
 
+  Widget _partSessions(BuildContext context, StudyPlanEntry e, StudyUnit u) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final l = MaterialLocalizations.of(context);
+    final rows = <(BookedSession, Set<WorkKind>)>[
+      for (final s in [...e.sessions]..sort((a, b) => a.session.start.compareTo(b.session.start)))
+        if (!s.gone && (!s.skipped || s.credited))
+          if (s.session.items.where((i) => i.unitId == u.id).map((i) => i.kind).toSet() case final kinds when kinds.isNotEmpty) (s, kinds),
+    ];
+    if (rows.isEmpty) return const SizedBox();
+    String kind(WorkKind k) => switch (k) {
+          WorkKind.learn => tr('Learn'),
+          WorkKind.review => tr('Go over'),
+          WorkKind.quiz => tr('Quiz'),
+          WorkKind.mistakes => tr('Mistakes'),
+          _ => '',
+        };
+    return Padding(
+      key: ValueKey('plan-part-sessions-${u.id}'),
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(spacing: 6, runSpacing: 4, children: [
+        for (final (s, kinds) in rows)
+          ActionChip(
+            key: ValueKey('plan-part-session-${u.id}-${s.key}'),
+            visualDensity: VisualDensity.compact,
+            avatar: Icon(s.credited ? Icons.check_circle : Icons.schedule, size: 16, color: s.credited ? scheme.primary : scheme.outline),
+            label: Text.verbatim('${l.formatShortDate(s.session.start)}, ${_clock(context, s.session.start)} · ${kinds.map(kind).where((k) => k.isNotEmpty).join(', ')}', style: theme.textTheme.labelSmall),
+            onPressed: () => openStudySession(context, planner, e.id, s.key, cards: cards, onOpenNoteAt: onOpenNoteAt, clock: clock),
+          ),
+      ]),
+    );
+  }
+
   Widget _part(BuildContext context, StudyPlanEntry e, StudyUnit u) {
     final theme = Theme.of(context);
     final p = e.progress[u.id];
@@ -148,6 +181,7 @@ class StudyPlanDetail extends StatelessWidget {
                             : tr('{n} % learnt', {'n': (p.learned * 100).round()}),
                 style: theme.textTheme.labelSmall,
               ),
+              _partSessions(context, e, u),
             ]),
           ),
           if (points.isNotEmpty)

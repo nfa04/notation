@@ -4201,4 +4201,7 @@ const spanishTexts = <String, String>{
   'Studying now': 'Estudiando ahora',
   'Next up': 'A continuación',
   '+{n} % ready for the exam: now {m} %.': '+{n} % listo para el examen: ahora {m} %.',
+  'Learn': 'Aprender',
+  'Go over': 'Repasar',
+  'Mistakes': 'Errores',
 };
