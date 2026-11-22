@@ -4,6 +4,7 @@ import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../review/study_planner.dart';
 import '../review/study_progress.dart';
+import '../review/study_schedule.dart';
 
 /// A bar with two layers: [value] in the full colour on top of [behind] in a light one (for a part: what was gone over on top of what was
 /// learnt), and an optional tick at [marker] (where the plan says the person should be by now).
@@ -79,33 +80,73 @@ class PlanProgressBlock extends StatelessWidget {
   }
 }
 
-/// The readiness of a plan over the days to the exam: the line the sessions promise (dashed) and the line of what was done.
-class ProgressDiagram extends StatelessWidget {
+/// The readiness of a plan over the days to the exam: the line the sessions promise (dashed) and the line of what was done. Pointing at
+/// a day (or touching it) says how ready the plan is then and, for a day to come, what is still to learn by then; for a day that is over,
+/// what was learnt since.
+class ProgressDiagram extends StatefulWidget {
   final List<ProgressPoint> points;
   final DateTime today;
 
-  const ProgressDiagram({super.key, required this.points, required this.today});
+  /// The work around a day (see [workAround]).
+  final ({bool ahead, List<PartWork> work}) Function(DateTime day) workAt;
+
+  const ProgressDiagram({super.key, required this.points, required this.today, required this.workAt});
+
+  @override
+  State<ProgressDiagram> createState() => _ProgressDiagramState();
+}
+
+class _ProgressDiagramState extends State<ProgressDiagram> {
+  int? _at;
+
+  static const _left = 32.0, _pad = 6.0;
+
+  int _index(double dx, double width) {
+    final w = width - _left - _pad;
+    return ((dx - _left) / w * (widget.points.length - 1)).round().clamp(0, widget.points.length - 1);
+  }
+
+  int get _shown {
+    final t = widget.points.indexWhere((p) => !p.day.isBefore(widget.today));
+    return (_at ?? (t < 0 ? widget.points.length - 1 : t)).clamp(0, widget.points.length - 1);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final points = widget.points;
     if (points.length < 2) return const SizedBox();
     final theme = Theme.of(context);
     final l = MaterialLocalizations.of(context);
     final scheme = theme.colorScheme;
     final style = theme.textTheme.labelSmall;
+    final shown = _shown;
     return Column(key: const ValueKey('plan-diagram'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 16, children: [
         _key(context, scheme.outline, tr('Planned'), dashed: true),
         _key(context, scheme.primary, tr('Done')),
       ]),
       const SizedBox(height: 8),
-      SizedBox(
-        height: 160,
-        child: CustomPaint(
-          size: Size.infinite,
-          painter: _DiagramPainter(points: points, today: today, planned: scheme.outline, actual: scheme.primary, grid: scheme.outlineVariant, label: scheme.onSurfaceVariant, style: style),
-        ),
-      ),
+      LayoutBuilder(builder: (context, c) {
+        void point(Offset o) => setState(() => _at = _index(o.dx, c.maxWidth));
+        return MouseRegion(
+          onHover: (e) => point(e.localPosition),
+          onExit: (_) => setState(() => _at = null),
+          child: GestureDetector(
+            key: const ValueKey('plan-diagram-area'),
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (d) => point(d.localPosition),
+            onHorizontalDragUpdate: (d) => point(d.localPosition),
+            child: SizedBox(
+              height: 160,
+              width: double.infinity,
+              child: CustomPaint(
+                painter: _DiagramPainter(
+                    points: points, today: widget.today, at: shown, planned: scheme.outline, actual: scheme.primary, grid: scheme.outlineVariant, label: scheme.onSurfaceVariant, style: style),
+              ),
+            ),
+          ),
+        );
+      }),
       Padding(
         padding: const EdgeInsets.only(left: 32, top: 2),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -113,7 +154,57 @@ class ProgressDiagram extends StatelessWidget {
           Text.verbatim(l.formatShortDate(points.last.day), style: style),
         ]),
       ),
+      const SizedBox(height: 8),
+      _detail(context, shown),
     ]);
+  }
+
+  String _kind(PartWork w) => switch (w.kind) {
+        WorkKind.learn => tr('Learn'),
+        WorkKind.review => tr('Go over'),
+        WorkKind.quiz => tr('Quiz'),
+        WorkKind.mistakes => tr('Mistakes'),
+        _ => '',
+      };
+
+  Widget _detail(BuildContext context, int i) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final p = widget.points[i];
+    final w = widget.workAt(p.day);
+    final isToday = DateUtils.isSameDay(p.day, widget.today);
+    final lines = [
+      for (final x in w.work)
+        if (_kind(x).isNotEmpty) '${x.unit?.title ?? tr('A part that was taken out of the plan')}: ${_kind(x)}${x.share < 0.995 ? ' (${(x.share * 100).round()} %)' : ''}',
+    ];
+    return Container(
+      key: const ValueKey('plan-diagram-detail'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text.verbatim(
+          isToday ? tr('Today') : MaterialLocalizations.of(context).formatFullDate(p.day),
+          style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 2),
+        Text.verbatim(
+          p.actual == null
+              ? tr('Planned: {n} % ready', {'n': (p.planned * 100).round()})
+              : tr('Planned: {n} % ready · Done: {m} % ready', {'n': (p.planned * 100).round(), 'm': (p.actual! * 100).round()}),
+          key: const ValueKey('plan-diagram-percent'),
+        ),
+        if (!isToday) ...[
+          const SizedBox(height: 6),
+          Text.verbatim(
+            w.ahead ? tr('Still to learn by then:') : tr('Learnt since then:'),
+            style: theme.textTheme.labelMedium,
+          ),
+          if (lines.isEmpty) Text(w.ahead ? 'Nothing: all of it is done or planned for later.' : 'Nothing was learnt since then.', style: theme.textTheme.bodySmall),
+          for (final t in lines) Text.verbatim('• $t', style: theme.textTheme.bodySmall),
+        ],
+      ]),
+    );
   }
 
   Widget _key(BuildContext context, Color color, String text, {bool dashed = false}) => Row(mainAxisSize: MainAxisSize.min, children: [
@@ -147,10 +238,11 @@ class _KeyPainter extends CustomPainter {
 class _DiagramPainter extends CustomPainter {
   final List<ProgressPoint> points;
   final DateTime today;
+  final int at;
   final Color planned, actual, grid, label;
   final TextStyle? style;
 
-  _DiagramPainter({required this.points, required this.today, required this.planned, required this.actual, required this.grid, required this.label, required this.style});
+  _DiagramPainter({required this.points, required this.today, required this.at, required this.planned, required this.actual, required this.grid, required this.label, required this.style});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -191,12 +283,16 @@ class _DiagramPainter extends CustomPainter {
     }
     final ti = points.indexWhere((p) => !p.day.isBefore(today));
     if (ti > 0 && ti < points.length - 1) {
-      canvas.drawLine(Offset(x(ti), pad), Offset(x(ti), size.height - pad), Paint()..color = label.withValues(alpha: 0.5)..strokeWidth = 1);
+      canvas.drawLine(Offset(x(ti), pad), Offset(x(ti), size.height - pad), Paint()..color = label.withValues(alpha: 0.3)..strokeWidth = 1);
     }
+    // the day that is pointed at
+    canvas.drawLine(Offset(x(at), pad), Offset(x(at), size.height - pad), Paint()..color = label..strokeWidth = 1.5);
+    canvas.drawCircle(Offset(x(at), y(points[at].planned)), 4, Paint()..color = planned);
+    if (points[at].actual != null) canvas.drawCircle(Offset(x(at), y(points[at].actual!)), 5, Paint()..color = actual);
   }
 
   @override
-  bool shouldRepaint(_DiagramPainter old) => old.points != points || old.today != today || old.planned != planned || old.actual != actual;
+  bool shouldRepaint(_DiagramPainter old) => old.points != points || old.today != today || old.at != at || old.planned != planned || old.actual != actual;
 }
 
 /// The seven days of the week of [today]: a mark for each day with sessions (all done, some done, missed, to come), a dot for today.

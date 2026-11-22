@@ -82,4 +82,16 @@ void main() {
       expect(c[i].planned, greaterThanOrEqualTo(c[i - 1].planned));
     }
   });
+
+  test('pointing at a day to come gives the work still to do by then; at a day that is over, the work done since', () {
+    final d0 = DateTime(2026, 11, 20, 16), d1 = DateTime(2026, 11, 22, 16), d2 = DateTime(2026, 11, 24, 16), d3 = DateTime(2026, 11, 26, 16);
+    final e = plan(sessions: [session(d0, 'a', credited: true), session(d1, 'b'), session(d2, 'a', kind: WorkKind.review), session(d3, 'b', kind: WorkKind.review)]);
+    final soon = workAround(e, now, DateTime(2026, 11, 24));
+    expect(soon.ahead, isTrue);
+    expect([for (final w in soon.work) (w.unit!.id, w.kind)], [('b', WorkKind.learn), ('a', WorkKind.review)]);
+    final back = workAround(e, now, DateTime(2026, 11, 19));
+    expect(back.ahead, isFalse);
+    expect([for (final w in back.work) (w.unit!.id, w.kind)], [('a', WorkKind.learn)]);
+    expect(workAround(e, now, DateTime(2026, 11, 20)).work, isEmpty);
+  });
 }

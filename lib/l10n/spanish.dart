@@ -4204,4 +4204,10 @@ const spanishTexts = <String, String>{
   'Learn': 'Aprender',
   'Go over': 'Repasar',
   'Mistakes': 'Errores',
+  'Planned: {n} % ready': 'Previsto: {n} % listo',
+  'Planned: {n} % ready · Done: {m} % ready': 'Previsto: {n} % listo · Hecho: {m} % listo',
+  'Still to learn by then:': 'Por aprender hasta entonces:',
+  'Learnt since then:': 'Aprendido desde entonces:',
+  'Nothing: all of it is done or planned for later.': 'Nada: todo está hecho o previsto para más tarde.',
+  'Nothing was learnt since then.': 'No se aprendió nada desde entonces.',
 };

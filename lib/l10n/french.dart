@@ -4204,4 +4204,10 @@ const frenchTexts = <String, String>{
   'Learn': 'Apprendre',
   'Go over': 'Réviser',
   'Mistakes': 'Erreurs',
+  'Planned: {n} % ready': 'Prévu : {n} % prêt',
+  'Planned: {n} % ready · Done: {m} % ready': 'Prévu : {n} % prêt · Fait : {m} % prêt',
+  'Still to learn by then:': 'Encore à apprendre d\'ici là :',
+  'Learnt since then:': 'Appris depuis :',
+  'Nothing: all of it is done or planned for later.': 'Rien : tout est fait ou prévu pour plus tard.',
+  'Nothing was learnt since then.': 'Rien n\'a été appris depuis.',
 };

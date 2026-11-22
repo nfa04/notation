@@ -4204,4 +4204,10 @@ const italianTexts = <String, String>{
   'Learn': 'Imparare',
   'Go over': 'Ripassare',
   'Mistakes': 'Errori',
+  'Planned: {n} % ready': 'Previsto: {n} % pronto',
+  'Planned: {n} % ready · Done: {m} % ready': 'Previsto: {n} % pronto · Fatto: {m} % pronto',
+  'Still to learn by then:': 'Ancora da imparare fino ad allora:',
+  'Learnt since then:': 'Imparato da allora:',
+  'Nothing: all of it is done or planned for later.': 'Niente: tutto è fatto o previsto per dopo.',
+  'Nothing was learnt since then.': 'Da allora non è stato imparato nulla.',
 };

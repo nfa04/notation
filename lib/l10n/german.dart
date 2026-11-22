@@ -4238,4 +4238,10 @@ const germanTexts = <String, String>{
   'Learn': 'Lernen',
   'Go over': 'Wiederholen',
   'Mistakes': 'Fehler',
+  'Planned: {n} % ready': 'Geplant: {n} % bereit',
+  'Planned: {n} % ready · Done: {m} % ready': 'Geplant: {n} % bereit · Erreicht: {m} % bereit',
+  'Still to learn by then:': 'Bis dann noch zu lernen:',
+  'Learnt since then:': 'Seitdem gelernt:',
+  'Nothing: all of it is done or planned for later.': 'Nichts: alles ist erledigt oder für später geplant.',
+  'Nothing was learnt since then.': 'Seitdem wurde nichts gelernt.',
 };

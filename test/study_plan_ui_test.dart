@@ -1,3 +1,4 @@
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:notes/algebra/mistake_card.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -178,6 +179,15 @@ void main() {
     expect(find.byKey(const ValueKey('plan-next-up')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-diagram')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-week')), findsOneWidget);
+    // pointing at the diagram says how ready the plan is that day and what is still to learn by then
+    final area = find.byKey(const ValueKey('plan-diagram-area'));
+    await tester.ensureVisible(area);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getTopRight(area) - const Offset(40, -40));
+    await tester.pump();
+    expect(find.textContaining('Still to learn by then'), findsOneWidget);
+    expect(find.textContaining('Planned: 100 %'), findsWidgets);
     expect(find.byKey(ValueKey('plan-part-sessions-${plan.units.first.id}')), findsOneWidget);
     expect(find.text('Not started'), findsWidgets);
     expect(find.byKey(ValueKey('plan-part-${plan.units.first.id}')), findsOneWidget);

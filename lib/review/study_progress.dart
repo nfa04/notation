@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'study_material.dart';
 import 'study_planner.dart';
 import 'study_schedule.dart';
 
@@ -153,10 +156,38 @@ class PlanProgress {
           }
         }
       }
-      out.add(ProgressPoint(d, _ready(e, planned), d.isAfter(today) ? null : _ready(e, actual)));
+      out.add(ProgressPoint(d, _ready(e, planned), d.isAfter(today) ? null : (d == today ? math.max(_ready(e, actual), _ready(e, e.progress)) : _ready(e, actual))));
     }
     return out;
   }
+}
+
+/// Work on a part: what kind of work, and the share of the part.
+typedef PartWork = ({StudyUnit? unit, WorkKind kind, double share});
+
+/// The work on parts that lies between [day] and today: for a day to come, what the sessions from today up to the end of [day] still have
+/// to do ([ahead] is true); for a day that is over, what was done in the sessions after [day] up to now. Work of the same part and kind
+/// is added up.
+({bool ahead, List<PartWork> work}) workAround(StudyPlanEntry e, DateTime now, DateTime day) {
+  DateTime d0(DateTime t) => DateTime(t.year, t.month, t.day);
+  final today = d0(now), target = d0(day);
+  final ahead = !target.isBefore(today);
+  final sums = <(String, WorkKind), double>{};
+  for (final s in e.sessions) {
+    if (s.gone) continue;
+    final sd = d0(s.session.start);
+    if (ahead) {
+      if (s.credited || s.skipped || sd.isBefore(today) || sd.isAfter(target)) continue;
+    } else {
+      if (!s.credited || !sd.isAfter(target) || sd.isAfter(today)) continue;
+    }
+    for (final (n, i) in s.session.items.indexed) {
+      if (i.unitId == null) continue;
+      if (!ahead && s.report != null && !s.report!.done.contains(n)) continue;
+      sums[(i.unitId!, i.kind)] = (sums[(i.unitId!, i.kind)] ?? 0) + (i.to - i.from);
+    }
+  }
+  return (ahead: ahead, work: [for (final en in sums.entries) (unit: e.unit(en.key.$1), kind: en.key.$2, share: en.value.clamp(0.0, 1.0))]);
 }
 
 /// One day of the curve of a plan.

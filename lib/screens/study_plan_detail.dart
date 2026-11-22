@@ -66,7 +66,7 @@ class StudyPlanDetail extends StatelessWidget {
         const SizedBox(height: 12),
         PlanProgressBlock(progress: progress, barHeight: 10),
         if (sessions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 16), child: WeekStrip(sessions: sessions, today: DateTime(now.year, now.month, now.day))),
-        if (curve.length > 1) Padding(padding: const EdgeInsets.only(top: 16), child: ProgressDiagram(points: curve, today: DateTime(now.year, now.month, now.day))),
+        if (curve.length > 1) Padding(padding: const EdgeInsets.only(top: 16), child: ProgressDiagram(points: curve, today: DateTime(now.year, now.month, now.day), workAt: (d) => workAround(e, now, d))),
         if (progress.next != null) _nextUp(context, e, progress.next!, now),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
