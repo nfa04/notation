@@ -4210,4 +4210,8 @@ const italianTexts = <String, String>{
   'Learnt since then:': 'Imparato da allora:',
   'Nothing: all of it is done or planned for later.': 'Niente: tutto è fatto o previsto per dopo.',
   'Nothing was learnt since then.': 'Da allora non è stato imparato nulla.',
+  'Overview': 'Panoramica',
+  'Exam': 'Esame',
+  'Done: {m} % ready': 'Fatto: {m} % pronto',
+  'How ready you are, day by day': 'Quanto sei pronto, giorno per giorno',
 };

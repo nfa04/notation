@@ -62,6 +62,7 @@ import 'collab_ui.dart';
 import 'assistant_panel.dart';
 import 'dashboard_view.dart';
 import 'graph_study.dart';
+import 'study_plan_screen.dart';
 import 'study_session_screen.dart';
 import '../review/study_material_reader.dart' show readPageTexts;
 import '../review/study_generate.dart';
@@ -119,7 +120,10 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// The places of the menu on the left, by the index the rest of the shell goes by (the calendar and the
   /// automations go when they are off; the graph and the assistant go with the AI).
   /// (3, the open note, is not among them: notes open as tabs, and on a phone from the dashboard, so it has no place of its own in the menu)
-  List<int> get _navItems => [0, 1, 6, if (_assistantOn) 9, if (_aiOn) 8, if (_f(Feature.calendar)) 2, if (_f(Feature.automations)) 4, 5];
+  List<int> get _navItems => [0, 1, 6, if (_assistantOn) 9, if (_aiOn) 8, if (_f(Feature.calendar)) 2, if (_studyOn) 10, if (_f(Feature.automations)) 4, 5];
+
+  /// Whether the study plans are offered (their own place in the menu; they go by the calendar).
+  bool get _studyOn => _app.planner != null && _f(Feature.calendar);
 
   /// Whether the assistant that answers from all notes is offered (its own place in the menu).
   bool get _assistantOn => _app.ai != null && _aiOn && _f(Feature.assistant);
@@ -132,6 +136,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     0: NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Dashboard')),
     1: NavigationRailDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: Text('Folders')),
     2: NavigationRailDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: Text('Calendar')),
+    10: NavigationRailDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: Text('Study plans')),
     3: NavigationRailDestination(icon: Icon(Icons.note_alt_outlined), selectedIcon: Icon(Icons.note_alt), label: Text('Note')),
     4: NavigationRailDestination(icon: Icon(Icons.bolt_outlined), selectedIcon: Icon(Icons.bolt), label: Text('Automations')),
     6: NavigationRailDestination(icon: Icon(Icons.search), selectedIcon: Icon(Icons.search), label: Text('Search')),
@@ -404,6 +409,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       }
       if (_kept.length > _keptMax) WidgetsBinding.instance.addPostFrameCallback((_) => _expireKept());
       if (focused != null && focused != before && _alive.contains(focused) && const {0, 1, 2}.contains(_pageOf(focused))) WidgetsBinding.instance.addPostFrameCallback((_) => _pageRefresh.ring());
+      // (sessions moved or deleted in the calendar app are seen as soon as the study plans come to the front)
+      if (focused != null && focused != before && _pageOf(focused) == 10) unawaited(_app.planner?.refresh(lookAtCalendar: true));
       if (focused != null && _isGraph(focused)) _lastGraph = focused;
       if (_lastGraph != null && !newTabs.contains(_lastGraph)) _lastGraph = null;
       if (_lastNote != null && !newTabs.contains(_lastNote)) _lastNote = null;
@@ -1355,6 +1362,10 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         );
       case 2:
         return CalendarView(reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style, refresh: _pageRefresh);
+      case 10:
+        final planner = _app.planner;
+        if (planner == null) return const SizedBox.shrink();
+        return StudyPlanScreen(planner: planner, repository: _app.repository, cards: _f(Feature.flashcards) ? _app.cards : null, onOpenNoteAt: (id, page) => _openAtPage(id, page));
       case 3:
         return const Center(child: Text('Open a note from the dashboard or create a new one.'));
       case 4:

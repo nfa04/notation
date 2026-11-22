@@ -16,7 +16,6 @@ import 'package:notes/review/study_planner.dart';
 import 'package:notes/review/study_practice.dart';
 import 'package:notes/review/study_schedule.dart';
 import 'package:notes/review/study_topics.dart';
-import 'package:notes/screens/review_view.dart';
 import 'package:notes/screens/study_plan_screen.dart';
 import 'package:notes/screens/study_session_screen.dart';
 import 'package:notes/sync/caldav_remote.dart';
@@ -174,7 +173,7 @@ void main() {
     await tester.tap(find.byKey(ValueKey('study-detail-${plan.id}')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('plan-detail')), findsOneWidget);
-    expect(find.text('Parts'), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan-tabs')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-progress')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-next-up')), findsOneWidget);
     expect(find.byKey(const ValueKey('plan-diagram')), findsOneWidget);
@@ -188,10 +187,20 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Still to learn by then'), findsOneWidget);
     expect(find.textContaining('Planned: 100 %'), findsWidgets);
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('plan-diagram-tip')), findsNothing);
+    // the parts and the sessions are tabs of their own
+    expect(find.byKey(ValueKey('plan-part-${plan.units.first.id}')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('plan-tab-parts')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('plan-diagram')), findsNothing);
     expect(find.byKey(ValueKey('plan-part-sessions-${plan.units.first.id}')), findsOneWidget);
     expect(find.text('Not started'), findsWidgets);
     expect(find.byKey(ValueKey('plan-part-${plan.units.first.id}')), findsOneWidget);
     final first = plan.sessions.first;
+    await tester.tap(find.byKey(const ValueKey('plan-tab-sessions')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(ValueKey('plan-session-${first.key}')), 200, scrollable: find.descendant(of: find.byKey(const ValueKey('plan-detail')), matching: find.byType(Scrollable)).first);
     expect(find.byKey(ValueKey('plan-session-${first.key}')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -264,21 +273,6 @@ void main() {
     await makePlan(tester);
     expect(tester.takeException(), isNull);
     expect(find.byKey(const ValueKey('study-approve')), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('the review of the cards has the button to the plans, when plans are offered', (tester) async {
-    await open(tester);
-    await tester.pumpWidget(MaterialApp(home: ReviewScreen(cards: cards, planner: planner, repository: notes, clock: () => now)));
-    await real(tester, 3);
-    expect(find.byKey(const ValueKey('study-plans')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('study-plans')));
-    await tester.pumpAndSettle();
-    expect(find.text('Study plans'), findsWidgets);
-    expect(find.byKey(const ValueKey('new-study-plan')), findsOneWidget);
-    await tester.pumpWidget(MaterialApp(home: ReviewScreen(cards: cards, clock: () => now)));
-    await real(tester, 2);
-    expect(find.byKey(const ValueKey('study-plans')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

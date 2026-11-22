@@ -7,7 +7,6 @@ import '../data/card_repository.dart';
 import '../data/note_repository.dart';
 import '../review/study_planner.dart';
 import 'review_export.dart';
-import 'study_plan_screen.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 
@@ -168,16 +167,6 @@ class _ReviewScreenState extends State<ReviewScreen> {
             icon: const Icon(Icons.ios_share_outlined),
             onPressed: () => exportCardsToAnki(context, widget.cards, repository: widget.repository, source: widget.source),
           ),
-          if (widget.planner != null && widget.repository != null)
-            IconButton(
-              key: const ValueKey('study-plans'),
-              tooltip: tr('Plan for an exam'),
-              icon: const Icon(Icons.event_available_outlined),
-              onPressed: () {
-                final planner = widget.planner!, repository = widget.repository!, clock = widget.clock;
-                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanScreen(planner: planner, repository: repository, clock: clock, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt)));
-              },
-            ),
         ],
       ),
       body: SafeArea(

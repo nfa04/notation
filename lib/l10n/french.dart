@@ -4210,4 +4210,8 @@ const frenchTexts = <String, String>{
   'Learnt since then:': 'Appris depuis :',
   'Nothing: all of it is done or planned for later.': 'Rien : tout est fait ou prévu pour plus tard.',
   'Nothing was learnt since then.': 'Rien n\'a été appris depuis.',
+  'Overview': 'Aperçu',
+  'Exam': 'Examen',
+  'Done: {m} % ready': 'Fait : {m} % prêt',
+  'How ready you are, day by day': 'Ton niveau de préparation, jour par jour',
 };

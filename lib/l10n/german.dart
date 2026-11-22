@@ -4244,4 +4244,8 @@ const germanTexts = <String, String>{
   'Learnt since then:': 'Seitdem gelernt:',
   'Nothing: all of it is done or planned for later.': 'Nichts: alles ist erledigt oder für später geplant.',
   'Nothing was learnt since then.': 'Seitdem wurde nichts gelernt.',
+  'Overview': 'Übersicht',
+  'Exam': 'Prüfung',
+  'Done: {m} % ready': 'Erreicht: {m} % bereit',
+  'How ready you are, day by day': 'Wie bereit du bist, Tag für Tag',
 };

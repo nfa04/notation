@@ -16,7 +16,7 @@ String _clock(BuildContext context, DateTime t) =>
 String _length(int minutes) => minutes < 90 ? trCount(minutes, '{n} minute', '{n} minutes') : tr('{n} hours', {'n': (minutes / 60).toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')});
 
 /// A plan as a whole: how far it is, its parts with their progress and summaries, and every session by day (done, missed, to come).
-class StudyPlanDetail extends StatelessWidget {
+class StudyPlanDetail extends StatefulWidget {
   final StudyPlanner planner;
   final String planId;
   final DateTime Function()? clock;
@@ -24,6 +24,21 @@ class StudyPlanDetail extends StatelessWidget {
   final CardRepository? cards;
 
   const StudyPlanDetail({super.key, required this.planner, required this.planId, this.clock, this.onOpenNoteAt, this.cards});
+
+  @override
+  State<StudyPlanDetail> createState() => _StudyPlanDetailState();
+}
+
+enum _Tab { overview, parts, sessions }
+
+class _StudyPlanDetailState extends State<StudyPlanDetail> {
+  _Tab _tab = _Tab.overview;
+
+  StudyPlanner get planner => widget.planner;
+  String get planId => widget.planId;
+  DateTime Function()? get clock => widget.clock;
+  OpenNoteAt? get onOpenNoteAt => widget.onOpenNoteAt;
+  CardRepository? get cards => widget.cards;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -53,6 +68,7 @@ class StudyPlanDetail extends StatelessWidget {
       byDay.putIfAbsent(DateTime(s.session.start.year, s.session.start.month, s.session.start.day), () => []).add(s);
     }
     Widget chip(IconData icon, String text) => Chip(avatar: Icon(icon, size: 16), label: Text.verbatim(text), visualDensity: VisualDensity.compact);
+    final today = DateTime(now.year, now.month, now.day);
     return Scaffold(
       appBar: AppBar(title: Text.verbatim(e.name)),
       body: ListView(key: const ValueKey('plan-detail'), padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
@@ -62,30 +78,56 @@ class StudyPlanDetail extends StatelessWidget {
               : trCount(days, '{n} day left: the exam is on {day}', '{n} days left: the exam is on {day}').replaceAll('{day}', l.formatMediumDate(e.exam)),
           style: theme.textTheme.titleMedium,
         ),
-        const SizedBox(height: 8),
         const SizedBox(height: 12),
         PlanProgressBlock(progress: progress, barHeight: 10),
-        if (sessions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 16), child: WeekStrip(sessions: sessions, today: DateTime(now.year, now.month, now.day))),
-        if (curve.length > 1) Padding(padding: const EdgeInsets.only(top: 16), child: ProgressDiagram(points: curve, today: DateTime(now.year, now.month, now.day), workAt: (d) => workAround(e, now, d))),
         if (progress.next != null) _nextUp(context, e, progress.next!, now),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, children: [
-          chip(Icons.event_available_outlined, tr('{done} of {all} sessions done', {'done': done, 'all': sessions.length})),
-          chip(Icons.timer_outlined, tr('{time} still to study', {'time': _length(left)})),
-          chip(Icons.view_agenda_outlined, trCount(parts.length, '{n} part', '{n} parts')),
-          if (summaries > 0) chip(Icons.summarize_outlined, trCount(summaries, '{n} summary', '{n} summaries')),
-        ]),
-        Padding(padding: const EdgeInsets.only(top: 16, bottom: 4), child: Text('Parts', style: theme.textTheme.titleSmall)),
-        if (parts.isEmpty) Text('This plan has no parts: it goes by the flashcards.'),
-        for (final u in parts) _part(context, e, u),
-        Padding(padding: const EdgeInsets.only(top: 16, bottom: 4), child: Text('Sessions', style: theme.textTheme.titleSmall)),
-        if (sessions.isEmpty) Text('There are no sessions yet. Approve the plan to get them.', key: const ValueKey('plan-detail-no-sessions')),
-        for (final d in byDay.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 10, bottom: 2),
-            child: Text.verbatim(l.formatFullDate(d.key), style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<_Tab>(
+            key: const ValueKey('plan-tabs'),
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(value: _Tab.overview, label: Text('Overview', key: const ValueKey('plan-tab-overview')), icon: const Icon(Icons.insights_outlined)),
+              ButtonSegment(value: _Tab.parts, label: Text.verbatim('${tr('Parts')} ${parts.length}', key: const ValueKey('plan-tab-parts')), icon: const Icon(Icons.view_agenda_outlined)),
+              ButtonSegment(value: _Tab.sessions, label: Text.verbatim('${tr('Sessions')} ${sessions.length}', key: const ValueKey('plan-tab-sessions')), icon: const Icon(Icons.event_note_outlined)),
+            ],
+            selected: {_tab},
+            onSelectionChanged: (v) => setState(() => _tab = v.first),
           ),
-          for (final s in d.value) _session(context, e, s, now),
+        ),
+        const SizedBox(height: 12),
+        if (_tab == _Tab.overview) ...[
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            chip(Icons.event_available_outlined, tr('{done} of {all} sessions done', {'done': done, 'all': sessions.length})),
+            chip(Icons.timer_outlined, tr('{time} still to study', {'time': _length(left)})),
+            chip(Icons.view_agenda_outlined, trCount(parts.length, '{n} part', '{n} parts')),
+            if (summaries > 0) chip(Icons.summarize_outlined, trCount(summaries, '{n} summary', '{n} summaries')),
+          ]),
+          if (sessions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 16), child: WeekStrip(sessions: sessions, today: today)),
+          if (curve.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 8), child: ProgressDiagram(points: curve, today: today, exam: DateTime(e.exam.year, e.exam.month, e.exam.day), workAt: (d) => workAround(e, now, d))),
+              ),
+            ),
+          if (sessions.isEmpty) Padding(padding: const EdgeInsets.only(top: 16), child: Text('There are no sessions yet. Approve the plan to get them.', key: const ValueKey('plan-detail-no-sessions'))),
+        ],
+        if (_tab == _Tab.parts) ...[
+          if (parts.isEmpty) Text('This plan has no parts: it goes by the flashcards.'),
+          for (final u in parts) _part(context, e, u),
+        ],
+        if (_tab == _Tab.sessions) ...[
+          if (sessions.isEmpty) Text('There are no sessions yet. Approve the plan to get them.'),
+          for (final d in byDay.entries) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 2),
+              child: Text.verbatim(l.formatFullDate(d.key), style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+            ),
+            for (final s in d.value) _session(context, e, s, now),
+          ],
         ],
       ]),
     );

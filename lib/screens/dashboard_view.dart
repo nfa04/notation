@@ -18,7 +18,6 @@ import '../cloudsync/cloud_sync_service.dart';
 import '../automations/automation_service.dart';
 import '../data/note_data.dart';
 import '../review/study_planner.dart';
-import 'study_plan_screen.dart';
 import 'study_session_screen.dart';
 import 'ask_card.dart';
 import '../data/note_file_service.dart';
@@ -351,18 +350,6 @@ class _DashboardViewState extends State<DashboardView> {
           label: tr('Reminders'),
           onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => RemindersScreen(service: widget.reminders!))),
           widget: RemindersButton(service: widget.reminders!),
-        ),
-      if (widget.planner != null)
-        (
-          key: 'study-plans',
-          icon: Icons.school_outlined,
-          label: tr('Study plans'),
-          onTap: () {
-            unawaited(widget.planner!.refresh(lookAtCalendar: true)); // (sessions moved or deleted in the calendar app are seen at once)
-            Navigator.push(context, MaterialPageRoute<void>(
-                builder: (_) => StudyPlanScreen(planner: widget.planner!, repository: widget.repository, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt)));
-          },
-          widget: null,
         ),
       if (widget.cards != null)
         (key: 'review-cards', icon: Icons.event_repeat, label: tr('Review cards'), onTap: () {}, widget: ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository)),

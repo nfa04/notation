@@ -4210,4 +4210,8 @@ const spanishTexts = <String, String>{
   'Learnt since then:': 'Aprendido desde entonces:',
   'Nothing: all of it is done or planned for later.': 'Nada: todo está hecho o previsto para más tarde.',
   'Nothing was learnt since then.': 'No se aprendió nada desde entonces.',
+  'Overview': 'Resumen',
+  'Exam': 'Examen',
+  'Done: {m} % ready': 'Hecho: {m} % listo',
+  'How ready you are, day by day': 'Cuánto estás preparado, día a día',
 };
