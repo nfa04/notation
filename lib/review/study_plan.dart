@@ -58,7 +58,7 @@ class StudyPlan {
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
-/// The plan that works backwards from the exam: new cards are spread over the first part of the time (so that the last days are for
+/// The flashcards' part of a study plan (the minutes a day for them, see `StudyPlanner`), worked out backwards from the exam: new cards are spread over the first part of the time (so that the last days are for
 /// going over them), the cards that are due or soon will be are reviewed every day, the weak spots get more of the last days, and the
 /// day of the exam is a short look at what is weak. [minutesPerDay] and [secondsPerCard] give how many cards a day fit; [daysOff] are
 /// weekdays (1 = Monday) without a session. The plan is made again every day from where the cards stand then, which is how it adjusts to
@@ -106,14 +106,4 @@ StudyPlan planStudy({
   final light = math.min(stats.weak > 0 ? stats.weak : stats.total, math.max(5, capacity ~/ 3));
   sessions.add(StudySession(to, weak: math.min(light, stats.weak), reviews: stats.weak > 0 ? 0 : light, minutes: math.max(5, minutesFor(light) ~/ 2 + 1), examDay: true));
   return StudyPlan(sessions, unseen, capacity);
-}
-
-/// The words of a session, for the task it becomes on the calendar.
-String sessionTitle(String name, StudySession s) {
-  if (s.examDay) return 'Exam day: $name, a last look at what is weak (about ${s.minutes} min)';
-  final parts = [
-    if (s.newCards > 0) '${s.newCards} new',
-    if (s.reviews + s.weak > 0) '${s.reviews + s.weak} to go over${s.weak > 0 ? ' (${s.weak} weak)' : ''}',
-  ];
-  return 'Study $name: ${parts.join(', ')} (about ${s.minutes} min)';
 }

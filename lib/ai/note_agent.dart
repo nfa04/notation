@@ -874,6 +874,26 @@ final agentTools = <AgentTool>[
     },
   ),
   AgentTool(
+    name: 'study.list',
+    usage: 'study.list {} : the user\'s study plans for exams (id, name, exam day, how much is learned, the next sessions, whether the plan needs a look).',
+    parameters: _schema({}),
+    permission: ExtensionPermission.tasksManage,
+    describe: (args) => AgentAction(tr('Look at your study plans')),
+    run: (api, args) async {
+      final plans = await api.listStudyPlans();
+      if (plans.isEmpty) return 'There are no study plans.';
+      return plans.map((p) => '- id ${p['id']}: "${p['name']}", exam ${p['exam']}, ${p['learned']}% learned${(p['next'] as List).isEmpty ? '' : ', next: ${(p['next'] as List).join('; ')}'}${p['needsALook'] == true ? ' (needs a look)' : ''}').join('\n');
+    },
+  ),
+  AgentTool(
+    name: 'study.replan',
+    usage: 'study.replan {"id"} : plans the sessions of a study plan again from what is done and the calendar, and updates its calendar events and to-dos; the id is from study.list.',
+    parameters: _schema({'id': _string('The id of the study plan.')}, required: ['id']),
+    permission: ExtensionPermission.tasksManage,
+    describe: (args) => AgentAction(tr('Plan the sessions of a study plan again, and update its calendar events and to-dos')),
+    run: (api, args) async => await api.replanStudyPlan(_text(args, 'id', max: 200, lone: true)),
+  ),
+  AgentTool(
     name: 'tasks.complete',
     usage: 'tasks.complete {"id", "done"?} : ticks a task off by the id tasks.list gave; "done": false opens it again.',
     parameters: _schema({'id': _string('The id of the task.'), 'done': _flag('false opens the task again. Default: true.')}, required: ['id']),
@@ -1120,7 +1140,7 @@ const agentToolGroups = <String, (String, List<String>)>{
     'images.list', 'images.move', 'images.delete', 'draw.shape', 'draw.strokes', 'note.resolveChanges',
   ]),
   'planner': ('the user\'s tasks, reminders, calendar and flashcards, and the clipboard', [
-    'tasks.list', 'tasks.complete', 'tasks.update', 'tasks.remove', 'reminders.add', 'reminders.list', 'reminders.remove', //
+    'tasks.list', 'tasks.complete', 'tasks.update', 'tasks.remove', 'study.list', 'study.replan', 'reminders.add', 'reminders.list', 'reminders.remove', //
     'calendar.events', 'calendar.addEvent', 'cards.add', 'clipboard.write',
   ]),
 };
@@ -1210,7 +1230,7 @@ String agentResults(List<String> results) => 'Results:\n${results.join('\n')}\n\
 const notesAgentTools = {
   'notes.search', 'notes.read', 'notes.list', 'notes.create', 'pdf.read', 'pdf.search', 'tasks.add', //
   'notes.move', 'notes.tag', 'notes.favorite', 'notes.trash', 'notes.restore', 'folders.list', 'folders.create', 'folders.rename',
-  'tasks.list', 'tasks.complete', 'tasks.update', 'tasks.remove', 'reminders.add', 'reminders.list', 'reminders.remove',
+  'tasks.list', 'tasks.complete', 'tasks.update', 'tasks.remove', 'study.list', 'study.replan', 'reminders.add', 'reminders.list', 'reminders.remove',
   'calendar.events', 'calendar.addEvent', 'clipboard.write',
 };
 

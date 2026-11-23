@@ -18,6 +18,7 @@ import '../cloudsync/cloud_sync_service.dart';
 import '../automations/automation_service.dart';
 import '../data/note_data.dart';
 import '../review/study_planner.dart';
+import 'study_session_screen.dart';
 import 'ask_card.dart';
 import '../data/note_file_service.dart';
 import '../data/note_repository.dart';
@@ -94,10 +95,13 @@ class DashboardView extends StatefulWidget {
   /// The plans for exams (a button in the review of the cards); null: none.
   final StudyPlanner? planner;
 
+  /// Opens a note at a page (an item of a study session).
+  final OpenNoteAt? onOpenNoteAt;
+
   /// The tags notes can have (the tags of imported notes are set through it); null: none are set.
   final TagRepository? tags;
 
-  const DashboardView({super.key, this.tags, this.planner, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh});
+  const DashboardView({super.key, this.tags, this.planner, this.onOpenNoteAt, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -435,6 +439,7 @@ class _DashboardViewState extends State<DashboardView> {
                         children: [
                           if (widget.collab?.nativeShares != null) ShareInvitations(service: widget.collab!.nativeShares!),
                           if (widget.automations != null) AskCard(service: widget.automations!, repository: widget.repository, onOpenNote: widget.onOpenNote),
+                          if (widget.planner != null) StudySessionCard(planner: widget.planner!, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt),
                           Text(
                             'Welcome back 👋',
                             style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),

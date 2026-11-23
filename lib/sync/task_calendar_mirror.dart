@@ -41,6 +41,9 @@ class TaskCalendarMirror extends ChangeNotifier {
   /// Why the last run failed, or null.
   String? problem;
 
+  /// Tasks that are never put on the calendar here: the sessions of a study plan, which are on it as events of their own (with a time).
+  bool Function(String taskId)? keepOff;
+
   Future<void> load() async {
     _target = await _settings.get(_kTarget);
     _onlyAuto = (await _settings.get(_kOnlyAuto)) != '0';
@@ -103,7 +106,7 @@ class TaskCalendarMirror extends ChangeNotifier {
       final wanted = <String, Task>{
         if (_target != null)
           for (final t in await _tasks.listTasks())
-            if (t.dueDate != null && !t.done && (!_onlyAuto || t.auto)) t.id: t,
+            if (t.dueDate != null && !t.done && (!_onlyAuto || t.auto) && keepOff?.call(t.id) != true) t.id: t,
       };
       for (final entry in links.entries.toList()) {
         final t = wanted[entry.key];

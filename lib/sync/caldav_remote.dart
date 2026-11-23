@@ -120,7 +120,11 @@ class NewEvent {
   final bool allDay;
   final String description;
 
-  const NewEvent({required this.title, required this.start, this.end, this.allDay = false, this.description = ''});
+  /// The event's UID where the calendar lets it be chosen (a server calendar): an event made twice with the same UID is one event, so two
+  /// devices that both write it do not make it twice. Null: a new one is made up.
+  final String? uid;
+
+  const NewEvent({required this.title, required this.start, this.end, this.allDay = false, this.description = '', this.uid});
 }
 
 /// An event of a server calendar, for display.

@@ -37,6 +37,9 @@ abstract class PhoneCalendarApi {
 
   /// Removes an event (one that is gone already is fine).
   Future<void> deleteEvent(String eventId);
+
+  /// Makes a new calendar (on the phone's own account) and returns its id.
+  Future<String> createCalendar(String name, {String? color});
 }
 
 /// An event of a calendar on the phone, as the plugin gives it.
@@ -105,6 +108,9 @@ class PluginPhoneCalendarApi implements PhoneCalendarApi {
           : (event.end ?? event.start.add(const Duration(hours: 1))),
     );
   }
+
+  @override
+  Future<String> createCalendar(String name, {String? color}) => _p.createCalendar(name: name, colorHex: color);
 
   @override
   Future<void> deleteEvent(String eventId) async {
@@ -202,6 +208,16 @@ class DeviceCalendarService extends ChangeNotifier {
     return id;
   }
 
+  /// Makes a calendar on the phone and shows it (its events are then read like those of the other calendars that are shown).
+  Future<CalendarInfo> createCalendar(String name, {String? color}) async {
+    final api = _api;
+    if (api == null || !await api.requestAccess()) throw StateError(tr('This device has no calendars to write to.'));
+    final id = await api.createCalendar(name, color: color);
+    _known[id] = PhoneCalendar(id: id, name: name, color: color);
+    await setSelected({..._selected, id});
+    return CalendarInfo('phone:$id', name, color);
+  }
+
   Future<void> deleteEvent(String eventId) async {
     await _api?.deleteEvent(eventId);
     _cache.clear();
@@ -237,6 +253,26 @@ class DeviceCalendarService extends ChangeNotifier {
     } catch (e) {
       debugPrint('reading phone calendars failed: $e');
       return const [];
+    }
+  }
+
+  /// The events of the shown phone calendar [id], read now (not from the cache): null when it cannot be read (it is not shown, it is gone
+  /// from the phone, or there is no access).
+  Future<List<DayEvent>?> readCalendarNow(String id, DateTime from, DateTime to) async {
+    final api = _api;
+    if (api == null || !_selected.contains(id)) return null;
+    try {
+      if (!await api.hasAccess()) return null;
+      // (read again: a calendar deleted on the phone has no events, which must not read as "every event was deleted")
+      final calendars = await api.calendars();
+      for (final c in calendars) {
+        _known[c.id] = c;
+      }
+      if (!calendars.any((c) => c.id == id)) return null;
+      return [for (final e in await api.events(from, to, [id])) _toDayEvent(e)];
+    } catch (e) {
+      debugPrint('reading the phone calendar $id failed: $e');
+      return null;
     }
   }
 

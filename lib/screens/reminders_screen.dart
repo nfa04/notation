@@ -159,6 +159,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
         ReminderKind.note => Icons.sticky_note_2_outlined,
         ReminderKind.task => Icons.check_circle_outline,
         ReminderKind.review => Icons.event_note_outlined,
+        ReminderKind.study => Icons.school_outlined,
         ReminderKind.custom => Icons.notifications_none,
       };
 
@@ -210,6 +211,15 @@ class _RemindersScreenState extends State<RemindersScreen> {
             trailing: Text.verbatim(MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay(hour: m ~/ 60, minute: m % 60), alwaysUse24HourFormat: MediaQuery.of(context,).alwaysUse24HourFormat)),
             onTap: _pickTaskTime,
           ),
+        SwitchListTile.adaptive(
+          key: const ValueKey('reminders-study'),
+          title: const Text('Tell me when a study session starts'),
+          value: _service.studyOn,
+          onChanged: (on) async {
+            if (on) await _service.ensurePermission();
+            await _service.setStudyOn(on);
+          },
+        ),
         const Divider(),
         if (!_loaded)
           const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator.adaptive()))

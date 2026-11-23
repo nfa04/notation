@@ -161,6 +161,13 @@ abstract class ExtensionApi {
   /// The tasks: `id`, `title`, `due` (a day or null) and `done`; [done] picks the ones done (true) or open (false).
   Future<List<Map<String, Object?>>> listTasks({bool? done}) async => throw ExtensionError('Tasks cannot be looked at here.');
 
+  /// The study plans: `id`, `name`, `exam` (a day), `learned` (0..1), the `next` sessions and what `needs` a look.
+  Future<List<Map<String, Object?>>> listStudyPlans() async => throw ExtensionError('Study plans cannot be looked at here.');
+
+  /// Plans the sessions of the study plan [id] again from what is done and the calendars, puts them in the calendar and the to-dos
+  /// and returns what changed.
+  Future<String> replanStudyPlan(String id) async => throw ExtensionError('Study plans cannot be changed here.');
+
   /// Ticks the task [id] off ([done]), or opens it again.
   Future<void> completeTask(String id, {bool done = true}) async => throw ExtensionError('Tasks cannot be changed here.');
 
