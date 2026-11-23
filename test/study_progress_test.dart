@@ -94,4 +94,20 @@ void main() {
     expect([for (final w in back.work) (w.unit!.id, w.kind)], [('a', WorkKind.learn)]);
     expect(workAround(e, now, DateTime(2026, 11, 20)).work, isEmpty);
   });
+
+  test('parts are told apart by how far they are, and the focus is what has most left to do', () {
+    expect(partStanding(null), PartStanding.notStarted);
+    expect(partStanding((learned: 0.5, reviewed: 0.0)), PartStanding.learning);
+    expect(partStanding((learned: 1.0, reviewed: 0.2)), PartStanding.toGoOver);
+    expect(partStanding((learned: 1.0, reviewed: 1.0)), PartStanding.done);
+    final e = plan(progress: {'a': (learned: 1.0, reviewed: 1.0), 'b': (learned: 0.5, reviewed: 0.0)});
+    expect([for (final u in focusParts(e)) u.id], ['b']);
+    expect([for (final u in focusParts(plan())) u.id].length, 2);
+  });
+
+  test('the time studied is what the reports say, or the length of the session without a report', () {
+    final s1 = BookedSession(PlannedSession(now, 30, const [SessionItem(WorkKind.learn, unitId: 'a', minutes: 30)]), 'S', credited: true, report: const SessionReport(spent: 20, done: {0}));
+    final s2 = session(now.add(const Duration(days: 1)), 'b', credited: true);
+    expect(studiedMinutes(plan(sessions: [s1, s2])), 50);
+  });
 }

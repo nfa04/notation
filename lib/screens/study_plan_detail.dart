@@ -23,7 +23,10 @@ class StudyPlanDetail extends StatefulWidget {
   final OpenNoteAt? onOpenNoteAt;
   final CardRepository? cards;
 
-  const StudyPlanDetail({super.key, required this.planner, required this.planId, this.clock, this.onOpenNoteAt, this.cards});
+  /// Set when the page is shown inside a tab: the back button then calls this instead of closing a page.
+  final VoidCallback? onBack;
+
+  const StudyPlanDetail({super.key, required this.planner, required this.planId, this.clock, this.onOpenNoteAt, this.cards, this.onBack});
 
   @override
   State<StudyPlanDetail> createState() => _StudyPlanDetailState();
@@ -45,7 +48,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
         listenable: planner,
         builder: (context, _) {
           final e = planner.plans.where((p) => p.id == planId).firstOrNull;
-          if (e == null) return Scaffold(appBar: AppBar(), body: const SizedBox());
+          if (e == null) return Scaffold(appBar: AppBar(leading: widget.onBack == null ? null : BackButton(onPressed: widget.onBack)), body: const SizedBox());
           return _body(context, e);
         },
       );
@@ -62,26 +65,19 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     final done = sessions.where((s) => s.credited).length;
     final left = sessions.where((s) => !s.credited && s.session.end.isAfter(now)).fold<int>(0, (n, s) => n + s.session.minutes);
     final parts = e.units.where((u) => u.included).toList();
-    final summaries = parts.where((u) => e.material.containsKey(u.id)).length;
     final byDay = <DateTime, List<BookedSession>>{};
     for (final s in sessions) {
       byDay.putIfAbsent(DateTime(s.session.start.year, s.session.start.month, s.session.start.day), () => []).add(s);
     }
-    Widget chip(IconData icon, String text) => Chip(avatar: Icon(icon, size: 16), label: Text.verbatim(text), visualDensity: VisualDensity.compact);
     final today = DateTime(now.year, now.month, now.day);
     return Scaffold(
-      appBar: AppBar(title: Text.verbatim(e.name)),
+      appBar: AppBar(
+        leading: widget.onBack == null ? null : BackButton(onPressed: widget.onBack),
+        title: Text.verbatim(e.name),
+      ),
       body: ListView(key: const ValueKey('plan-detail'), padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
-        Text.verbatim(
-          days == 0
-              ? tr('The exam is today')
-              : trCount(days, '{n} day left: the exam is on {day}', '{n} days left: the exam is on {day}').replaceAll('{day}', l.formatMediumDate(e.exam)),
-          style: theme.textTheme.titleMedium,
-        ),
-        const SizedBox(height: 12),
-        PlanProgressBlock(progress: progress, barHeight: 10),
         if (progress.next != null) _nextUp(context, e, progress.next!, now),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: SegmentedButton<_Tab>(
@@ -89,8 +85,8 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
             showSelectedIcon: false,
             segments: [
               ButtonSegment(value: _Tab.overview, label: Text('Overview', key: const ValueKey('plan-tab-overview')), icon: const Icon(Icons.insights_outlined)),
-              ButtonSegment(value: _Tab.parts, label: Text.verbatim('${tr('Parts')} ${parts.length}', key: const ValueKey('plan-tab-parts')), icon: const Icon(Icons.view_agenda_outlined)),
-              ButtonSegment(value: _Tab.sessions, label: Text.verbatim('${tr('Sessions')} ${sessions.length}', key: const ValueKey('plan-tab-sessions')), icon: const Icon(Icons.event_note_outlined)),
+              ButtonSegment(value: _Tab.parts, label: Text.verbatim('${tr('Parts')} (${parts.length})', key: const ValueKey('plan-tab-parts')), icon: const Icon(Icons.view_agenda_outlined)),
+              ButtonSegment(value: _Tab.sessions, label: Text.verbatim('${tr('Sessions')} (${sessions.length})', key: const ValueKey('plan-tab-sessions')), icon: const Icon(Icons.event_note_outlined)),
             ],
             selected: {_tab},
             onSelectionChanged: (v) => setState(() => _tab = v.first),
@@ -98,12 +94,10 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
         ),
         const SizedBox(height: 12),
         if (_tab == _Tab.overview) ...[
-          Wrap(spacing: 8, runSpacing: 4, children: [
-            chip(Icons.event_available_outlined, tr('{done} of {all} sessions done', {'done': done, 'all': sessions.length})),
-            chip(Icons.timer_outlined, tr('{time} still to study', {'time': _length(left)})),
-            chip(Icons.view_agenda_outlined, trCount(parts.length, '{n} part', '{n} parts')),
-            if (summaries > 0) chip(Icons.summarize_outlined, trCount(summaries, '{n} summary', '{n} summaries')),
-          ]),
+          _hero(context, e, progress, days, done, sessions.length, left, now),
+          if (parts.isNotEmpty) _standing(context, e, parts),
+          if (parts.isNotEmpty) _focus(context, e, parts),
+          _today(context, e, sessions, now, today),
           if (sessions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 16), child: WeekStrip(sessions: sessions, today: today)),
           if (curve.length > 1)
             Padding(
@@ -131,6 +125,152 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
         ],
       ]),
     );
+  }
+
+  Widget _hero(BuildContext context, StudyPlanEntry e, PlanProgress progress, int days, int done, int all, int left, DateTime now) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final l = MaterialLocalizations.of(context);
+    final studied = studiedMinutes(e);
+    final color = switch (progress.pace) { PlanPace.behind => scheme.tertiary, _ => scheme.primary };
+    final icon = switch (progress.pace) { PlanPace.onTrack => Icons.check_circle_outline, PlanPace.ahead => Icons.trending_up, PlanPace.behind => Icons.flag_outlined };
+    Widget stat(IconData i, String t) => Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(children: [Icon(i, size: 16, color: scheme.onSurfaceVariant), const SizedBox(width: 6), Expanded(child: Text.verbatim(t, style: theme.textTheme.bodySmall))]),
+        );
+    return Card(
+      key: const ValueKey('plan-progress'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          if (progress.hasParts) ...[ReadinessRing(value: progress.readiness, marker: progress.planned, color: color), const SizedBox(width: 16)],
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text.verbatim(days == 0 ? tr('The exam is today') : trCount(days, '{n} day to go', '{n} days to go'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+              Text.verbatim(l.formatFullDate(e.exam), style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              if (progress.hasParts)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(children: [
+                    Icon(icon, size: 16, color: color),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text.verbatim(PlanProgressBlock.paceText(progress), key: const ValueKey('plan-pace'), style: theme.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w600))),
+                  ]),
+                ),
+              const SizedBox(height: 4),
+              stat(Icons.event_available_outlined, tr('{done} of {all} sessions done', {'done': done, 'all': all})),
+              if (studied > 0) stat(Icons.local_fire_department_outlined, tr('{time} studied', {'time': _length(studied)})),
+              stat(Icons.timer_outlined, tr('{time} still to study', {'time': _length(left)})),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _section(BuildContext context, String title, {Widget? trailing}) => Padding(
+        padding: const EdgeInsets.only(top: 20, bottom: 8),
+        child: Row(children: [
+          Expanded(child: Text.verbatim(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
+          ?trailing,
+        ]),
+      );
+
+  /// How many parts are not started, being learnt, learnt but to go over, and done: one bar split in four, with the counts below it.
+  Widget _standing(BuildContext context, StudyPlanEntry e, List<StudyUnit> parts) {
+    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final count = {for (final s in PartStanding.values) s: parts.where((u) => partStanding(e.progress[u.id]) == s).length};
+    final colors = {
+      PartStanding.notStarted: scheme.surfaceContainerHighest,
+      PartStanding.learning: scheme.primary.withValues(alpha: 0.35),
+      PartStanding.toGoOver: scheme.primary.withValues(alpha: 0.65),
+      PartStanding.done: scheme.primary,
+    };
+    final names = {
+      PartStanding.notStarted: tr('Not started'),
+      PartStanding.learning: tr('Learning'),
+      PartStanding.toGoOver: tr('To go over'),
+      PartStanding.done: tr('Done'),
+    };
+    return Column(key: const ValueKey('plan-standing'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(context, tr('Where the parts stand')),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          height: 12,
+          child: Row(children: [
+            for (final s in PartStanding.values.reversed)
+              if (count[s]! > 0) Expanded(flex: count[s]!, child: Container(color: colors[s])),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Wrap(spacing: 16, runSpacing: 4, children: [
+        for (final s in PartStanding.values.reversed)
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: colors[s], borderRadius: BorderRadius.circular(3), border: s == PartStanding.notStarted ? Border.all(color: scheme.outlineVariant) : null)),
+            const SizedBox(width: 6),
+            Text.verbatim('${names[s]} (${count[s]})', style: theme.textTheme.bodySmall),
+          ]),
+      ]),
+    ]);
+  }
+
+  /// The parts that need the most work, each with how far it is; a tap opens the parts.
+  Widget _focus(BuildContext context, StudyPlanEntry e, List<StudyUnit> parts) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final focus = focusParts(e);
+    if (focus.isEmpty) {
+      return Column(key: const ValueKey('plan-focus'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _section(context, tr('Focus on these')),
+        Row(children: [Icon(Icons.emoji_events_outlined, color: scheme.primary), const SizedBox(width: 8), Expanded(child: Text('Every part is learnt and gone over.'))]),
+      ]);
+    }
+    final names = {
+      PartStanding.notStarted: tr('Not started'),
+      PartStanding.learning: tr('Learning'),
+      PartStanding.toGoOver: tr('To go over'),
+      PartStanding.done: tr('Done'),
+    };
+    return Column(key: const ValueKey('plan-focus'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(context, tr('Focus on these'), trailing: TextButton(onPressed: () => setState(() => _tab = _Tab.parts), child: Text('All parts'))),
+      Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: [
+          for (final (i, u) in focus.indexed) ...[
+            if (i > 0) const Divider(height: 1),
+            InkWell(
+              onTap: () => setState(() => _tab = _Tab.parts),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(child: Text.verbatim(u.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge)),
+                    Text.verbatim(names[partStanding(e.progress[u.id])]!, style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  ]),
+                  const SizedBox(height: 6),
+                  LayeredBar(value: e.progress[u.id]?.reviewed ?? 0, behind: e.progress[u.id]?.learned ?? 0, height: 6),
+                ]),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    ]);
+  }
+
+  /// What is on today.
+  Widget _today(BuildContext context, StudyPlanEntry e, List<BookedSession> sessions, DateTime now, DateTime today) {
+    final mine = [for (final s in sessions) if (!s.gone && (!s.skipped || s.credited) && DateUtils.isSameDay(s.session.start, today)) s];
+    if (mine.isEmpty) return const SizedBox();
+    return Column(key: const ValueKey('plan-today'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section(context, tr('Today')),
+      for (final s in mine) _session(context, e, s, now),
+    ]);
   }
 
   Widget _nextUp(BuildContext context, StudyPlanEntry e, BookedSession s, DateTime now) {

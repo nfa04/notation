@@ -198,3 +198,25 @@ class ProgressPoint {
 
   const ProgressPoint(this.day, this.planned, this.actual);
 }
+
+/// Where a part stands.
+enum PartStanding { notStarted, learning, toGoOver, done }
+
+PartStanding partStanding(UnitProgress? p) {
+  if (p == null || (p.learned <= 0.001 && p.reviewed <= 0.001)) return PartStanding.notStarted;
+  if (p.learned < 0.99) return PartStanding.learning;
+  if (p.reviewed < 0.99) return PartStanding.toGoOver;
+  return PartStanding.done;
+}
+
+/// The parts of [e] that still need the most work (what is left of each, weighed by how long it takes to learn), most first, at most
+/// [count]. Parts that are done are left out.
+List<StudyUnit> focusParts(StudyPlanEntry e, {int count = 3}) {
+  final open = [for (final u in e.units) if (u.included && partStanding(e.progress[u.id]) != PartStanding.done) u];
+  double left(StudyUnit u) => (1 - PlanProgress.partReady(e.progress[u.id])) * u.learnMinutes;
+  open.sort((a, b) => left(b).compareTo(left(a)));
+  return open.take(count).toList();
+}
+
+/// The minutes the person said they studied in the sessions of [e].
+int studiedMinutes(StudyPlanEntry e) => e.sessions.where((s) => s.credited && !s.gone).fold<int>(0, (n, s) => n + (s.report?.spent ?? s.session.minutes));

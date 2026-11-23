@@ -32,7 +32,7 @@ String _hours(int minutes) =>
 
 /// The plans for exams: how far each is, its next session, and what wants it made again (missed sessions, a new event at the time of
 /// one). A new plan is made on [StudyPlanSetup] and shown as a proposal ([StudyProposalPage]) before anything goes in the calendar.
-class StudyPlanScreen extends StatelessWidget {
+class StudyPlanScreen extends StatefulWidget {
   final StudyPlanner planner;
   final NoteRepository repository;
   final DateTime Function()? clock;
@@ -43,6 +43,20 @@ class StudyPlanScreen extends StatelessWidget {
 
   const StudyPlanScreen({super.key, required this.planner, required this.repository, this.clock, this.cards, this.onOpenNoteAt});
 
+  @override
+  State<StudyPlanScreen> createState() => _StudyPlanScreenState();
+}
+
+class _StudyPlanScreenState extends State<StudyPlanScreen> {
+  StudyPlanner get planner => widget.planner;
+  NoteRepository get repository => widget.repository;
+  DateTime Function()? get clock => widget.clock;
+  CardRepository? get cards => widget.cards;
+  OpenNoteAt? get onOpenNoteAt => widget.onOpenNoteAt;
+
+  /// The plan whose page is shown here in the tab (null: the list).
+  String? _open;
+
   DateTime _now() => (clock ?? DateTime.now)();
 
   void _create(BuildContext context) {
@@ -52,7 +66,12 @@ class StudyPlanScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
+  Widget build(BuildContext context) {
+    final open = _open;
+    if (open != null && planner.plans.any((p) => p.id == open)) {
+      return StudyPlanDetail(planner: planner, planId: open, clock: clock, cards: cards, onOpenNoteAt: onOpenNoteAt, onBack: () => setState(() => _open = null));
+    }
+    return ListenableBuilder(
         listenable: planner,
         builder: (context, _) => Scaffold(
           appBar: AppBar(title: Text('Study plans')),
@@ -76,11 +95,12 @@ class StudyPlanScreen extends StatelessWidget {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
                   children: [
-                    for (final p in planner.plans) _PlanCard(planner: planner, repository: repository, entry: p, now: _now(), clock: clock, cards: cards, onOpenNoteAt: onOpenNoteAt),
+                    for (final p in planner.plans) _PlanCard(planner: planner, repository: repository, entry: p, now: _now(), clock: clock, cards: cards, onOpenNoteAt: onOpenNoteAt, onView: () => setState(() => _open = p.id)),
                   ],
                 ),
         ),
       );
+  }
 }
 
 class _PlanCard extends StatelessWidget {
@@ -91,8 +111,9 @@ class _PlanCard extends StatelessWidget {
   final DateTime Function()? clock;
   final CardRepository? cards;
   final OpenNoteAt? onOpenNoteAt;
+  final VoidCallback onView;
 
-  const _PlanCard({required this.planner, required this.repository, required this.entry, required this.now, this.clock, this.cards, this.onOpenNoteAt});
+  const _PlanCard({required this.planner, required this.repository, required this.entry, required this.now, required this.onView, this.clock, this.cards, this.onOpenNoteAt});
 
   Future<void> _again(BuildContext context) async {
     final proposal = await planner.propose(entry);
@@ -100,8 +121,7 @@ class _PlanCard extends StatelessWidget {
     await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => StudyProposalPage(planner: planner, proposal: proposal)));
   }
 
-  void _view(BuildContext context) =>
-      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudyPlanDetail(planner: planner, planId: entry.id, clock: clock, cards: cards, onOpenNoteAt: onOpenNoteAt)));
+  void _view(BuildContext context) => onView();
 
   Future<void> _delete(BuildContext context) async {
     final ok = await showDialog<bool>(

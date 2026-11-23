@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -439,4 +441,65 @@ class WeekStrip extends StatelessWidget {
         ),
     ]);
   }
+}
+
+/// A ring that fills to [value] (0..1) with the number in its middle, and a tick where the plan says the person should be ([marker]).
+class ReadinessRing extends StatelessWidget {
+  final double value;
+  final double? marker;
+  final double size;
+  final Color? color;
+
+  const ReadinessRing({super.key, required this.value, this.marker, this.size = 104, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(alignment: Alignment.center, children: [
+        CustomPaint(size: Size.square(size), painter: _RingPainter(value.clamp(0.0, 1.0), marker, color ?? scheme.primary, scheme.surfaceContainerHighest, scheme.onSurface)),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text.verbatim('${(value * 100).round()}%', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text('ready', style: theme.textTheme.labelSmall),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double value;
+  final double? marker;
+  final Color color, track, tick;
+
+  _RingPainter(this.value, this.marker, this.color, this.track, this.tick);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 10.0;
+    final rect = Rect.fromLTWH(stroke / 2, stroke / 2, size.width - stroke, size.height - stroke);
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, 0, 2 * 3.141592653589793, false, base..color = track);
+    if (value > 0) canvas.drawArc(rect, -3.141592653589793 / 2, 2 * 3.141592653589793 * value, false, base..color = color);
+    final m = marker;
+    if (m != null && m > 0 && m < 1) {
+      final a = -3.141592653589793 / 2 + 2 * 3.141592653589793 * m;
+      final c = rect.center;
+      final r = rect.width / 2;
+      final p = Paint()
+        ..color = tick.withValues(alpha: 0.7)
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(Offset(c.dx + (r - stroke * 0.8) * math.cos(a), c.dy + (r - stroke * 0.8) * math.sin(a)), Offset(c.dx + (r + stroke * 0.8) * math.cos(a), c.dy + (r + stroke * 0.8) * math.sin(a)), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter o) => o.value != value || o.marker != marker || o.color != color || o.track != track;
 }
