@@ -137,7 +137,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   /// The arrows go to the next card and the one before, without answering.
   void _move(int dir) {
     final queue = _queue!;
-    if (queue.length < 2) return;
+    if (_answering || queue.length < 2) return;
     setState(() {
       dir > 0 ? queue.add(queue.removeAt(0)) : queue.insert(0, queue.removeLast());
       _flipped = false;
@@ -145,12 +145,25 @@ class _ReviewScreenState extends State<ReviewScreen> {
     });
   }
 
+  bool _answering = false; // (a rating is being saved: the keys wait, so the queue is the one that was answered)
+
   Future<void> _answer(Recall recall) async {
-    final queue = _queue!, card = queue.first;
-    final next = await widget.cards.review(card, recall, now: _now());
+    if (_answering) return;
+    final queue = _queue!;
+    if (queue.isEmpty) return;
+    final card = queue.first;
+    _answering = true;
+    final CardSchedule next;
+    try {
+      next = await widget.cards.review(card, recall, now: _now());
+    } catch (_) {
+      _answering = false;
+      rethrow;
+    }
+    _answering = false;
     if (!mounted) return;
     setState(() {
-      queue.removeAt(0);
+      queue.remove(card);
       _answers[recall] = _answers[recall]! + 1;
       if (recall == Recall.again) {
         // seen again before the round ends

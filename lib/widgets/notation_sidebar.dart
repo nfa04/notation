@@ -72,7 +72,7 @@ class NotationSidebar extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: wide ? 10 : 8, vertical: 12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (header != null) Flexible(flex: 0, child: Padding(padding: const EdgeInsets.only(bottom: 14), child: SingleChildScrollView(child: header))),
+              if (header != null) Padding(padding: const EdgeInsets.only(bottom: 14), child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45), child: SingleChildScrollView(child: header))),
               Expanded(
                 child: LayoutBuilder(builder: (context, box) {
                   final rows = grouped.length;

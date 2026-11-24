@@ -93,6 +93,7 @@ class _StudyCardState extends State<StudyCard> {
     if (kb.isControlPressed || kb.isMetaPressed || kb.isAltPressed) return KeyEventResult.ignored;
     final key = e.logicalKey;
     if (key == LogicalKeyboardKey.space) {
+      if (!node.hasPrimaryFocus) return KeyEventResult.ignored; // (a focused button takes the space itself)
       widget.onFlip();
     } else if (widget.onMove != null && (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.arrowLeft)) {
       _dir = key == LogicalKeyboardKey.arrowRight ? 1 : -1;
@@ -108,6 +109,8 @@ class _StudyCardState extends State<StudyCard> {
     }
     return KeyEventResult.handled;
   }
+
+  String _rateKeys() => widget.ratings.length < 2 ? '1' : '1-${widget.ratings.length}';
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +202,10 @@ class _StudyCardState extends State<StudyCard> {
                 Expanded(
                   child: (r.primary ? FilledButton.new : OutlinedButton.new)(
                     key: r.key,
-                    onPressed: () => widget.onRate(i),
+                    onPressed: () {
+                      _dir = 1;
+                      widget.onRate(i);
+                    },
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                       // the key that gives this answer stands in front of its name
                       Row(mainAxisSize: MainAxisSize.min, children: [
@@ -217,7 +223,9 @@ class _StudyCardState extends State<StudyCard> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                widget.onMove == null ? 'Keys: space turns the card, 1-4 rate' : 'Keys: space turns the card, arrows go to the next card, 1-4 rate',
+                widget.onMove == null
+                    ? 'Keys: space turns the card, ${_rateKeys()} rate'
+                    : 'Keys: space turns the card, arrows go to the next card, ${_rateKeys()} rate',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),

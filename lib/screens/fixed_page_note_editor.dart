@@ -2150,8 +2150,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   ]);
 
   Future<void> _saveNow() {
-    if (_sealedAway) return _saveChain; // (an encrypted note is not written back)
     final sig = _signature();
+    // (the mode a note was left in is a setting, kept even when the note itself has nothing new to write, or is encrypted)
+    if (_loaded && _modeSettingsChanged && (_sealedAway || sig == _lastSavedSignature)) unawaited(_writeModeSettings());
+    if (_sealedAway) return _saveChain; // (an encrypted note is not written back)
     if (!_loaded || sig == _lastSavedSignature) return _saveChain;
     _lastSavedSignature = sig;
     final note = _snapshot();

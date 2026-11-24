@@ -10,6 +10,8 @@ import 'package:notes/models/image_item.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 Future<List<int>> _png() async {
   final recorder = ui.PictureRecorder();
   Canvas(recorder).drawRect(const Rect.fromLTWH(0, 0, 40, 20), Paint()..color = Colors.red);
@@ -61,6 +63,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('Eraser (drawings only)'), findsNothing);
       expect(find.byType(CustomScrollView), findsOneWidget);
+      await closeEditor(tester); // (the mode the note was left in is written as it closes)
     });
   }
 }

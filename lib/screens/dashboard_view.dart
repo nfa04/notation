@@ -209,6 +209,7 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _reload() {
+    if (!mounted) return;
     final notes = widget.repository.listNotes();
     setState(() {
       _notes = notes; // (an arrow function would hand the Future to setState, which refuses it)

@@ -8,6 +8,8 @@ import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -79,6 +81,7 @@ void main() {
     await choose(tester, 'brush-picker', 'brush-pencil');
     await drag(tester, line(const Offset(100, 300), const Offset(400, 360)));
     expect(strokes().last.brush, 'pencil');
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('with the tool off the pen and the roller are the only brushes (so the button is still there for those two)', (tester) async {
@@ -122,6 +125,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('redo-any')));
     await tester.pumpAndSettle();
     expect(strokes().length, 2);
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('around the centre with six turns makes six lines of the same length, and turning symmetry off draws one again', (tester) async {
@@ -145,6 +149,7 @@ void main() {
     await drag(tester, line(const Offset(100, 500), const Offset(300, 520)));
     expect(strokes().length, 7);
     expect(find.byKey(const ValueKey('symmetry-guide')), findsNothing);
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('a tap does not leave a stray mirror image behind', (tester) async {
@@ -154,6 +159,7 @@ void main() {
     await tester.tapAt(origin + const Offset(200, 200));
     await tester.pumpAndSettle();
     expect(strokes().length, lessThanOrEqualTo(1), reason: 'at most the dot a tap with a finger or pen writes, never its three images');
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('the stabiliser keeps a shaky line smoother than the pen and ends it where the pen was lifted', (tester) async {

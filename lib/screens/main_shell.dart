@@ -185,7 +185,16 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       final data = jsonDecode(raw) as Map<String, dynamic>;
       final saved = [for (final k in data['tabs'] as List) k as String];
       final live = <String>[], openable = <String>{};
+      // (a graph deleted since, here or on another device, is not brought back)
+      Set<int>? graphIds;
+      if (saved.any(_isGraph)) {
+        await _graphs.refresh();
+        if (!mounted) return;
+        if (_graphs.listed) graphIds = {for (final g in _graphs.graphs) g.id};
+      }
       for (final k in saved) {
+        final gid = _graphIdOf(k);
+        if (gid != null && graphIds != null && !graphIds.contains(gid)) continue;
         if (live.contains(k)) continue;
         if (_isNote(k)) {
           if (!await _app.repository.noteExists(k)) continue;
@@ -1372,10 +1381,15 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     // (on a phone the button of the menu sits over the top left corner of the assistant's page)
     final shown = MediaQuery.sizeOf(context).width < 600 && _pageOf(key) == 9 ? Padding(padding: const EdgeInsets.only(top: 48), child: page) : page;
     // a screen opened from the page (a study session, the reminders) lies over this tab only, not over the whole window
-    return Navigator(
-      key: _navKeys.putIfAbsent(key, () => GlobalKey<NavigatorState>()), // (a global key: the tab moves between the row and the hidden stack with its screens)
-      pages: [MaterialPage<void>(key: const ValueKey('tab-page'), child: shown)],
-      onDidRemovePage: (_) {},
+    final navKey = _navKeys.putIfAbsent(key, () => GlobalKey<NavigatorState>()); // (a global key: the tab moves between the row and the hidden stack with its screens)
+    // (the system's back goes to the window's navigator only: this hands it to the tab's, so a screen opened in the tab closes first)
+    return NavigatorPopHandler(
+      onPopWithResult: (_) => navKey.currentState?.maybePop(),
+      child: Navigator(
+        key: navKey,
+        pages: [MaterialPage<void>(key: const ValueKey('tab-page'), child: shown)],
+        onDidRemovePage: (_) {},
+      ),
     );
   }
 
