@@ -982,6 +982,8 @@ const italianTexts = <String, String>{
   'Make new flashcards': 'Crea nuove schede',
   'Question': 'Domanda',
   'Answer': 'Risposta',
+  'Keys: space turns the card, 1-4 rate': 'Tasti: spazio gira la carta, 1-4 valutano',
+  'Keys: space turns the card, arrows go to the next card, 1-4 rate': 'Tasti: spazio gira la carta, le frecce passano alla carta successiva, 1-4 valutano',
   'Tap to see the answer': 'Tocca per vedere la risposta',
   '{known} of {total} known': '{known} su {total} sapute',
   'You knew every card.': 'Sapevi tutte le schede.',

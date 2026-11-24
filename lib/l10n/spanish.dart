@@ -982,6 +982,8 @@ const spanishTexts = <String, String>{
   'Make new flashcards': 'Crear tarjetas nuevas',
   'Question': 'Pregunta',
   'Answer': 'Respuesta',
+  'Keys: space turns the card, 1-4 rate': 'Teclas: espacio da la vuelta a la carta, 1-4 valoran',
+  'Keys: space turns the card, arrows go to the next card, 1-4 rate': 'Teclas: espacio da la vuelta a la carta, las flechas pasan a la siguiente, 1-4 valoran',
   'Tap to see the answer': 'Toca para ver la respuesta',
   '{known} of {total} known': '{known} de {total} sabidas',
   'You knew every card.': 'Te sabías todas las tarjetas.',

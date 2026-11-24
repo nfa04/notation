@@ -998,6 +998,8 @@ const germanTexts = <String, String>{
   'Make new flashcards': 'Neue Karteikarten erstellen',
   'Question': 'Frage',
   'Answer': 'Antwort',
+  'Keys: space turns the card, 1-4 rate': 'Tasten: Leertaste dreht die Karte um, 1-4 bewerten',
+  'Keys: space turns the card, arrows go to the next card, 1-4 rate': 'Tasten: Leertaste dreht die Karte um, Pfeiltasten gehen zur nächsten Karte, 1-4 bewerten',
   'Tap to see the answer': 'Tippen, um die Antwort zu sehen',
   '{known} of {total} known': '{known} von {total} gewusst',
   'You knew every card.': 'Du wusstest jede Karte.',

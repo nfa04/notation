@@ -982,6 +982,8 @@ const frenchTexts = <String, String>{
   'Make new flashcards': 'Créer de nouvelles cartes mémoire',
   'Question': 'Question',
   'Answer': 'Réponse',
+  'Keys: space turns the card, 1-4 rate': 'Touches : espace retourne la carte, 1-4 évaluent',
+  'Keys: space turns the card, arrows go to the next card, 1-4 rate': 'Touches : espace retourne la carte, les flèches passent à la carte suivante, 1-4 évaluent',
   'Tap to see the answer': 'Touchez pour voir la réponse',
   '{known} of {total} known': '{known} sur {total} connues',
   'You knew every card.': 'Vous connaissiez toutes les cartes.',

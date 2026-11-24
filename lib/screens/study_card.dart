@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
@@ -182,7 +183,15 @@ class _StudyCardState extends State<StudyCard> {
           ),
           const SizedBox(height: 12),
           if (front)
-            FilledButton(key: const ValueKey('flashcard-flip'), onPressed: widget.onFlip, child: const Text('Show the answer'))
+            FilledButton(
+              key: const ValueKey('flashcard-flip'),
+              onPressed: widget.onFlip,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Text('Show the answer'),
+                const SizedBox(width: 8),
+                Text.verbatim('␣', style: TextStyle(fontSize: 12, color: scheme.onPrimary.withValues(alpha: 0.7))),
+              ]),
+            )
           else
             Row(children: [
               for (final (i, r) in widget.ratings.indexed) ...[
@@ -192,15 +201,35 @@ class _StudyCardState extends State<StudyCard> {
                     key: r.key,
                     onPressed: () => widget.onRate(i),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(r.label),
+                      // the key that gives this answer stands in front of its name
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text.verbatim('${i + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 6),
+                        Flexible(child: Text(r.label)),
+                      ]),
                       if (r.hint != null) Text.verbatim(r.hint!, style: const TextStyle(fontSize: 11)),
                     ]),
                   ),
                 ),
               ],
             ]),
+          if (_keyboard)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                widget.onMove == null ? 'Keys: space turns the card, 1-4 rate' : 'Keys: space turns the card, arrows go to the next card, 1-4 rate',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
+            ),
         ]),
       ),
     );
   }
+
+  /// Only where there is a keyboard to press (not on a phone or tablet).
+  bool get _keyboard => switch (defaultTargetPlatform) {
+        TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.fuchsia => false,
+        _ => true,
+      };
 }
