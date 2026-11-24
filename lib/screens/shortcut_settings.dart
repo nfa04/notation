@@ -1,3 +1,4 @@
+import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
@@ -58,7 +59,7 @@ class _ShortcutSettingsState extends State<ShortcutSettings> {
             (group: g, actions: [for (final a in _service.actions) if (a.group == g && _shown(a, query)) a]),
         ].where((g) => g.actions.isNotEmpty).toList();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Keyboard shortcuts', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Keyboard shortcuts', style: PaperSection.style(context)),
           const SizedBox(height: 8),
           Text(
             'Press a key combination to run an action: tools, inserting things, going to another part of the app. '

@@ -1,3 +1,4 @@
+import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -40,7 +41,7 @@ class _SpellSettingsState extends State<SpellSettings> {
       builder: (context, _) {
         final service = widget.service;
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Spell checking', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Spell checking', style: PaperSection.style(context)),
           const SizedBox(height: 6),
           Text(
             'Misspelled words get a wavy red line in text boxes and the written document; tap one for suggestions. A word is right if the dictionary of any language that is on takes it, '

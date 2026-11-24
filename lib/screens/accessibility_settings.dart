@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide Text;
 
+import '../widgets/paper.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../style/accessibility.dart';
@@ -14,7 +15,7 @@ class AccessibilitySettingsCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Accessibility', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Accessibility', style: PaperSection.style(context)),
         const SizedBox(height: 8),
         Text(
           'On top of what the system already offers: its text size, bold text and reduced motion are followed too.',

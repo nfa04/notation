@@ -1,4 +1,5 @@
 
+import '../widgets/paper.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide Text;
@@ -108,7 +109,7 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
       builder: (context, _) {
         final service = widget.service;
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Extensions', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Extensions', style: PaperSection.style(context)),
           const SizedBox(height: 6),
           Text(
             'Extensions are small scripts (JavaScript) that add tools to the menu of selected text and actions to the automations. '

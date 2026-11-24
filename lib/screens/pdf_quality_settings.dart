@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide Text;
 
+import '../widgets/paper.dart';
 import '../data/note_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
@@ -41,7 +42,7 @@ class _PdfQualitySettingsState extends State<PdfQualitySettings> {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('PDF sharpness', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+      Text('PDF sharpness', style: PaperSection.style(context)),
       const SizedBox(height: 8),
       Text(
         'The most PDF pages are drawn at. On screen a page is drawn as sharp as the screen shows it, up to this; zoomed in, the part on screen is drawn sharper. Pictures of pages that are exported use it as it is. Higher is sharper but uses more memory and loads slower. Automatic picks 250 dpi on a device with plenty of memory and 200 dpi on others. It applies to PDFs opened from now on.',

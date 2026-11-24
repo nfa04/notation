@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide Text;
 
+import '../widgets/paper.dart';
 import '../l10n/text.dart';
 import '../widgets/notation_logo.dart';
 import 'lookup_panel.dart' show openInBrowser;
@@ -15,7 +16,7 @@ class AboutSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('About', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+      Text('About', style: PaperSection.style(context)),
       const SizedBox(height: 6),
       Text(
         'Notation is built with open-source software and fonts; their licences are listed on the page below. '

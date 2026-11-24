@@ -1,3 +1,4 @@
+import '../widgets/paper.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -16,7 +17,7 @@ class StylusSettingsCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Pen and fingers', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Pen and fingers', style: PaperSection.style(context)),
         const SizedBox(height: 8),
         Text('For a stylus on a tablet or a screen that has one. A pen that cannot tell how hard it presses draws lines of one thickness.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
         SwitchListTile.adaptive(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' hide Text;
+import '../widgets/paper.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../features/feature.dart';
@@ -35,7 +36,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     return ListenableBuilder(
       listenable: widget.profile,
       builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('You', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text('You', style: PaperSection.style(context)),
         const SizedBox(height: 6),
         Text(
           'The name other people see in live sessions, on what you add to a note, and in the history of a note.',
@@ -90,7 +91,7 @@ class ToolSettings extends StatelessWidget {
     return ListenableBuilder(
       listenable: features,
       builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Tools', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Tools', style: PaperSection.style(context)),
         const SizedBox(height: 6),
         Text(
           'Switch off what you do not use and it goes away from the screens. Nothing is deleted: notes that use a tool that is off stay as they are.',

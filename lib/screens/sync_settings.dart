@@ -1,3 +1,4 @@
+import '../widgets/paper.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -117,7 +118,7 @@ class _SyncSettingsState extends State<SyncSettings> {
       builder: (context, _) {
         final s = widget.service;
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Sync profile', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Sync profile', style: PaperSection.style(context)),
           const SizedBox(height: 6),
           Text(
             'Use Notation on several devices as one person: the same id and name, the same notes and folders, the same settings. '

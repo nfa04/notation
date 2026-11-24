@@ -40,7 +40,7 @@ class _AiSettingsState extends State<_AiSettings> {
       builder: (context, _) {
         final changed = _edited.encode() != ai.summaryConfig.encode();
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('AI assistant', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('AI assistant', style: PaperSection.style(context)),
           const SizedBox(height: 8),
           Text(
             'Highlight text and choose "Summarize" (more than two words), "Tell me more" or "Ask a question"; '
@@ -334,7 +334,7 @@ class _AiSwitchCard extends StatelessWidget {
               SwitchListTile.adaptive(
                 key: const ValueKey('ai-switch'),
                 contentPadding: EdgeInsets.zero,
-                title: Text('AI features', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold,)),
+                title: Text('AI features', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
                 subtitle: Text(on ? 'On' : 'Off: nothing in the app uses AI'),
                 value: on,
                 onChanged: aiSwitch.setEnabled,

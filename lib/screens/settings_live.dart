@@ -44,7 +44,7 @@ class _LiveSettingsState extends State<_LiveSettings> {
   Widget build(BuildContext context) {
     final service = widget.service;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Live collaboration', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+      Text('Live collaboration', style: PaperSection.style(context)),
       const SizedBox(height: 8),
       Text(
         'Work on a note together with others at the same time. Everything is sealed with a key that only the invite '
@@ -169,7 +169,7 @@ class _RelaySettingsState extends State<_RelaySettings> {
           _problem = null;
         });
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Relay server (for mobile networks)', style: Theme.of(context,).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+      Text('Relay server (for mobile networks)', style: PaperSection.style(context)),
       const SizedBox(height: 6),
       Text(
         'Two devices connect to each other directly. On a mobile network, and behind some other networks, that does not work: '

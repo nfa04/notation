@@ -37,7 +37,7 @@ class _McpSettingsState extends State<_McpSettings> {
       builder: (context, _) {
         final token = service.token ?? '';
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Connect an AI agent', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Connect an AI agent', style: PaperSection.style(context)),
           const SizedBox(height: 8),
           Text(
             'An AI agent on this computer (Claude Code, an editor with AI, any program that speaks the Model Context Protocol) can then find, read and '

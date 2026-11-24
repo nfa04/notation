@@ -1,4 +1,5 @@
 
+import '../widgets/paper.dart';
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart' show OrtProvider;
@@ -132,7 +133,7 @@ class SettingsScreen extends StatelessWidget {
 
   /// The sections of the settings, by category: each is a tab (a category with nothing in it is left out).
   List<({String label, IconData icon, List<Widget> sections})> _categories(BuildContext context) {
-    Widget title(String text) => Text(text, style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold));
+    Widget title(String text) => Text(text, style: PaperSection.style(context));
     return [
       (
         label: 'General',
@@ -452,7 +453,7 @@ class _ModelSettings extends StatelessWidget {
         final installed = service.status == HandwritingStatus.installed;
         final downloading = service.status == HandwritingStatus.downloading;
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text(title, style: PaperSection.style(context)),
           const SizedBox(height: 8),
           Text.verbatim(tr('{description} It needs a model of about {size} MB.', {'description': tr(description), 'size': service.sizeMb}),
               style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
@@ -493,7 +494,7 @@ class _NoteFilesSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Note files', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Note files', style: PaperSection.style(context)),
         const SizedBox(height: 8),
         Text(
           'A note can be saved as one file (.uninote, a ZIP with the text, the strokes, pictures and the PDF) to keep, '
@@ -963,7 +964,7 @@ class _LanguageSettings extends StatelessWidget {
     return ListenableBuilder(
       listenable: language,
       builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Language', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Language', style: PaperSection.style(context)),
         const SizedBox(height: 8),
         Text('The language of the menus and messages. By default the language of the device is used.',
             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),

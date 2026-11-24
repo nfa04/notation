@@ -1,3 +1,4 @@
+import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,7 +23,7 @@ class ShareStorageSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Sharing copies of notes', style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+      Text('Sharing copies of notes', style: PaperSection.style(context)),
       const SizedBox(height: 8),
       Text(
         'A copy of a note can be put on a storage service you have an account with, and opened by anyone with the link, '
