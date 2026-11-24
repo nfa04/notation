@@ -136,6 +136,54 @@ class _FadeOnChangeState extends State<FadeOnChange> with SingleTickerProviderSt
   Widget build(BuildContext context) => FadeTransition(opacity: Tween(begin: 0.0, end: 1.0).animate(_curve), child: RepaintBoundary(child: widget.child));
 }
 
+/// Fades in (and rises a little) once, when it first appears: a note that has just been made, a message that has just come, a
+/// page whose data has just loaded. After that it is a plain child. Nothing moves when the person wants no motion.
+class Appear extends StatefulWidget {
+  final Widget child;
+
+  /// How far it rises while it fades in, in logical pixels (0: only a fade).
+  final double rise;
+
+  const Appear({super.key, required this.child, this.rise = 8});
+
+  @override
+  State<Appear> createState() => _AppearState();
+}
+
+class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: Motion.medium);
+  late final Animation<double> _curve = CurvedAnimation(parent: _c, curve: Motion.curveIn);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    final d = Motion.of(context, Motion.medium);
+    if (d == Duration.zero) {
+      _c.value = 1;
+    } else {
+      _c.duration = d;
+      _c.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: _curve,
+        child: widget.rise == 0
+            ? widget.child
+            : AnimatedBuilder(animation: _curve, builder: (_, child) => Transform.translate(offset: Offset(0, widget.rise * (1 - _curve.value)), child: child), child: widget.child),
+      );
+}
+
 /// A card that turns over when [front] changes: it rotates about its vertical middle, and the other face is put in at the edge-on
 /// moment, so the turn goes on in the same direction instead of mirroring. [face] builds one side.
 class FlipCard extends StatefulWidget {

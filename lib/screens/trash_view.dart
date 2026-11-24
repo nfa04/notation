@@ -8,6 +8,7 @@ import '../data/note_data.dart';
 import '../data/note_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 /// The notes that were thrown away: they can be brought back, or deleted for good. What stays for [NoteRepository.purgeTrash]'s time is removed on its own.
@@ -96,8 +97,8 @@ class _TrashViewState extends State<TrashView> {
       body: notes == null
           ? const Center(child: CircularProgressIndicator.adaptive())
           : notes.isEmpty
-              ? const Center(child: Text('The trash is empty. Deleted notes stay here for 30 days.'))
-              : ListView(children: [
+              ? const Appear(rise: 0, child: Center(child: Text('The trash is empty. Deleted notes stay here for 30 days.')))
+              : Appear(rise: 0, child: ListView(children: [
                   for (final n in notes)
                     ListTile(
                       key: ValueKey('trashed-${n.id}'),
@@ -118,7 +119,7 @@ class _TrashViewState extends State<TrashView> {
                         IconButton(key: ValueKey('forever-${n.id}'), tooltip: tr('Delete for good'), icon: const Icon(Symbols.delete_forever), onPressed: () => _forever(n)),
                       ]),
                     ),
-                ]),
+                ])),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../style/motion.dart';
 import 'package:flutter/services.dart';
 
 import '../ai/ai_service.dart';
@@ -357,7 +358,9 @@ class _AssistantPanelState extends State<AssistantPanel> {
             ]),
           );
         }
-        return _bubble(context, chat.messages[i], i);
+        final bubble = _bubble(context, chat.messages[i], i);
+        // the newest message comes in with a fade and a small rise (older ones are only built again when scrolled to)
+        return i == chat.messages.length - 1 ? Appear(key: ValueKey('appear-$i'), child: bubble) : bubble;
       },
     );
   }

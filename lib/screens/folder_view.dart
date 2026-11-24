@@ -37,6 +37,7 @@ import '../reminders/reminder.dart';
 import '../reminders/reminder_service.dart';
 import '../data/tag_repository.dart';
 import '../tags/tag_names.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 /// Folder tree on the left, the notes of the selected folder on the right.
@@ -118,6 +119,9 @@ class _FolderViewState extends State<FolderView> {
     }
   }
   List<NoteSummary> _notes = [];
+
+  /// Ids of the notes that appeared with the last reload.
+  Set<String> _fresh = const {};
   int _trashCount = 0;
   bool _loaded = false;
   String _scope = _all;
@@ -265,6 +269,11 @@ class _FolderViewState extends State<FolderView> {
     setState(() {
       _noteTags = noteTags;
       _tagTree = buildTagTree(noteTags);
+      // notes that were not there at the last load come in with a fade (not the first load: everything is new then)
+      if (_loaded) {
+        final had = {for (final n in _notes) n.id};
+        _fresh = {for (final n in notes) if (!had.contains(n.id)) n.id};
+      }
       _folders = folders;
       _notes = notes;
       _trashCount = trashed;
@@ -596,7 +605,7 @@ class _FolderViewState extends State<FolderView> {
     if (!_loaded) return const Center(child: CircularProgressIndicator.adaptive());
     final selectedHere = _selectedHere;
     final narrow = _narrow;
-    return PopScope(
+    return Appear(rise: 0, child: PopScope(
       canPop: !(narrow && _inRealFolder && !_selecting),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _goUp();
@@ -658,7 +667,7 @@ class _FolderViewState extends State<FolderView> {
               label: Text(_inRealFolder ? 'New note here' : 'New note'),
             ),
     ),
-    );
+    ));
   }
 
   Widget _buildTree() {
@@ -1067,8 +1076,12 @@ class _FolderViewState extends State<FolderView> {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: ListTile(
-        tileColor: _selected.contains(n.id) ? scheme.secondaryContainer : null,
+      // the highlight of a selected row fades in and out
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: _selected.contains(n.id) ? scheme.secondaryContainer : scheme.secondaryContainer.withValues(alpha: 0)),
+        duration: Motion.of(context, Motion.fast),
+        builder: (context, tint, _) => ListTile(
+        tileColor: tint,
         leading: _selecting
             ? Checkbox.adaptive(key: ValueKey('select-${n.id}'), value: _selected.contains(n.id), onChanged: (_) => _toggleSelected(n.id))
             : SizedBox(
@@ -1153,14 +1166,16 @@ class _FolderViewState extends State<FolderView> {
                 ],
               ),
       ),
+      ),
     );
     final together = _selected.contains(n.id) ? _selectedHere.length : 1;
-    return _draggable(
+    final tile = _draggable(
       _DraggedNote(n.id),
       together > 1 ? trCount(together, '1 note', '{n} notes') : n.shownTitle,
       n.locked ? Symbols.lock_outline : (n.isPdf ? Symbols.picture_as_pdf : Symbols.edit_note_rounded),
       card,
     );
+    return _fresh.contains(n.id) ? Appear(key: ValueKey('fresh-${n.id}'), child: tile) : tile;
   }
 
   /// "  -  #a #b" for a note that has tags; nothing otherwise.
