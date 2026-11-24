@@ -2315,6 +2315,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   void _setLoadingPdf(bool v) => setState(() => _isLoadingPdf = v);
 
+  Widget _titleBox(bool phone, double width, Widget field) => phone ? Expanded(child: field) : SizedBox(width: width, child: field);
+
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
@@ -2336,7 +2338,6 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     final titleWidth = (titlePainter.width + 24).clamp(140.0, math.max(140.0, screenWidth * 0.32)).toDouble();
     titlePainter.dispose();
     final buttons = _toolbarButtons(context);
-    final buttonsWidth = math.max(120.0, screenWidth - titleWidth - 120 - (_toolbarProfiles.length > 1 ? _profileMenuWidth : 0));
     // (the title and the buttons share one line everywhere there is room: the buttons scroll sideways when they are too many)
     // (on a phone the buttons are one line that scrolls sideways under the title)
     final phone = _phoneBars;
@@ -2350,9 +2351,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         leading: widget.onLeave != null && MediaQuery.sizeOf(context).width < 600
             ? IconButton(key: const ValueKey('editor-back'), tooltip: tr('Back'), icon: const BackButtonIcon(), onPressed: widget.onLeave)
             : null,
-        title: SizedBox(
-          width: phone ? null : titleWidth,
-          child: TextField(
+        titleSpacing: phone ? null : 16,
+        title: Row(children: [
+         _titleBox(phone, titleWidth, TextField(
             controller: _titleController,
             onChanged: (_) {
               _scheduleSave();
@@ -2370,13 +2371,14 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
-          ),
-        ),
+          )),
+         // (the tools follow the title directly and scroll sideways when they are too many)
+         if (!phone) Expanded(child: Padding(padding: const EdgeInsets.only(left: 12), child: _topLine(buttons))),
+        ]),
         actions: [
           // (beside the buttons, so that it is always in reach)
           ?_toolbarProfileMenu(),
-          // the buttons take more rows when the screen is too narrow for them in one
-          if (!phone) SizedBox(width: buttonsWidth, child: _topLine(buttons)),
+          _customizeToolbarButton(),
         ],
         bottom: phone && buttons.isNotEmpty
             ? PreferredSize(preferredSize: const Size.fromHeight(_stripHeight), child: _buttonStrip(buttons, key: const ValueKey('top-strip')))

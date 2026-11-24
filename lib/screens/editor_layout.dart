@@ -443,19 +443,18 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       if (shown.isNotEmpty) shown.add(const VerticalDivider(width: 16, indent: 12, endIndent: 12));
       shown.addAll(items);
     }
-    if (bottom) return shown;
-    return [
-      ...shown,
-      if (shown.isNotEmpty) const VerticalDivider(width: 16, indent: 12, endIndent: 12),
-      IconButton(
+    return shown;
+  }
+
+  /// The button that opens the arrangement of the toolbars. It sits in the app bar beside the title, outside the buttons that
+  /// scroll, so it is never pushed out of sight when there are many tools.
+  Widget _customizeToolbarButton() => IconButton(
         key: const ValueKey('customize-toolbar'),
         tooltip: tr('Arrange the toolbars'),
         visualDensity: VisualDensity.compact,
         icon: const Icon(Icons.tune_rounded, size: 20),
         onPressed: _customizeToolbar,
-      ),
-    ];
-  }
+      );
 
   /// The pages, scrolling down (and across when zoomed in), with what the fingers and the pen do on them.
   Widget _pagesArea(BoxConstraints box) {

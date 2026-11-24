@@ -547,12 +547,17 @@ class _DashboardViewState extends State<DashboardView> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
           child: DecoratedBox(
+            // a page on the ground: a faint shadow lifts it, and a hairline drawn over the picture (not under it) keeps its edge in light mode
             decoration: BoxDecoration(
               color: color,
               borderRadius: corners,
-              border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant, width: selected ? 2 : 1),
+              boxShadow: selected || scheme.brightness == Brightness.dark ? null : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
             ),
-            child: ClipRRect(
+            position: DecorationPosition.background,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(borderRadius: corners, border: Border.all(color: selected ? scheme.primary : scheme.onSurface.withValues(alpha: scheme.brightness == Brightness.dark ? 0.16 : 0.13), width: selected ? 2 : 1)),
+              child: ClipRRect(
               borderRadius: corners,
               child: Stack(fit: StackFit.expand, children: [
                 if (note.themeImage != null)
@@ -573,7 +578,7 @@ class _DashboardViewState extends State<DashboardView> {
                   ]),
                 ),
               ]),
-            ),
+            )),
           ),
         ),
         const SizedBox(height: 8),

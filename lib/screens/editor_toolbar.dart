@@ -12,8 +12,6 @@ const _toolbarSections = <String, String>{
   'files': 'PDF and files',
 };
 
-/// The room the button that changes the toolbar profile takes in the app bar.
-const _profileMenuWidth = 150.0;
 
 /// The sections that start in the bottom bar, until the user moves them.
 const _defaultBottomSections = {'insert', 'page', 'files'};
@@ -98,7 +96,7 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
           scrollDirection: Axis.horizontal,
           child: ConstrainedBox(
             constraints: BoxConstraints(minWidth: box.maxWidth),
-            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: buttons),
+            child: Row(mainAxisAlignment: MainAxisAlignment.start, children: buttons),
           ),
         ),
       );
