@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/ai/flashcards.dart';
 import 'package:notes/data/app_database.dart';
@@ -8,6 +9,76 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   setUpAll(AppDatabase.initFfi);
+
+  testWidgets('keys: space turns the card over and back, arrows skip, 1-4 rate once the answer shows', (tester) async {
+    await tester.runAsync(() async {
+      final db = await AppDatabase.open(path: inMemoryDatabasePath);
+      final cards = CardRepository(db);
+      await cards.addAll('keys', const [Flashcard('first?', 'one'), Flashcard('second?', 'two')], now: DateTime(2026, 3, 1, 9));
+      await tester.pumpWidget(MaterialApp(home: ReviewScreen(cards: cards, source: 'keys', clock: () => DateTime(2026, 3, 1, 9))));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // a rating before the answer was seen does nothing
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('2 left'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('review-back')), findsOneWidget);
+      // and back again
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('review-back')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('review-card-0-false')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('review-back')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('review-card-0-true')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('review-back')), findsNothing);
+
+      // an arrow goes to the other card without answering, and back
+      final first = find.text('first?');
+      expect(first, findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('second?'), findsOneWidget);
+      expect(first, findsNothing);
+      expect(find.text('2 left'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(first, findsOneWidget);
+
+      // 4 = easy
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('1 left'), findsOneWidget);
+      expect(find.text('second?'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      // "again" puts the card back in the queue
+      expect(find.text('1 left'), findsOneWidget);
+      await db.close();
+    });
+  });
 
   final t0 = DateTime(2026, 3, 1, 9);
 
@@ -20,6 +91,8 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ReviewScreen(cards: cards, clock: () => t0)));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.byKey(const ValueKey('review-front')), findsOneWidget);
       expect(find.byKey(const ValueKey('review-back')), findsNothing);
@@ -27,6 +100,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('review-show')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const ValueKey('review-back')), findsOneWidget);
       // the buttons say when the card would come back
       expect(find.text('10 min'), findsOneWidget);
@@ -36,22 +110,30 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('review-again')));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       // the next card, and the missed one waits at the end
       expect(find.text('Capital of France?'), findsNothing);
       expect(find.text('2 left'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('review-show')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('review-good')));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('Capital of France?'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('review-show')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('review-easy')));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const ValueKey('review-done')), findsOneWidget);
       expect(find.textContaining('3 reviewed: 1 again, 0 hard, 1 good, 1 easy'), findsOneWidget);
 
@@ -69,6 +151,8 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ReviewScreen(cards: CardRepository(db), clock: () => t0)));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('No cards are due.'), findsOneWidget);
       await db.close();
     });
@@ -81,10 +165,14 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: Scaffold(appBar: AppBar(actions: [ReviewButton(cards: cards)]))));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const ValueKey('review-cards')), findsNothing);
       await cards.addAll('n1', const [Flashcard('Q', 'A')]);
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const ValueKey('review-cards')), findsOneWidget);
       expect(find.text('1'), findsOneWidget);
       await db.close();

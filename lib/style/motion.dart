@@ -135,3 +135,52 @@ class _FadeOnChangeState extends State<FadeOnChange> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) => FadeTransition(opacity: Tween(begin: 0.0, end: 1.0).animate(_curve), child: RepaintBoundary(child: widget.child));
 }
+
+/// A card that turns over when [front] changes: it rotates about its vertical middle, and the other face is put in at the edge-on
+/// moment, so the turn goes on in the same direction instead of mirroring. [face] builds one side.
+class FlipCard extends StatefulWidget {
+  final bool front;
+  final Widget Function(bool front) face;
+
+  const FlipCard({super.key, required this.front, required this.face});
+
+  @override
+  State<FlipCard> createState() => _FlipCardState();
+}
+
+class _FlipCardState extends State<FlipCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: Motion.slow, value: 1);
+  late bool _from = widget.front;
+
+  @override
+  void didUpdateWidget(FlipCard old) {
+    super.didUpdateWidget(old);
+    if (widget.front == old.front) return;
+    _from = old.front;
+    _c.duration = Motion.of(context, Motion.slow);
+    _c.forward(from: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          if (_c.isCompleted) return widget.face(widget.front);
+          final turn = Curves.easeInOutCubic.transform(_c.value) * 3.141592653589793;
+          final first = turn < 3.141592653589793 / 2;
+          return Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0012)
+              ..rotateY(first ? turn : turn - 3.141592653589793),
+            child: widget.face(first ? _from : widget.front),
+          );
+        },
+      );
+}

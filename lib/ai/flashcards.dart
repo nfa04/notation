@@ -148,6 +148,22 @@ class FlashcardDeck extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Leaves this card for later in the round (it goes to the end) and shows the next one.
+  void skip() {
+    if (finished || _queue.length - _index < 2) return;
+    _queue.add(_queue.removeAt(_index));
+    _flipped = false;
+    notifyListeners();
+  }
+
+  /// Brings back the card that was last put off (the other way of [skip]).
+  void unskip() {
+    if (finished || _queue.length - _index < 2) return;
+    _queue.insert(_index, _queue.removeLast());
+    _flipped = false;
+    notifyListeners();
+  }
+
   /// The person knew it.
   void gotIt() => _next(known: true);
 

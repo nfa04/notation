@@ -102,7 +102,7 @@ class _FlashcardViewState extends State<FlashcardView> {
 
 /// A deck being studied: the card, the buttons to say whether it was known, and the result of a round. Shared by the assistant
 /// and the graph view.
-class DeckView extends StatelessWidget {
+class DeckView extends StatefulWidget {
   final FlashcardDeck deck;
 
   /// Asked for when the person wants new cards.
@@ -116,7 +116,61 @@ class DeckView extends StatelessWidget {
   const DeckView({super.key, required this.deck, required this.onNew, this.onJumpToPage, this.onAddToNote, this.onKeep});
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(listenable: deck, builder: (context, _) => deck.finished ? _finished(context) : _study(context));
+  State<DeckView> createState() => _DeckViewState();
+}
+
+class _DeckViewState extends State<DeckView> {
+  FlashcardDeck get deck => widget.deck;
+  VoidCallback get onNew => widget.onNew;
+  ValueChanged<int>? get onJumpToPage => widget.onJumpToPage;
+  ValueChanged<String>? get onAddToNote => widget.onAddToNote;
+  Future<int> Function(List<Flashcard> cards)? get onKeep => widget.onKeep;
+
+  // (no autofocus: beside the assistant's chat the typing field must keep the keyboard until a card is clicked)
+  final _focus = FocusNode(debugLabel: 'flashcards');
+  int _dir = 1;
+
+  /// Changes with every card in front (also when a skipped card puts another at the same place).
+  Object get _cardKey => (deck.position, deck.current);
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  /// Space turns the card over and back, the arrows put it off and bring it back, 1 is "Again" and 2 "Got it".
+  KeyEventResult _key(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent || deck.finished) return KeyEventResult.ignored;
+    final kb = HardwareKeyboard.instance;
+    if (kb.isControlPressed || kb.isMetaPressed || kb.isAltPressed) return KeyEventResult.ignored;
+    final key = e.logicalKey;
+    if (key == LogicalKeyboardKey.space) {
+      deck.flip();
+    } else if (key == LogicalKeyboardKey.arrowRight) {
+      _dir = 1;
+      deck.skip();
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      _dir = -1;
+      deck.unskip();
+    } else if (deck.flipped && (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1)) {
+      _dir = 1;
+      deck.again();
+    } else if (deck.flipped && (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2)) {
+      _dir = 1;
+      deck.gotIt();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+        focusNode: _focus,
+        onKeyEvent: _key,
+        child: ListenableBuilder(listenable: deck, builder: (context, _) => deck.finished ? _finished(context) : _study(context)),
+      );
 
   Widget _study(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -157,18 +211,21 @@ class DeckView extends StatelessWidget {
         Expanded(
           child: GestureDetector(
             key: const ValueKey('flashcard'),
-            onTap: deck.flip,
+            onTap: () {
+              _focus.requestFocus();
+              deck.flip();
+            },
             // the next card comes in from the right while the one before leaves to the left; turning the same card over is the flip inside
             child: AnimatedSwitcher(
               duration: Motion.of(context, Motion.medium),
               switchInCurve: Motion.curveIn,
               switchOutCurve: Motion.curveOut,
               transitionBuilder: (child, animation) {
-                final arriving = child.key == ValueKey(deck.position);
-                return FadeTransition(opacity: animation, child: SlideTransition(position: Tween(begin: Offset(arriving ? 0.12 : -0.12, 0), end: Offset.zero).animate(animation), child: child));
+                final arriving = child.key == ValueKey(_cardKey);
+                return FadeTransition(opacity: animation, child: SlideTransition(position: Tween(begin: Offset((arriving ? 0.12 : -0.12) * _dir, 0), end: Offset.zero).animate(animation), child: child));
               },
               child: FlipCard(
-                key: ValueKey(deck.position),
+                key: ValueKey(_cardKey),
                 front: front,
                 face: (front) => Container(
                 width: double.infinity,
@@ -327,51 +384,3 @@ class _KeepButtonState extends State<_KeepButton> {
 }
 
 
-/// A card that turns over when [front] changes: it rotates about its vertical middle, and the other face is put in at the edge-on
-/// moment, so the turn goes on in the same direction instead of mirroring. [face] builds one side.
-class FlipCard extends StatefulWidget {
-  final bool front;
-  final Widget Function(bool front) face;
-
-  const FlipCard({super.key, required this.front, required this.face});
-
-  @override
-  State<FlipCard> createState() => _FlipCardState();
-}
-
-class _FlipCardState extends State<FlipCard> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: Motion.slow, value: 1);
-  late bool _from = widget.front;
-
-  @override
-  void didUpdateWidget(FlipCard old) {
-    super.didUpdateWidget(old);
-    if (widget.front == old.front) return;
-    _from = old.front;
-    _c.duration = Motion.of(context, Motion.slow);
-    _c.forward(from: 0.0);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) {
-          if (_c.isCompleted) return widget.face(widget.front);
-          final turn = Curves.easeInOutCubic.transform(_c.value) * 3.141592653589793;
-          final first = turn < 3.141592653589793 / 2;
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.0012)
-              ..rotateY(first ? turn : turn - 3.141592653589793),
-            child: widget.face(first ? _from : widget.front),
-          );
-        },
-      );
-}

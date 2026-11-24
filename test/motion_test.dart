@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'package:notes/ai/flashcards.dart';
 import 'package:notes/screens/flashcard_view.dart';
 import 'package:notes/style/motion.dart';
 
@@ -64,5 +66,41 @@ void main() {
     expect(tester.widget<FadeTransition>(find.byType(FadeTransition).last).opacity.value, 0);
     await tester.pumpAndSettle();
     expect(tester.widget<FadeTransition>(find.byType(FadeTransition).last).opacity.value, 1);
+  });
+
+  test('a deck puts a card off and brings it back', () {
+    final deck = FlashcardDeck(const [Flashcard('a', '1'), Flashcard('b', '2'), Flashcard('c', '3')]);
+    deck.skip();
+    expect(deck.current!.front, 'b');
+    deck.skip();
+    expect(deck.current!.front, 'c');
+    deck.unskip();
+    expect(deck.current!.front, 'b');
+    expect(deck.roundLength, 3);
+    expect(deck.position, 0);
+    final one = FlashcardDeck(const [Flashcard('a', '1')])..skip();
+    expect(one.current!.front, 'a');
+  });
+
+  testWidgets('a deck of the assistant: space turns the card over and back, 2 says it was known', (tester) async {
+    final deck = FlashcardDeck(const [Flashcard('q1', 'a1'), Flashcard('q2', 'a2')]);
+    await tester.pumpWidget(_app(DeckView(deck: deck, onNew: () {})));
+    await tester.tap(find.byKey(const ValueKey('flashcard')));
+    await tester.pumpAndSettle();
+    expect(deck.flipped, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(deck.flipped, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.text('q2'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2); // not turned yet: nothing
+    await tester.pumpAndSettle();
+    expect(deck.knownCount, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.pumpAndSettle();
+    expect(deck.knownCount, 1);
+    expect(find.text('q1'), findsOneWidget);
   });
 }
