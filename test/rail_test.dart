@@ -23,7 +23,7 @@ void main() {
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       _db = db;
-      await db.delete('settings', where: "key = 'rail_hidden'"); // (the in-memory database outlives a test)
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')"); // (the in-memory database outlives a test)
       tasks = TaskRepository(db);
       caldav = CalDavService(SettingsRepository(db), tasks);
       device = DeviceCalendarService.forPlatform(SettingsRepository(db));

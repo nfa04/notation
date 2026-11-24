@@ -51,7 +51,7 @@ void main() {
     await tester.runAsync(() async {
       dir = await Directory.systemTemp.createTemp('lockui');
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
       repo = NoteRepository(db);
       tasks = TaskRepository(db);
       caldav = CalDavService(SettingsRepository(db), tasks);
@@ -135,7 +135,7 @@ void main() {
     await tester.runAsync(() async {
       dir = await Directory.systemTemp.createTemp('lockui2');
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
       repo = NoteRepository(db);
       tasks = TaskRepository(db);
       caldav = CalDavService(SettingsRepository(db), tasks);

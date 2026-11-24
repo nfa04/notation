@@ -110,6 +110,7 @@ void main() {
     setUp(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       await db.delete('settings', where: "key = 'automations'");
+      await db.delete('settings', where: "key = 'workspace_tabs'");
       await db.delete('tasks');
       notes = NoteRepository(db);
       tasks = TaskRepository(db);
@@ -288,6 +289,7 @@ void main() {
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       await db.delete('settings', where: "key = 'automations'");
+      await db.delete('settings', where: "key = 'workspace_tabs'");
       notes = NoteRepository(db);
       tasks = TaskRepository(db);
       settings = SettingsRepository(db);
@@ -355,6 +357,7 @@ void main() {
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
       await db.delete('settings', where: "key = 'automations'");
+      await db.delete('settings', where: "key = 'workspace_tabs'");
       dir = await Directory.systemTemp.createTemp('closing_');
       notes = NoteRepository(db);
       tasks = TaskRepository(db);

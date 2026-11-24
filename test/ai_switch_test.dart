@@ -164,6 +164,7 @@ void main() {
     late SettingsRepository settings;
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
+      await db.delete('settings', where: "key = 'workspace_tabs'");
       notes = NoteRepository(db);
       tasks = TaskRepository(db);
       settings = SettingsRepository(db);
@@ -190,6 +191,8 @@ void main() {
     expect(find.text('Graph'), findsOneWidget);
     await tester.tap(find.descendant(of: find.byType(NotationSidebar), matching: find.text('Assistant')));
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200))); // (the page reads its saved chat: the query gets its real time)
+    await tester.pump(const Duration(milliseconds: 100));
     final panel = find.byKey(const ValueKey('notes-assistant'));
     expect(panel, findsOneWidget);
     final rail = tester.getSize(find.byType(NotationSidebar)).width;

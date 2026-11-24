@@ -1142,7 +1142,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     phoneNavItems.addListener(_navChosen);
     _loadSideFavourites();
     _favouritesLive = debouncedChanges([_app.repository.changes, _app.repository.created]).listen((_) => _loadSideFavourites());
-    //unawaited(_restoreTabs());
+    unawaited(_restoreTabs());
     _app.repository.settings.get(_railHiddenKey).then((v) {
       if (!mounted || v != '1') return;
       _railSlide.value = 0; // (hidden from the start: no sliding out at launch)

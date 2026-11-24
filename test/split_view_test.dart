@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:notes/widgets/notation_sidebar.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   setUpAll(AppDatabase.initFfi);
+  tabOrderTests();
 
   testWidgets('two notes can be open side by side, and the second can be closed again', (tester) async {
     tester.view.physicalSize = const Size(1900, 1000);
@@ -30,7 +33,7 @@ void main() {
     late String a, b;
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
       repo = NoteRepository(db);
       tasks = TaskRepository(db);
       caldav = CalDavService(SettingsRepository(db), tasks);
@@ -99,7 +102,7 @@ void main() {
     late String a, b;
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
       await db.delete('notes');
       repo = NoteRepository(db);
       tasks = TaskRepository(db);
@@ -180,7 +183,7 @@ void main() {
     late int g2;
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
       await db.delete('notes');
       await db.delete('saved_graphs');
       repo = NoteRepository(db);
@@ -241,7 +244,7 @@ void main() {
     late String a;
     await tester.runAsync(() async {
       final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      await db.delete('settings', where: "key = 'rail_hidden'");
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
       repo = NoteRepository(db);
       tasks = TaskRepository(db);
       caldav = CalDavService(SettingsRepository(db), tasks);
@@ -291,4 +294,66 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 900)));
   });
 
+}
+
+void tabOrderTests() {
+  for (final touch in [true, false]) {
+  testWidgets('the tabs are kept for the next launch, and can be dragged into another order (${touch ? 'finger' : 'mouse'})', (tester) async {
+    if (!touch) debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    tester.view.physicalSize = const Size(1900, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    late TaskRepository tasks;
+    late CalDavService caldav;
+    late DeviceCalendarService device;
+    late SettingsRepository settings;
+    late String a, b;
+    await tester.runAsync(() async {
+      final db = await AppDatabase.open(path: inMemoryDatabasePath);
+      await db.delete('settings', where: "key IN ('rail_hidden', 'workspace_tabs')");
+      repo = NoteRepository(db);
+      tasks = TaskRepository(db);
+      settings = SettingsRepository(db);
+      caldav = CalDavService(settings, tasks);
+      device = DeviceCalendarService.forPlatform(settings);
+      a = await repo.createNote(title: 'Alpha tabs');
+      b = await repo.createNote(title: 'Beta tabs');
+      await settings.set('workspace_tabs', '{"tabs":["page:0","$a","$b"],"shown":["$a"],"focused":"$a"}');
+    });
+    await tester.pumpWidget(NotationApp(services: AppServices(
+      repository: repo,
+      tasks: tasks,
+      caldav: caldav,
+      device: device,
+      style: StyleService.inMemory(),
+      appTheme: AppTheme.inMemory(),
+    )));
+    for (var i = 0; i < 8; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    // the tabs of the last run are back, the one that was shown is open
+    expect(find.byKey(ValueKey('tab-$a')), findsOneWidget);
+    expect(find.byKey(ValueKey('tab-$b')), findsOneWidget);
+    expect(find.byType(FixedPageNoteEditor), findsOneWidget);
+
+    // drag the last tab in front of the first
+    final from = tester.getCenter(find.byKey(ValueKey('tab-$b')));
+    final to = tester.getCenter(find.byKey(const ValueKey('tab-page:0')));
+    // (tests run as a touch screen: a finger holds the tab, then drags it)
+    final g = await tester.startGesture(from, kind: touch ? PointerDeviceKind.touch : PointerDeviceKind.mouse);
+    await tester.pump(touch ? const Duration(milliseconds: 700) : const Duration(milliseconds: 50));
+    final step = (to - const Offset(30, 0) - from) / 10;
+    for (var i = 0; i < 10; i++) {
+      await g.moveBy(step);
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    await g.up();
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    final saved = await tester.runAsync(() => settings.get('workspace_tabs'));
+    debugDefaultTargetPlatformOverride = null;
+    expect(saved, contains('"tabs":["$b","page:0","$a"]'));
+  });  }
 }
