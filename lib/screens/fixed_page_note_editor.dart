@@ -216,7 +216,6 @@ import 'document_sheets.dart';
 import 'print_preview.dart';
 import '../markdown/live_markdown.dart';
 import '../markdown/grammar.dart';
-import 'bar_layout.dart';
 import '../style/tool_columns.dart';
 import '../style/zoomed_selection.dart';
 import 'page_list.dart';
@@ -2314,33 +2313,6 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   String? _lastClipboardProblem;
 
-  /// How high the buttons of the top bar are, wrapped onto as many rows as they need, and how wide they are in one row.
-  double _topBarHeight = kToolbarHeight;
-  double _topButtonsWidth = 0;
-
-  /// The buttons of the top bar, in as many rows as they need (the bar is made as high as they are).
-  Widget _topButtons(List<Widget> buttons, Alignment at) => SizedBox(
-        height: _topBarHeight,
-        child: OverflowBox(
-          alignment: at,
-          minHeight: 0,
-          maxHeight: double.infinity,
-          child: HeightReporter(
-            onHeight: (h) {
-              if (mounted && (h - _topBarHeight).abs() > 0.5) setState(() => _topBarHeight = h);
-            },
-            onWidth: (w) {
-              if (mounted && (w - _topButtonsWidth).abs() > 0.5) setState(() => _topButtonsWidth = w);
-            },
-            child: Wrap(
-              alignment: at == Alignment.center ? WrapAlignment.center : WrapAlignment.end,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: buttons,
-            ),
-          ),
-        ),
-      );
-
   void _setLoadingPdf(bool v) => setState(() => _isLoadingPdf = v);
 
   @override
@@ -2357,24 +2329,23 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     // the title gets the room it needs (up to half the width); the buttons take the rest and scroll sideways if it is too little
     final screenWidth = MediaQuery.sizeOf(context).width;
     final titlePainter = TextPainter(
-      text: TextSpan(text: _titleController.text.isEmpty ? tr('Note Title...') : _titleController.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
+      text: TextSpan(text: _titleController.text.isEmpty ? tr('Note Title...') : _titleController.text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w400)),
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();
-    final titleWidth = (titlePainter.width + 24).clamp(220.0, math.max(220.0, screenWidth / 2)).toDouble();
+    final titleWidth = (titlePainter.width + 24).clamp(140.0, math.max(140.0, screenWidth * 0.32)).toDouble();
     titlePainter.dispose();
     final buttons = _toolbarButtons(context);
-    final buttonsWidth = math.max(200.0, screenWidth - titleWidth - 180 - (_toolbarProfiles.length > 1 ? _profileMenuWidth : 0));
-    // (beside the title when they fit there in one row, else a row of their own, with as many rows as they need)
-    // (on a phone they are one line that scrolls sideways under the title, never rows)
+    final buttonsWidth = math.max(120.0, screenWidth - titleWidth - 120 - (_toolbarProfiles.length > 1 ? _profileMenuWidth : 0));
+    // (the title and the buttons share one line everywhere there is room: the buttons scroll sideways when they are too many)
+    // (on a phone the buttons are one line that scrolls sideways under the title)
     final phone = _phoneBars;
-    final buttonsBelow = !phone && _topButtonsWidth > buttonsWidth;
     return CitationStyleScope(
       style: _citationStyle,
       wholeText: _noteCitationText,
       child: Scaffold(
       appBar: AppBar(
-        toolbarHeight: phone ? 48 : buttonsBelow ? kToolbarHeight : math.max(kToolbarHeight, _topBarHeight + 8),
+        toolbarHeight: phone ? 48 : kToolbarHeight,
         // on a phone the note has the whole screen, so the way back to the notes is here
         leading: widget.onLeave != null && MediaQuery.sizeOf(context).width < 600
             ? IconButton(key: const ValueKey('editor-back'), tooltip: tr('Back'), icon: const BackButtonIcon(), onPressed: widget.onLeave)
@@ -2387,11 +2358,17 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
               _scheduleSave();
               setState(() {}); // the field grows with the title
             },
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w400),
+            // (a plain title, not a box: the theme's field border is switched off in every state)
             decoration: InputDecoration(
               hintText: tr('Note Title...'),
-              filled: false, border: InputBorder.none,
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
               isDense: true,
+              contentPadding: EdgeInsets.zero,
             ),
           ),
         ),
@@ -2399,18 +2376,10 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
           // (beside the buttons, so that it is always in reach)
           ?_toolbarProfileMenu(),
           // the buttons take more rows when the screen is too narrow for them in one
-          if (!buttonsBelow && !phone) SizedBox(width: buttonsWidth, child: _topButtons(buttons, Alignment.centerRight)),
+          if (!phone) SizedBox(width: buttonsWidth, child: _topLine(buttons)),
         ],
-        // (too many to fit beside the title: a row of their own under it, as many rows as they need)
-        bottom: phone
-            ? (buttons.isEmpty
-                ? null
-                : PreferredSize(preferredSize: const Size.fromHeight(_stripHeight), child: _buttonStrip(buttons, key: const ValueKey('top-strip'))))
-            : buttonsBelow
-            ? PreferredSize(
-                preferredSize: Size.fromHeight(math.max(0, _topBarHeight)),
-                child: SizedBox(width: screenWidth, child: _topButtons(buttons, Alignment.center)),
-              )
+        bottom: phone && buttons.isNotEmpty
+            ? PreferredSize(preferredSize: const Size.fromHeight(_stripHeight), child: _buttonStrip(buttons, key: const ValueKey('top-strip')))
             : null,
       ),
       // formatting bar for whatever Markdown is being edited right now

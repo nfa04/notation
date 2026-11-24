@@ -91,6 +91,18 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
         ),
       );
 
+  /// [buttons] beside the title: one line, pushed to the right, that scrolls sideways when they are too many.
+  Widget _topLine(List<Widget> buttons) => LayoutBuilder(
+        builder: (context, box) => SingleChildScrollView(
+          key: const ValueKey('top-line'),
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: box.maxWidth),
+            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: buttons),
+          ),
+        ),
+      );
+
   /// The bar at the bottom of the screen: the formatting bar for the Markdown being edited, and the bottom toolbar.
   Widget? _bottomBars() {
     final formatting = _bottomBar();
