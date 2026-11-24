@@ -88,6 +88,12 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       foregroundColor: scheme.onSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: scheme.onSurfaceVariant.withValues(alpha: 0.5))),
     ),
+    // fields: a hairline box with small corners, the ink on focus
+    inputDecorationTheme: base.inputDecorationTheme.copyWith(
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: rule),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.6))),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.onSurface, width: 1.5)),
+    ),
     // buttons: small square corners, no pill; chips and segments flat with a hairline and a pale selection
     filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, textStyle: const TextStyle(fontWeight: FontWeight.w500))),
     elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(shape: r6, elevation: 0, shadowColor: Colors.transparent, surfaceTintColor: Colors.transparent, backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, side: rule)),

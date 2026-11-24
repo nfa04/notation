@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/note_data.dart';
@@ -546,7 +547,6 @@ class _SearchViewState extends State<SearchView> {
                         _changed();
                       },
                     ),
-              border: const OutlineInputBorder(),
             ),
             onChanged: (_) => _changed(),
             onSubmitted: (_) {
@@ -682,7 +682,7 @@ class _SearchViewState extends State<SearchView> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text.verbatim(p.label, style: TextStyle(fontSize: 11, color: scheme.primary)),
+                      Text.verbatim(p.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: scheme.onSurfaceVariant)),
                       Text.verbatim(p.text.replaceAll(RegExp(r'\s+'), ' ').trim(), maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
                     ]),
                   ),
@@ -699,7 +699,7 @@ class _SearchViewState extends State<SearchView> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text.verbatim(tr('Recent searches'), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))),
+            Expanded(child: Text.verbatim(tr('Recent searches'), style: PaperSection.style(context))),
             TextButton(
               key: const ValueKey('search-recent-clear'),
               onPressed: () async {
@@ -751,13 +751,13 @@ class _SearchViewState extends State<SearchView> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text.verbatim(_placeLabel(h), style: TextStyle(fontSize: 11, color: scheme.primary)),
+                Text.verbatim(_placeLabel(h), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: scheme.onSurfaceVariant)),
                 RichText(
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   text: TextSpan(style: DefaultTextStyle.of(context,).style.copyWith(fontSize: 13), children: [
                     TextSpan(text: h.before),
-                    TextSpan(text: h.match, style: TextStyle(fontWeight: FontWeight.bold, backgroundColor: scheme.primaryContainer, color: scheme.onPrimaryContainer)),
+                    TextSpan(text: h.match, style: TextStyle(fontWeight: FontWeight.w500, backgroundColor: scheme.primaryContainer, color: scheme.onPrimaryContainer)),
                     TextSpan(text: h.after),
                   ]),
                 ),
