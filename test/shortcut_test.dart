@@ -212,13 +212,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
 
-      expect(find.byIcon(Symbols.auto_fix_normal), findsNothing); // (the icon of the eraser when it is on)
+      expect(find.byWidgetPredicate((w) => w is Icon && w.icon == Symbols.auto_fix_normal && w.fill == 1), findsNothing); // (the icon of the eraser when it is on)
       await press(tester, LogicalKeyboardKey.keyE);
       await tester.pump();
-      expect(find.byIcon(Symbols.auto_fix_normal), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is Icon && w.icon == Symbols.auto_fix_normal && w.fill == 1), findsOneWidget);
       await press(tester, LogicalKeyboardKey.keyE); // again: the pen
       await tester.pump();
-      expect(find.byIcon(Symbols.auto_fix_normal), findsNothing);
+      expect(find.byWidgetPredicate((w) => w is Icon && w.icon == Symbols.auto_fix_normal && w.fill == 1), findsNothing);
 
       // the dot on the width button is in the color of the pen
       Color pen() => ((tester.widget<Container>(find.descendant(of: find.byTooltip('Stroke Size'), matching: find.byType(Container)).first)).decoration! as BoxDecoration).color!;
@@ -246,7 +246,7 @@ void main() {
       await press(tester, LogicalKeyboardKey.keyX, held: [ctrl, shift]); // the eraser, which goes to draw mode by itself
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
-      expect(find.byIcon(Symbols.auto_fix_normal), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is Icon && w.icon == Symbols.auto_fix_normal && w.fill == 1), findsOneWidget);
     });
 
     testWidgets('the keys of the line width step through the widths of the menu', (tester) async {

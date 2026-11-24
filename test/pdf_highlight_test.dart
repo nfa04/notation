@@ -1,4 +1,3 @@
-import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -143,7 +142,7 @@ void main() {
       // the button in the menu at the selection (a narrow one puts the last buttons behind its "more" button)
       // (the toolbar lays out the buttons behind "more" too, unseen: only a button that can be pressed counts)
       if (find.text('Comment').hitTestable().evaluate().isEmpty) {
-        await tester.tap(find.byIcon(Symbols.more_vert).hitTestable().last);
+        await tester.tap(find.byIcon(Icons.more_vert).hitTestable().last);
         for (var i = 0; i < 5; i++) {
           await tester.pump(const Duration(milliseconds: 100)); // (the overflow menu opens animated)
         }
@@ -217,7 +216,7 @@ void main() {
 
     Future<void> press(String label) async {
       if (find.text(label).hitTestable().evaluate().isEmpty) {
-        await tester.tap(find.byIcon(Symbols.more_vert).hitTestable().last);
+        await tester.tap(find.byIcon(Icons.more_vert).hitTestable().last);
         for (var i = 0; i < 5; i++) {
           await tester.pump(const Duration(milliseconds: 100));
         }

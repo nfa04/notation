@@ -579,7 +579,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           child: IconButton.filledTonal(
             isSelected: _highlighter,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Symbols.border_color, size: 20),
+            selectedIcon: const Icon(Symbols.border_color, size: 20, fill: 1),
             icon: const Icon(Symbols.border_color, size: 20),
             tooltip: tr('Highlighter (see-through, in the chosen color)'),
             onPressed: () => setState(() {
@@ -621,7 +621,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         child: IconButton.filledTonal(
           isSelected: _erasing,
             style: toggleToolStyle(context),
-          selectedIcon: const Icon(Symbols.auto_fix_normal, size: 20),
+          selectedIcon: const Icon(Symbols.auto_fix_normal, size: 20, fill: 1),
           icon: const Icon(Symbols.auto_fix_normal, size: 20),
           tooltip: tr('Eraser (drawings only)'),
           onPressed: () => setState(() {
@@ -642,7 +642,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           child: IconButton.filledTonal(
             isSelected: _lassoing,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Symbols.gesture, size: 20),
+            selectedIcon: const Icon(Symbols.gesture, size: 20, fill: 1),
             icon: const Icon(Symbols.gesture, size: 20),
             tooltip: tr(
               'Lasso: draw around drawings, text boxes and pictures to select them',
@@ -717,7 +717,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             key: const ValueKey('eyedropper-button'),
             isSelected: _picking,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Symbols.colorize, size: 20),
+            selectedIcon: const Icon(Symbols.colorize, size: 20, fill: 1),
             icon: const Icon(Symbols.colorize, size: 20),
             tooltip: tr('Eyedropper: touch anything on the page to draw in its color (I)'),
             onPressed: _toggleEyedropper,
@@ -730,7 +730,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             key: const ValueKey('fill-bucket-button'),
             isSelected: _bucketOn,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Symbols.format_color_fill, size: 20),
+            selectedIcon: const Icon(Symbols.format_color_fill, size: 20, fill: 1),
             icon: const Icon(Symbols.format_color_fill, size: 20),
             tooltip: tr('Fill bucket: touch a closed area to fill it with the pen color (G)'),
             onPressed: _toggleBucket,
@@ -823,7 +823,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             key: const ValueKey('straighten-toggle'),
             isSelected: _straighten,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Symbols.show_chart, size: 20),
+            selectedIcon: const Icon(Symbols.show_chart, size: 20, fill: 1),
             icon: const Icon(Symbols.show_chart, size: 20),
             tooltip: tr(
               _straighten
