@@ -29,10 +29,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
-    final undo = tester.getRect(find.byKey(const ValueKey('undo-button')));
-    final redo = tester.getRect(find.byKey(const ValueKey('redo-button')));
-    expect(redo.left, undo.left, reason: 'the same column');
-    expect(redo.top, greaterThan(undo.top));
+    final undo = tester.getRect(find.byKey(const ValueKey('brush-picker')));
     final add = tester.getRect(find.byTooltip('Add a color (hold an added color to remove it)'));
     expect(add.left, greaterThan(undo.left), reason: 'in a next column');
     final colors = find.bySemanticsLabel(RegExp('^Pen color'));
@@ -63,7 +60,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byKey(const ValueKey('undo-button'))).width, greaterThanOrEqualTo(52));
+    expect(tester.getSize(find.byTooltip('Eraser (drawings only)')).width, greaterThanOrEqualTo(52));
     await tester.tap(find.text('Document').first);
     await tester.pumpAndSettle();
   });
@@ -129,15 +126,15 @@ void main() {
     expect(during, lessThan(wide), reason: 'the pages are laid out at the size they end up with at once');
     expect(tester.getSize(find.byType(CustomScrollView).first).width, during, reason: 'and not again while the bar slides');
     // the bar is all there once it has come
-    expect(tester.getRect(find.byKey(const ValueKey('undo-button'))).right, lessThanOrEqualTo(1200));
+    expect(tester.getRect(find.byKey(const ValueKey('brush-picker'))).right, lessThanOrEqualTo(1200));
     await tester.tap(find.text('Select'));
     await tester.pump(); // (the slide starts when this frame is done)
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
-    expect(find.byKey(const ValueKey('undo-button')), findsOneWidget, reason: 'the bar slides out, it does not vanish');
+    expect(find.byKey(const ValueKey('brush-picker')), findsOneWidget, reason: 'the bar slides out, it does not vanish');
     expect(tester.getCenter(page).dx, inExclusiveRange(after, before));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('undo-button')), findsNothing);
+    expect(find.byKey(const ValueKey('brush-picker')), findsNothing);
     expect(tester.getCenter(page).dx, before);
     expect(tester.getSize(find.byType(CustomScrollView).first).width, wide);
   });
@@ -353,7 +350,7 @@ void main() {
 
     await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
-    final bar = find.ancestor(of: find.byKey(const ValueKey('undo-button')), matching: find.byType(Container)).last;
+    final bar = find.ancestor(of: find.byKey(const ValueKey('brush-picker')), matching: find.byType(Container)).last;
     expect(tester.getRect(bar).height, line().height, reason: 'the drawing tools fill the height');
     expect(tester.getRect(bar).top, line().top);
   });

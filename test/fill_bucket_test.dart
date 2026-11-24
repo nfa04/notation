@@ -86,14 +86,14 @@ void main() {
     expect(strokes(), hasLength(2));
     expect(strokes().first.fill!.r, lessThan(0.5));
 
-    await tester.ensureVisible(find.byKey(const ValueKey('undo-button')));
+    await tester.ensureVisible(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().first.fill!.r, greaterThan(0.5), reason: 'the first fill is back');
-    await tester.ensureVisible(find.byKey(const ValueKey('undo-button')));
+    await tester.ensureVisible(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes(), hasLength(1));
   });

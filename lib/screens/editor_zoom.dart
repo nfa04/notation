@@ -137,6 +137,8 @@ extension _EditorZoom on _FixedPageNoteEditorState {
     if (_penDown && !_touches.containsKey(_penPointer)) return; // (the pen is writing)
     _dropTouchStroke();
     _touchGesture = true;
+    _twoTapAt = DateTime.now();
+    _twoTapTravel = 0;
     if (_infinite) return; // (a canvas is moved and pinched by its own gesture)
     final (a, b) = (_touches.values.first, _touches.values.last);
     _pinchStartDistance = math.max(1.0, (a - b).distance);
@@ -168,6 +170,7 @@ extension _EditorZoom on _FixedPageNoteEditorState {
 
   void _onTouchMove(PointerMoveEvent e) {
     if (!_touches.containsKey(e.pointer)) return;
+    if (_twoTapAt != null) _twoTapTravel += (e.position - _touches[e.pointer]!).distance;
     _touches[e.pointer] = e.position;
     if (_pinching && _touches.length == 2) {
       final (a, b) = (_touches.values.first, _touches.values.last);
@@ -188,6 +191,12 @@ extension _EditorZoom on _FixedPageNoteEditorState {
   }
 
   void _onTouchEnd(PointerEvent e) {
+    // two fingers put down together and lifted at once, hardly moved: undo (while drawing, where it is the gesture that is wanted)
+    final tap = _twoTapAt;
+    if (tap != null && e is PointerUpEvent && _touches.length == 2 && _mode == CanvasInteractionMode.draw && _twoTapTravel < 24 && DateTime.now().difference(tap) < const Duration(milliseconds: 350) && _undoStack.canUndo) {
+      _undoDrawing();
+    }
+    if (_touches.length <= 2) _twoTapAt = null;
     _touches.remove(e.pointer);
     if (_touches.isEmpty) _touchGesture = false;
     if (_pinching && _touches.length < 2) setState(() => _pinching = false);

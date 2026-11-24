@@ -62,6 +62,7 @@ import '../features/feature.dart';
 import '../profile/user_profile.dart';
 import '../llm/llm_service.dart';
 import '../style/app_theme.dart';
+import 'phone_nav_settings.dart';
 import '../style/platform_look.dart';
 import '../style/calendar_style.dart';
 
@@ -229,6 +230,7 @@ class SettingsScreen extends StatelessWidget {
             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
           ),
           const SizedBox(height: 28),
+          if (repository != null && MediaQuery.sizeOf(context).width < 600) ...[PhoneNavSettings(settings: repository!.settings), const SizedBox(height: 28)],
           const AboutSettings(),
         ],
       ),

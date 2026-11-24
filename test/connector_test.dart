@@ -327,10 +327,10 @@ void editorTests() {
     final endBefore = line.link!.to.point;
     await tester.drag(find.byKey(const ValueKey('shape-tool')), const Offset(0, 900)); // (the drawing bar back to its top)
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes(), isEmpty);
-    await tester.tap(find.byKey(const ValueKey('redo-button')));
+    await tester.tap(find.byKey(const ValueKey('redo-any')));
     await tester.pumpAndSettle();
     expect(strokes().single.points, before);
 
@@ -359,7 +359,7 @@ void editorTests() {
     final bottom = moved.link!.from.point; // (the line leaves the bottom of the first box now that the second is far below)
     expect(bottom.dx, 200);
     final dot = Offset(300, 100 + (bottom.dy - 100) / 2); // the dot on the right side of the first box
-    final tap = await tester.startGesture(origin + dot, kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
+    final tap = await tester.startGesture(tester.getTopLeft(find.byKey(const ValueKey('page-0'))) + dot, kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);
     await tap.up();
     await tester.pumpAndSettle();
     final all = strokes();
@@ -372,7 +372,7 @@ void editorTests() {
     expect(find.text('Start'), findsOneWidget);
 
     // taking that back removes the box and the line together
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().length, 1);
     expect(typing, findsNothing);
@@ -447,12 +447,12 @@ void editorTests() {
     expect(moved.points.last.dy, greaterThan(350));
 
     // taking that back puts it on the second box again
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().single.link!.to.item, 'B');
     expect(strokes().single.points, pointsOnB);
     expect(strokes().single.link!.to.point, end);
-    await tester.tap(find.byKey(const ValueKey('redo-button')));
+    await tester.tap(find.byKey(const ValueKey('redo-any')));
     await tester.pumpAndSettle();
     expect(strokes().single.link!.to.item, 'C');
 

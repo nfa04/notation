@@ -132,12 +132,12 @@ void main() {
       return {for (final p in paint.evaluate()) ...((p.widget as CustomPaint).painter as InkLayerPainter).strokes}.toList();
     }
 
-    final origin = tester.getTopLeft(find.byKey(const ValueKey('page-0')));
+    Offset origin() => tester.getTopLeft(find.byKey(const ValueKey('page-0')));
     Future<void> drag(Offset from, Offset to, {int steps = 12}) async {
       final g = await tester.createGesture();
-      await g.down(origin + from);
+      await g.down(origin() + from);
       for (var i = 1; i <= steps; i++) {
-        await g.moveTo(origin + Offset.lerp(from, to, i / steps)!);
+        await g.moveTo(origin() + Offset.lerp(from, to, i / steps)!);
       }
       await g.up();
       await tester.pumpAndSettle();
@@ -154,12 +154,12 @@ void main() {
     // by default the pen draws what the hand does: an L stays an L
     Future<void> corner(Offset at) async {
       final g = await tester.createGesture();
-      await g.down(origin + at);
+      await g.down(origin() + at);
       for (var i = 1; i <= 8; i++) {
-        await g.moveTo(origin + at + Offset(25.0 * i, 0));
+        await g.moveTo(origin() + at + Offset(25.0 * i, 0));
       }
       for (var i = 1; i <= 4; i++) {
-        await g.moveTo(origin + at + Offset(200, 20.0 * i));
+        await g.moveTo(origin() + at + Offset(200, 20.0 * i));
       }
       await g.up();
       await tester.pumpAndSettle();
@@ -176,10 +176,10 @@ void main() {
 
     // the shape follows the pen while it is held, so only the end counts: a wobbly drag gives a clean rectangle
     final g = await tester.createGesture();
-    await g.down(origin + const Offset(500, 300));
-    await g.moveTo(origin + const Offset(700, 500));
-    await g.moveTo(origin + const Offset(650, 350));
-    await g.moveTo(origin + const Offset(600, 400));
+    await g.down(origin() + const Offset(500, 300));
+    await g.moveTo(origin() + const Offset(700, 500));
+    await g.moveTo(origin() + const Offset(650, 350));
+    await g.moveTo(origin() + const Offset(600, 400));
     await g.up();
     await tester.pumpAndSettle();
     final wobbly = bounds(strokes().last.points);
@@ -202,10 +202,10 @@ void main() {
     expect(strokes().last.points.map((p) => p.dy.toStringAsFixed(3)).toSet().length, 1); // dead level
 
     // each is one step to take back
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().length, 5);
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().length, 4);
 
@@ -213,7 +213,7 @@ void main() {
     await tester.tap(find.byTooltip('Eraser (drawings only)'));
     await tester.pumpAndSettle();
     final eraser = await tester.createGesture();
-    await eraser.down(origin + const Offset(250, 300)); // on the top edge of the first rectangle
+    await eraser.down(origin() + const Offset(250, 300)); // on the top edge of the first rectangle
     await eraser.up();
     await tester.pumpAndSettle();
     expect(strokes().length, 3);

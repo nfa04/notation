@@ -336,7 +336,7 @@ void main() {
       // what is always there is there
       expect(find.byKey(const ValueKey('add-text-box')), findsOneWidget);
       expect(find.byTooltip('Eraser (drawings only)'), findsOneWidget);
-      expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('undo-any')), findsOneWidget);
     });
   });
 

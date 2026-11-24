@@ -12,6 +12,10 @@ those; they do not style themselves.
   note page keeps its own frame and a faint shadow, because it is a page.
 - **Type.** Inter. Large titles Light (300), body Regular (400), labels Medium (500) and small. Section names are small, muted and
   letter-spaced, never bold. Figures are tabular. Use the text theme, not a size typed in.
+- **Empty states.** A big icon is never the answer, but a page whose first job is to start something (the dashboard with no notes) says
+  where to start in a hairline box, with the one primary button first and the other ways as quieter buttons beside it.
+- **One primary action.** Each screen has one filled button with its name on it (New Note, New event, New automation); its other ways in
+  are a menu beside it or quieter buttons, never several equal ones. Undo and Redo of the editor sit in the title bar, out of what can scroll or be hidden.
 - **Icons.** Material Symbols (`Symbols.x`, never `Icons.x`), weight 300, no fill; the selected state of a tool uses `fill: 1`. A
   big icon is never a decoration; an empty state is one line of muted text.
 - **Motion.** No ripple: a pale grey on hover and press. No page turn, no bounce.

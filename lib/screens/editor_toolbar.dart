@@ -2,7 +2,6 @@ part of 'fixed_page_note_editor.dart';
 
 /// The sections of the toolbars, with what the list calls them.
 const _toolbarSections = <String, String>{
-  'edit': 'Undo and redo',
   'note': 'Pages, lock and favourite',
   'mode': 'Select, draw or document',
   'insert': 'Insert text, tables and pictures',
@@ -10,11 +9,12 @@ const _toolbarSections = <String, String>{
   'tools': 'Dictate, read aloud and assistant',
   'history': 'History and live work',
   'files': 'PDF and files',
+  'more': 'Stamps, mood board and other tools',
 };
 
 
 /// The sections that start in the bottom bar, until the user moves them.
-const _defaultBottomSections = {'insert', 'page', 'files'};
+const _defaultBottomSections = {'insert', 'page', 'files', 'more'};
 
 typedef _ToolbarLayout = ({List<String> top, List<String> bottom, Set<String> hidden});
 
@@ -77,29 +77,17 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
     return size.width < 720 || size.height < 500;
   }
 
-  /// [buttons] in one line that scrolls sideways (a phone is too narrow for them in one row, and rows of them would take the page).
-  Widget _buttonStrip(List<Widget> buttons, {Key? key}) => SizedBox(
+  /// [buttons] in one line that scrolls sideways (a phone is too narrow for them in one row, and rows of them would take the page);
+  /// an arrow stands at the edge where some are out of view.
+  Widget _buttonStrip(List<Widget> buttons, {Key? key, bool center = false}) => SizedBox(
         key: key,
         height: _stripHeight,
         width: double.infinity,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          children: [for (final b in buttons) Center(child: b)],
-        ),
+        child: OverflowStrip(center: center, children: [for (final b in buttons) Center(child: b)]),
       );
 
   /// [buttons] beside the title: one line, pushed to the right, that scrolls sideways when they are too many.
-  Widget _topLine(List<Widget> buttons) => LayoutBuilder(
-        builder: (context, box) => SingleChildScrollView(
-          key: const ValueKey('top-line'),
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minWidth: box.maxWidth),
-            child: Row(mainAxisAlignment: MainAxisAlignment.start, children: buttons),
-          ),
-        ),
-      );
+  Widget _topLine(List<Widget> buttons) => OverflowStrip(key: const ValueKey('top-line'), children: buttons);
 
   /// The bar at the bottom of the screen: the formatting bar for the Markdown being edited, and the bottom toolbar.
   Widget? _bottomBars() {
@@ -117,12 +105,7 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
           child: ConstrainedBox(
             key: const ValueKey('bottom-toolbar'),
             constraints: const BoxConstraints(minHeight: 52),
-            child: _phoneBars
-                ? _buttonStrip(buttons, key: const ValueKey('bottom-strip'))
-                : SizedBox(
-                    width: double.infinity,
-                    child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: buttons),
-                  ),
+            child: _buttonStrip(buttons, key: const ValueKey('bottom-strip'), center: !_phoneBars),
           ),
         ),
       ),
@@ -172,7 +155,7 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
     final active = _toolbarProfiles.where((p) => p.id == _activeToolbarProfile).firstOrNull;
     return PopupMenuButton<String>(
       key: const ValueKey('toolbar-profile-menu'),
-      tooltip: tr('Change the toolbar profile'),
+      tooltip: '${tr('Change the toolbar profile')} (Alt+P)',
       onSelected: _switchToolbarProfile,
       itemBuilder: (context) => [
         for (final p in _toolbarProfiles) CheckedPopupMenuItem(key: ValueKey('toolbar-profile-${p.id}'), value: p.id, checked: p.id == active?.id, child: Text(p.name)),
@@ -182,7 +165,8 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Symbols.dashboard_customize, size: 20),
           const SizedBox(width: 4),
-          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 110), child: Text(active?.name ?? '', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
+          ConstrainedBox(constraints: const BoxConstraints(maxWidth: 110), child: Text(active?.name ?? '', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+          const Icon(Symbols.arrow_drop_down, size: 18), // (it is a menu: the name says which toolbars these are, the arrow that they can be changed)
         ]),
       ),
     );
@@ -385,6 +369,19 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
               width: 420,
               child: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        key: const ValueKey('arranging-hint'),
+                        profiles.where((p) => p.id == active).firstOrNull != null
+                            ? tr('Arranging the toolbars of the profile "{name}". The other profiles keep their own.', {'name': profiles.firstWhere((p) => p.id == active).name})
+                            : tr('Arranging the toolbars. Make a profile below to keep several arrangements and switch between them with one tap.'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
                   profilesSection(),
                   const Divider(),
                   bar('Top bar', 'top', top, (l) => top = l, (id) {
@@ -396,6 +393,11 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
                     bottom = [...bottom]..remove(id);
                     top = [...top, id];
                   }, Symbols.arrow_upward, 'Move to the top bar'),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(tr('A section switched off here leaves its buttons out of the bar. A tool switched off in the list below is gone from this profile altogether.'), style: Theme.of(context).textTheme.bodySmall),
+                  ),
                   if (active != null) ...[const Divider(), toolsSection()],
                 ]),
               ),

@@ -72,9 +72,12 @@ import '../reminders/reminder.dart' show ReminderKind;
 import '../widgets/notation_logo.dart';
 import '../widgets/notation_sidebar.dart';
 import 'folder_view.dart';
+import '../data/note_data.dart' show NoteSummary;
+import '../data/debounced_changes.dart';
 import 'bulk_note_actions.dart' show selectionBarsShowing;
 import 'fixed_page_note_editor.dart';
 import '../style/platform_dialog.dart';
+import 'phone_nav_settings.dart';
 
 /// The channel to the window of the app (Linux: `hide`).
 @visibleForTesting
@@ -233,6 +236,67 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   /// Rung when a kept page (dashboard, folders, calendar) comes to the front again: what changed while it was away is read.
   final _pageRefresh = _Refresh();
+
+  /// The starred notes the bar shows under the places (the newest first), and the request to show them all in the folder view.
+  List<NoteSummary> _sideFavourites = const [];
+  final _showFavourites = ValueNotifier<bool>(false);
+  StreamSubscription<void>? _favouritesLive;
+
+  Future<void> _loadSideFavourites() async {
+    final all = await _app.repository.listNotes();
+    final favs = [for (final n in all) if (n.favorite) n]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (!mounted) return;
+    final ids = [for (final n in favs.take(5)) '${n.id}|${n.title}'];
+    if (ids.join('\n') == [for (final n in _sideFavourites) '${n.id}|${n.title}'].join('\n')) return;
+    setState(() => _sideFavourites = favs.take(5).toList());
+  }
+
+  /// What the bar shows in its empty room: a few favourites (as many as fit, at most five) and a button for all of them.
+  Widget _favouritesFill(double room) {
+    const rowHeight = 34.0, head = 17.0 + 36.0;
+    final fit = ((room - head - 8) / rowHeight).floor().clamp(0, 5);
+    if (_sideFavourites.isEmpty || fit < 1) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final quiet = scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8), child: Divider(height: 1, thickness: 1, color: scheme.outlineVariant)),
+        SizedBox(
+          height: 36,
+          child: InkWell(
+            key: const ValueKey('side-favourites'),
+            borderRadius: BorderRadius.circular(6),
+            onTap: () {
+              _showFavourites.value = true;
+              _go(index: 1);
+            },
+            child: Row(children: [
+              const SizedBox(width: 10),
+              Icon(Symbols.star, size: 20, color: quiet),
+              const SizedBox(width: 12),
+              Expanded(child: Text.verbatim(tr('Favourites'), style: TextStyle(fontSize: 14, color: quiet))),
+              Icon(Symbols.chevron_right, size: 18, color: quiet),
+              const SizedBox(width: 6),
+            ]),
+          ),
+        ),
+        for (final n in _sideFavourites.take(fit))
+          SizedBox(
+            height: rowHeight,
+            child: InkWell(
+              key: ValueKey('side-fav-${n.id}'),
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => _go(index: 3, note: n.id),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 42, right: 8),
+                child: Align(alignment: Alignment.centerLeft, child: Text.verbatim(n.title.isEmpty ? tr('Untitled Note') : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: _focused == n.id ? scheme.onSurface : quiet, fontWeight: _focused == n.id ? FontWeight.w500 : FontWeight.w400))),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
   final Map<String, GlobalKey> _pageKeys = {};
   String? _lastGraph;
   static const _homeKey = 'page:0'; // the dashboard
@@ -936,6 +1000,9 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
 
   @override
   void dispose() {
+    phoneNavItems.removeListener(_navChosen);
+    _favouritesLive?.cancel();
+    _showFavourites.dispose();
     _notesChat?.dispose();
     _lockTimer?.cancel();
     _keptTimer?.cancel();
@@ -1026,6 +1093,12 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     if (automations != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => automations.bus.emit(AppEvent(AutomationEvent.appStarted.name)));
     }
+    _app.repository.settings.get(phoneNavKey).then((v) {
+      if (mounted) phoneNavItems.value = decodePhoneNav(v);
+    });
+    phoneNavItems.addListener(_navChosen);
+    _loadSideFavourites();
+    _favouritesLive = debouncedChanges([_app.repository.changes, _app.repository.created]).listen((_) => _loadSideFavourites());
     _app.repository.settings.get(_railHiddenKey).then((v) {
       if (!mounted || v != '1') return;
       _railSlide.value = 0; // (hidden from the start: no sliding out at launch)
@@ -1106,6 +1179,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           selected: _navItems.contains(_selectedNavIndex) ? _selectedNavIndex : null,
           wide: extended,
           pinned: 5,
+          fill: _favouritesFill,
           onSelect: (i) => _go(index: i),
           header: extended
               ? Row(children: [
@@ -1153,8 +1227,13 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   final _phoneScaffold = GlobalKey<ScaffoldState>();
 
   /// A phone: the main places sit in a bar at the bottom, every place is in the menu (the button at the top left, or a swipe from the left edge); an open note gets the whole screen.
+  void _navChosen() {
+    if (mounted) setState(() {});
+  }
+
   Widget _phoneShell() {
-    final inBar = [for (final i in const [0, 1, 6, 9]) if (_navItems.contains(i)) i];
+    final chosen = [for (final i in phoneNavItems.value) if (_navItems.contains(i)) i];
+    final inBar = chosen.length >= 2 ? chosen : [for (final i in defaultPhoneNav) if (_navItems.contains(i)) i];
     final inBarNow = inBar.contains(_selectedNavIndex);
     NavigationDestination of(int i) {
       final d = _destinations[i]!;
@@ -1240,12 +1319,20 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       );
 
   /// What a tab shows: a note, a graph, or a place of the menu.
+  final _navKeys = <String, GlobalKey<NavigatorState>>{};
+
   Widget _viewFor(String key) {
     if (_isNote(key)) return _editor(key);
     if (_isGraph(key)) return _graphView(key);
     final page = KeyedSubtree(key: _pageKeys.putIfAbsent(key, () => GlobalKey()), child: _pageView(_pageOf(key) ?? 0));
     // (on a phone the button of the menu sits over the top left corner of the assistant's page)
-    return MediaQuery.sizeOf(context).width < 600 && _pageOf(key) == 9 ? Padding(padding: const EdgeInsets.only(top: 48), child: page) : page;
+    final shown = MediaQuery.sizeOf(context).width < 600 && _pageOf(key) == 9 ? Padding(padding: const EdgeInsets.only(top: 48), child: page) : page;
+    // a screen opened from the page (a study session, the reminders) lies over this tab only, not over the whole window
+    return Navigator(
+      key: _navKeys.putIfAbsent(key, () => GlobalKey<NavigatorState>()), // (a global key: the tab moves between the row and the hidden stack with its screens)
+      pages: [MaterialPage<void>(key: const ValueKey('tab-page'), child: shown)],
+      onDidRemovePage: (_) {},
+    );
   }
 
   Widget _pageView(int place) {
@@ -1262,6 +1349,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           reminders: _app.reminders,
           onOpenNote: (id) => _go(index: 3, note: id),
           refresh: _pageRefresh,
+          showFavourites: _showFavourites,
         );
       case 9:
         final ai = _app.ai;
@@ -1433,6 +1521,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           if (pane != null) _focusPane(pane);
           _newTab();
         },
+        onReorder: (keys) => setState(() => _tabs = keys),
         onToggleAll: _toggleAll,
         allShown: _shown.length > 1,
         // the menu button comes back where the menu was hidden: at the left end of the first strip

@@ -41,7 +41,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: DashboardView(repository: repo, onOpenNote: (id) => opened = id)));
     await settle(tester);
 
-    await tester.tap(find.byKey(const ValueKey('select-notes')));
+    await tester.tap(find.byKey(const ValueKey('dashboard-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('menu-select-notes')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('selection-count')), findsOneWidget);
     await tester.tap(find.text('One'));
@@ -67,7 +69,9 @@ void main() {
     expect(find.byKey(const ValueKey('selection-count')), findsNothing); // done: the selection ends
 
     // select two others with a long press and the menu, and throw them away
-    await tester.tap(find.byKey(const ValueKey('select-notes')));
+    await tester.tap(find.byKey(const ValueKey('dashboard-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('menu-select-notes')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Three'));
     await tester.pumpAndSettle();
@@ -78,8 +82,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('selection-delete')));
     await tester.pumpAndSettle();
-    expect(find.text('Move 2 notes to the trash?'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('bulk-confirm-delete')));
+    expect(find.text('Move 2 notes to the trash?'), findsNothing);
+    // (no question: the notes go to the trash with an Undo)
     await settle(tester);
     expect((await tester.runAsync(repo.listNotes))!.map((n) => n.title).toSet(), {'One', 'Two'});
     expect((await tester.runAsync(repo.listTrash))!.map((n) => n.title).toSet(), {'Three', 'Four'});

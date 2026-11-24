@@ -116,10 +116,10 @@ void main() {
 
     await tester.drag(find.byKey(const ValueKey('symmetry-picker')), const Offset(0, 900)); // (the drawing bar back to its top)
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes(), isEmpty);
-    await tester.tap(find.byKey(const ValueKey('redo-button')));
+    await tester.tap(find.byKey(const ValueKey('redo-any')));
     await tester.pumpAndSettle();
     expect(strokes().length, 2);
   });

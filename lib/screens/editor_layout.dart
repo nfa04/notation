@@ -3,7 +3,42 @@ part of 'fixed_page_note_editor.dart';
 /// What the editor is made of on the screen: the buttons of the top bar and the scrolling pages (the rest of the frame is in `build`).
 extension _EditorLayout on _FixedPageNoteEditorState {
   /// Goes to select, draw or document mode.
+  /// Opens the note in the mode it was left in; a note never opened before starts in Draw when a pen has been used on this device
+  /// (and the note is not a PDF, which is read first), else in Select. Done once, when both the note and the settings are read.
+  void _applyStartMode() {
+    if (_startModeDone || !_loaded || !_modeSettingsRead) return;
+    _startModeDone = true;
+    if (_mode != CanvasInteractionMode.selectText) return;
+    final draw = _savedMode == null ? _penSeen && _isBlank && !_hasDocument : _savedMode == 'draw';
+    if (draw) _mode = CanvasInteractionMode.draw;
+  }
+
+  /// The first touch of a pen on this device: from now on blank notes open in Draw, and this one does so now.
+  void _noticePen(PointerDownEvent e) {
+    if (_penSeen || (e.kind != PointerDeviceKind.stylus && e.kind != PointerDeviceKind.invertedStylus)) return;
+    _penSeen = true;
+    if (_mode == CanvasInteractionMode.selectText && _isBlank && !_hasDocument && _savedMode == null) _selectMode(CanvasInteractionMode.draw);
+  }
+
+  /// Writes down the mode this note was left in and that a pen was used, when they changed: with the note, as it is saved (a write of
+  /// its own would be one more thing to wait for, and a note that is only looked at writes nothing).
+  bool get _modeSettingsChanged => (_savedMode != null && _savedMode != _modeWritten) || (_penSeen && !_penSeenWritten);
+
+  Future<void> _writeModeSettings() async {
+    final settings = widget.repository.settings;
+    final mode = _savedMode;
+    if (mode != null && mode != _modeWritten) {
+      _modeWritten = mode;
+      await settings.set('note_mode_${widget.noteId}', mode);
+    }
+    if (_penSeen && !_penSeenWritten) {
+      _penSeenWritten = true;
+      await settings.set('pen_seen', '1');
+    }
+  }
+
   void _selectMode(CanvasInteractionMode mode) {
+    if (_startModeDone && mode != CanvasInteractionMode.document) _savedMode = mode == CanvasInteractionMode.draw ? 'draw' : 'select';
     setState(() {
       _mode = mode;
       // boxes are not editable in document mode: show them rendered
@@ -16,29 +51,9 @@ extension _EditorLayout on _FixedPageNoteEditorState {
     if (_mode != CanvasInteractionMode.document) _leavePdfEdit();
   }
 
-  void _toggleFavorite() {
-    widget.repository.setFavorite(widget.noteId, !_favorite);
-    setState(() => _favorite = !_favorite);
-  }
-
-  Future<void> _remindAboutNote() => showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: widget.noteId, title: _titleController.text.trim().isEmpty ? tr('Untitled Note') : _titleController.text.trim());
-
-  /// The buttons of the top bar, left to right: the view, undo, the mode, what can be put on the page, the page itself,
-  /// speech and the assistant, history and live work, and the files.
-  List<Widget> _toolbarButtons(BuildContext context, {bool bottom = false}) {
-    final sections = <String, List<Widget>>{
-      'edit': [
-      // (ending the split view is not here: it sits in the title bar, where no toolbar arrangement can hide it)
-      if (widget.onCloseSplit == null && widget.onOpenBeside != null)
-        IconButton(
-          key: const ValueKey('open-beside'),
-          tooltip: tr('Open another note beside this one'),
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Symbols.vertical_split, size: 20),
-          onPressed: _chooseNoteBeside,
-        ),
-      // takes back (or does again) the last change of any kind, not only drawings
-      ValueListenableBuilder<int>(
+  /// Undo and redo for the last change of any kind, not only drawings. They sit in the title bar beside the arrange button, outside
+  /// the buttons that scroll and outside what can be hidden: while drawing they are the ones most often needed.
+  Widget _undoRedoButtons() => ValueListenableBuilder<int>(
         valueListenable: _undoTick,
         builder: (context, _, _) => Row(mainAxisSize: MainAxisSize.min, children: [
           IconButton(
@@ -56,13 +71,79 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             onPressed: _undoStack.canRedo ? _redoDrawing : null,
           ),
         ]),
+      );
+
+  void _toggleFavorite() {
+    widget.repository.setFavorite(widget.noteId, !_favorite);
+    setState(() => _favorite = !_favorite);
+  }
+
+  Future<void> _remindAboutNote() => showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: widget.noteId, title: _titleController.text.trim().isEmpty ? tr('Untitled Note') : _titleController.text.trim());
+
+  /// The buttons of the top bar, left to right: the view, undo, the mode, what can be put on the page, the page itself,
+  /// speech and the assistant, history and live work, and the files.
+  List<Widget> _toolbarButtons(BuildContext context, {bool bottom = false}) {
+    final sections = <String, List<Widget>>{
+      'more': [
+      // (ending the split view is not here: it sits in the title bar, where no toolbar arrangement can hide it)
+      if (widget.onCloseSplit == null && widget.onOpenBeside != null)
+        IconButton(
+          key: const ValueKey('open-beside'),
+          tooltip: tr('Open another note beside this one'),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Symbols.vertical_split, size: 20),
+          onPressed: _chooseNoteBeside,
+        ),
+      if (!_infinite && _on(Feature.flipbook)) _flipbookButton(),
+      if (_on(Feature.tables))
+      IconButton(
+        key: const ValueKey('add-truth-table'),
+        tooltip: tr('Make the truth table of a formula'),
+        icon: const Icon(Symbols.grid_on, size: 20),
+        onPressed: _insertTruthTable,
       ),
+      if (_on(Feature.images))
+      IconButton(
+        key: const ValueKey('add-collage'),
+        tooltip: tr('Add several pictures as a mood board'),
+        icon: const Icon(Symbols.dashboard, size: 20),
+        onPressed: _addCollage,
+      ),
+      if (_on(Feature.stamps))
+      IconButton(
+        key: const ValueKey('stamps'),
+        tooltip: tr('Stamps: drawings kept to put on a page again'),
+        icon: Icon(Symbols.approval, size: 20, color: _stampsOpen ? Theme.of(context).colorScheme.primary : null),
+        onPressed: _openStamps,
+      ),
+
+      if (_on(Feature.themeImages) && !_infinite)
+      IconButton(
+        tooltip: tr(_bannerImage == null
+            ? 'Set a theme image for this note'
+            : 'Change the theme image'),
+        icon: const Icon(Symbols.wallpaper, size: 20),
+        onPressed: _pickThemeImage,
+      ),
+      if (widget.ai != null && _on(Feature.ideas))
+        IconButton(
+          key: const ValueKey('ideas-button'),
+          tooltip: tr('Ideas from the assistant: colours, drawing prompts, characters, stories'),
+          icon: const Icon(Symbols.lightbulb_outline, size: 20),
+          onPressed: _openIdeas,
+        ),
+      if (widget.ai != null && _on(Feature.assistant))
+        IconButton(
+          key: const ValueKey('generated-button'),
+          tooltip: tr('What the AI made of this note'),
+          icon: Icon(Symbols.auto_fix_high, size: 20, color: _generatedOpen ? Theme.of(context).colorScheme.primary : null),
+          onPressed: _toggleGenerated,
+        ),
       ],
       'note': [
       if (_canShapePages) _pagesMenu(),
       if (_on(Feature.outline) && (widget.bookmarks != null || widget.links != null)) _outlineButton(),
       if (!_infinite && _on(Feature.present)) _presentButton(),
-      if (!_infinite && _on(Feature.flipbook)) _flipbookButton(),
       if (widget.audio != null && _on(Feature.audio)) _audioButton(),
       if (widget.audio != null && _on(Feature.audio)) _lectureButton(),
       if (widget.ai != null && _on(Feature.translate)) _translateButton(),
@@ -145,13 +226,6 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         icon: const Icon(Symbols.table_chart, size: 20),
         onPressed: _insertTable,
       ),
-      if (_on(Feature.tables))
-      IconButton(
-        key: const ValueKey('add-truth-table'),
-        tooltip: tr('Make the truth table of a formula'),
-        icon: const Icon(Symbols.grid_on, size: 20),
-        onPressed: _insertTruthTable,
-      ),
       if (_on(Feature.diagrams))
       IconButton(
         key: const ValueKey('add-diagram'),
@@ -180,21 +254,6 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         ),
         onPressed: _addImage,
       ),
-      if (_on(Feature.images))
-      IconButton(
-        key: const ValueKey('add-collage'),
-        tooltip: tr('Add several pictures as a mood board'),
-        icon: const Icon(Symbols.dashboard, size: 20),
-        onPressed: _addCollage,
-      ),
-      if (_on(Feature.stamps))
-      IconButton(
-        key: const ValueKey('stamps'),
-        tooltip: tr('Stamps: drawings kept to put on a page again'),
-        icon: Icon(Symbols.approval, size: 20, color: _stampsOpen ? Theme.of(context).colorScheme.primary : null),
-        onPressed: _openStamps,
-      ),
-
       ],
       'page': [
       // (in a PDF it is the paper of the pages added to it)
@@ -279,14 +338,6 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         ],
       ],
 
-      if (_on(Feature.themeImages) && !_infinite)
-      IconButton(
-        tooltip: tr(_bannerImage == null
-            ? 'Set a theme image for this note'
-            : 'Change the theme image'),
-        icon: const Icon(Symbols.wallpaper, size: 20),
-        onPressed: _pickThemeImage,
-      ),
       ],
       'tools': [
       if (widget.speech != null && _on(Feature.dictate))
@@ -308,25 +359,12 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             onPressed: _readAloud,
           ),
         ),
-      if (widget.ai != null && _on(Feature.ideas))
-        IconButton(
-          key: const ValueKey('ideas-button'),
-          tooltip: tr('Ideas from the assistant: colours, drawing prompts, characters, stories'),
-          icon: const Icon(Symbols.lightbulb_outline, size: 20),
-          onPressed: _openIdeas,
-        ),
       if (widget.ai != null && _on(Feature.assistant)) ...[
         IconButton(
           key: const ValueKey('assistant-button'),
           tooltip: tr('Ask about this document'),
           icon: Icon(Symbols.auto_awesome, size: 20, color: _assistantOpen ? Theme.of(context).colorScheme.primary : null),
           onPressed: _toggleAssistant,
-        ),
-        IconButton(
-          key: const ValueKey('generated-button'),
-          tooltip: tr('What the AI made of this note'),
-          icon: Icon(Symbols.auto_fix_high, size: 20, color: _generatedOpen ? Theme.of(context).colorScheme.primary : null),
-          onPressed: _toggleGenerated,
         ),
       ],
       ],
@@ -461,6 +499,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
     if (_presenting) return const ColoredBox(color: Colors.black);
     return Listener(
       onPointerDown: (e) {
+        _noticePen(e);
         _lastPointerDown = e.pointer;
         _areaDownAt = e.position;
         _areaDownTime = DateTime.now();

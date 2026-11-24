@@ -33,6 +33,9 @@ class WorkspaceTabStrip extends StatelessWidget {
   final ValueChanged<String> onCloseOthers;
   final VoidCallback onNewTab;
 
+  /// The tabs were put in a new order (all the keys, in that order).
+  final ValueChanged<List<String>> onReorder;
+
   /// Shows all tabs side by side (as far as they fit), or one again.
   final VoidCallback onToggleAll;
   final bool allShown;
@@ -50,6 +53,7 @@ class WorkspaceTabStrip extends StatelessWidget {
     required this.onShowAlone,
     required this.onCloseOthers,
     required this.onNewTab,
+    required this.onReorder,
     required this.onToggleAll,
     required this.allShown,
     this.leading,
@@ -66,9 +70,22 @@ class WorkspaceTabStrip extends StatelessWidget {
         child: Row(children: [
           ?leading,
           Expanded(
-            child: ListView(
+            child: ReorderableListView(
               scrollDirection: Axis.horizontal,
-              children: [for (final t in tabs) _tab(context, t)],
+              buildDefaultDragHandles: false,
+              // (no lift shadow: the paper look is flat)
+              proxyDecorator: (child, _, _) => Material(type: MaterialType.transparency, child: child),
+              onReorderItem: (from, to) {
+                if (from == to) return;
+                final keys = [for (final t in tabs) t.key];
+                keys.insert(to, keys.removeAt(from));
+                onReorder(keys);
+              },
+              children: [
+                for (var i = 0; i < tabs.length; i++)
+                  // a pointer drags at once; on a touch screen a long press is the menu, which has "Move left/right" instead
+                  ReorderableDragStartListener(key: ValueKey('drag-${tabs[i].key}'), index: i, enabled: !_touch, child: _tab(context, tabs[i], i)),
+              ],
             ),
           ),
           IconButton(key: const ValueKey('tab-new'), tooltip: tr('Open a note in a new tab'), visualDensity: VisualDensity.compact, icon: const Icon(Symbols.add, size: 20), onPressed: onNewTab),
@@ -85,7 +102,7 @@ class WorkspaceTabStrip extends StatelessWidget {
     );
   }
 
-  Widget _tab(BuildContext context, WorkspaceTab t) {
+  Widget _tab(BuildContext context, WorkspaceTab t, int index) {
     final scheme = Theme.of(context).colorScheme;
     final on = shown.contains(t.key), hasKeys = focused == t.key;
     final title = t.title.trim().isEmpty ? tr('Untitled') : t.title.trim();
@@ -97,11 +114,23 @@ class WorkspaceTabStrip extends StatelessWidget {
         items: [
           PopupMenuItem(value: 'beside', child: Text(on && shown.length > 1 ? 'Take out of the side-by-side view' : 'Show beside the others')),
           if (shown.length > 1 || !on) PopupMenuItem(value: 'alone', child: const Text('Show alone')),
+          if (index > 0) PopupMenuItem(value: 'left', child: const Text('Move left')),
+          if (index < tabs.length - 1) PopupMenuItem(value: 'right', child: const Text('Move right')),
           PopupMenuItem(value: 'close', child: const Text('Close tab')),
           if (tabs.length > 1) PopupMenuItem(value: 'others', child: const Text('Close other tabs')),
         ],
       );
+      void move(int by) {
+        final keys = [for (final x in tabs) x.key];
+        keys.insert(index + by, keys.removeAt(index));
+        onReorder(keys);
+      }
+
       switch (choice) {
+        case 'left':
+          move(-1);
+        case 'right':
+          move(1);
         case 'beside':
           onSelect(t.key, beside: true);
         case 'alone':

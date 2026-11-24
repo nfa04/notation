@@ -44,7 +44,6 @@ import 'template_picker.dart';
 import '../templates/templates.dart';
 import 'shared_badge.dart';
 import 'share_people.dart';
-import '../style/platform_dialog.dart';
 import '../widgets/paper.dart';
 
 /// The first screen: recent and starred notes, tasks, and the buttons that make a note (blank, from a PDF, a template,
@@ -143,7 +142,7 @@ class _DashboardViewState extends State<DashboardView> {
   Future<void> _trashSelected() async {
     final ids = _selectedIds;
     if (ids.isEmpty) return;
-    if (await trashNotes(context, widget.repository, ids)) _endSelecting();
+    if (await trashNotes(context, widget.repository, ids, onRestored: _reload)) _endSelecting();
     _reload();
   }
 
@@ -268,19 +267,7 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Future<void> _deleteNote(NoteSummary note) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => PlatformAlertDialog(
-        title: const Text('Move note to the trash?'),
-        content: Text.verbatim(tr('"{title}" goes to the trash, where it stays for 30 days.', {'title': note.shownTitle})),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await widget.repository.trashNote(note.id);
+    await trashNotes(context, widget.repository, [note.id], onRestored: _reload);
     _reload();
   }
 
@@ -289,13 +276,8 @@ class _DashboardViewState extends State<DashboardView> {
     _reload();
   }
 
-  /// The card's menu, where a right click or a long press lands.
-  Future<void> _showCardMenu(NoteSummary note, Offset global) async {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(global & const Size(1, 1), Offset.zero & overlay.size),
-      items: [
+  /// What a note's menu holds: the same for the ⋮ button on the card and for a right click or a long press on it.
+  List<PopupMenuEntry<String>> _cardMenuItems(NoteSummary note) => [
         const PopupMenuItem(value: 'open', child: Text('Open')),
         if (widget.templates != null && !note.locked) const PopupMenuItem(value: 'template', child: Text('Save as a template...')),
         PopupMenuItem(value: 'star', child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
@@ -303,8 +285,9 @@ class _DashboardViewState extends State<DashboardView> {
         const PopupMenuItem(value: 'select', child: Text('Select')),
         if (widget.noteFiles != null && !note.locked) const PopupMenuItem(value: 'file', child: Text('Save as a file...')),
         const PopupMenuItem(value: 'delete', child: Text('Delete')),
-      ],
-    );
+      ];
+
+  Future<void> _cardChoice(NoteSummary note, String? choice) async {
     if (choice == 'open') widget.onOpenNote(note.id);
     if (choice == 'star') await _toggleFavorite(note);
     if (choice == 'remind' && mounted) await showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: note.id, title: note.shownTitle);
@@ -312,6 +295,17 @@ class _DashboardViewState extends State<DashboardView> {
     if (choice == 'template' && mounted) await saveNoteAsTemplate(context, widget.templates!, note.id, note.title);
     if (choice == 'file' && mounted) await saveNoteAsFile(context, widget.noteFiles!, note.id, note.title);
     if (choice == 'delete') await _deleteNote(note);
+  }
+
+  /// The card's menu, where a right click or a long press lands.
+  Future<void> _showCardMenu(NoteSummary note, Offset global) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(global & const Size(1, 1), Offset.zero & overlay.size),
+      items: _cardMenuItems(note),
+    );
+    await _cardChoice(note, choice);
   }
 
   static String _ago(DateTime t) {
@@ -371,21 +365,22 @@ class _DashboardViewState extends State<DashboardView> {
           },
           widget: null,
         ),
-      // (the two round buttons at the foot of the page on a wide screen)
-      if (phone) ...[
-        (key: 'new-from-pdf', icon: Symbols.picture_as_pdf, label: tr('New note from a PDF'), onTap: _fromPdf, widget: null),
-        (
-          key: 'import-from-apps',
-          icon: Symbols.move_to_inbox,
-          label: tr('Bring your notes from another app'),
-          onTap: () async {
-            await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
-            if (mounted) _reload();
-          },
-          widget: null,
-        ),
-      ],
+      (key: 'new-from-pdf', icon: Symbols.picture_as_pdf, label: tr('New note from a PDF'), onTap: _fromPdf, widget: null),
+      (
+        key: 'import-from-apps',
+        icon: Symbols.move_to_inbox,
+        label: tr('Bring your notes from another app'),
+        onTap: () async {
+          await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
+          if (mounted) _reload();
+        },
+        widget: null,
+      ),
     ];
+    // (what makes a note is in the menu of the "New Note" button; the title bar keeps what is about the notes you have)
+    const makers = {'quick-note', 'clip-page', 'record-meeting', 'new-from-template', 'open-note-file', 'new-from-pdf', 'import-from-apps'};
+    final makes = [for (final t in tools) if (makers.contains(t.key)) t];
+    final about = [for (final t in tools) if (!makers.contains(t.key)) t];
     return Scaffold(
       appBar: _selecting
           ? SelectionBar(
@@ -402,20 +397,18 @@ class _DashboardViewState extends State<DashboardView> {
         title: const Text('Dashboard'),
         actions: [
           if (widget.sync != null) SyncNowButton(sync: widget.sync!, shares: widget.collab?.nativeShares),
-          if (phone) ...[
-            // a phone has room for few buttons: the rest are in a menu, the same actions
-            if (widget.cards != null) ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository),
-            PopupMenuButton<String>(
-              key: const ValueKey('dashboard-more'),
-              tooltip: tr('More'),
-              onSelected: (key) => tools.firstWhere((t) => t.key == key).onTap(),
-              itemBuilder: (_) => [
-                for (final t in tools)
-                  if (t.key != 'review-cards') PopupMenuItem(key: ValueKey('menu-${t.key}'), value: t.key, child: ListTile(leading: Icon(t.icon), title: Text.verbatim(t.label), contentPadding: EdgeInsets.zero)),
-              ],
-            ),
-          ] else
-            for (final t in tools) t.widget ?? IconButton(key: ValueKey(t.key), tooltip: t.label, icon: Icon(t.icon), onPressed: t.onTap),
+          // the two with a badge keep their place on a wide screen; a phone has room for the review only
+          for (final t in about)
+            if (t.widget != null && (!phone || t.key == 'review-cards')) t.widget!,
+          PopupMenuButton<String>(
+            key: const ValueKey('dashboard-more'),
+            tooltip: tr('More'),
+            onSelected: (key) => about.firstWhere((t) => t.key == key).onTap(),
+            itemBuilder: (_) => [
+              for (final t in about)
+                if (t.widget == null || (phone && t.key != 'review-cards')) PopupMenuItem(key: ValueKey('menu-${t.key}'), value: t.key, child: ListTile(leading: Icon(t.icon), title: Text.verbatim(t.label), contentPadding: EdgeInsets.zero)),
+            ],
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -443,16 +436,20 @@ class _DashboardViewState extends State<DashboardView> {
                           if (widget.collab?.nativeShares != null) ShareInvitations(service: widget.collab!.nativeShares!),
                           if (widget.automations != null) AskCard(service: widget.automations!, repository: widget.repository, onOpenNote: widget.onOpenNote),
                           if (widget.planner != null) StudySessionCard(planner: widget.planner!, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt),
-                          Text(
-                            'Welcome back',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w300),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            notes.isEmpty ? 'No notes yet - create your first one.' : 'Here are your recent study notes:',
-                            style: TextStyle(color: Theme.of(context,).colorScheme.onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 24),
+                          if (notes.isEmpty)
+                            _emptyState(context)
+                          else ...[
+                            Text(
+                              'Welcome back',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w300),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Here are your recent notes:',
+                              style: TextStyle(color: Theme.of(context,).colorScheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
                         ],
                       ),
                     ),
@@ -488,32 +485,80 @@ class _DashboardViewState extends State<DashboardView> {
           );
         },
       ),
-      floatingActionButton: Wrap(spacing: 12, runSpacing: 12, alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        if (!phone) ...[
-        FloatingActionButton.small(
-          key: const ValueKey('new-from-pdf'),
-          heroTag: 'new-from-pdf',
-          tooltip: tr('New note from a PDF'),
-          onPressed: _fromPdf,
-          child: const Icon(Symbols.picture_as_pdf),
+      // (while there are no notes the box on the page has the buttons)
+      floatingActionButton: FutureBuilder<List<NoteSummary>>(future: _notes, builder: (context, snapshot) => snapshot.hasData && snapshot.data!.isEmpty ? const SizedBox.shrink() : _newNoteButton(makes)),
+    );
+  }
+
+  /// "New Note", which makes a blank note at once, with two small buttons beside it: one for a PDF (its own button, as a PDF is what the
+  /// app is for as much as a blank page) and one for the other ways to start a note (a template, a quick note, a recording, another
+  /// app's notes).
+  Widget _newNoteButton(List<_DashboardTool> makes) {
+    final scheme = Theme.of(context).colorScheme;
+    final on = scheme.onPrimary;
+    Widget small(Widget child) => Material(
+          color: scheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: scheme.outlineVariant)),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(width: 44, height: 44, child: child),
+        );
+    final pdf = small(IconButton(key: const ValueKey('new-from-pdf'), tooltip: tr('New note from a PDF'), onPressed: _fromPdf, icon: const Icon(Symbols.picture_as_pdf, size: 22)));
+    final more = small(PopupMenuButton<String>(
+      key: const ValueKey('new-note-more'),
+      tooltip: tr('Other ways to start a note'),
+      icon: const Icon(Symbols.more_horiz, size: 22),
+      onSelected: (key) => makes.firstWhere((t) => t.key == key).onTap(),
+      itemBuilder: (_) => [
+        for (final t in makes) if (t.key != 'new-from-pdf') PopupMenuItem(key: ValueKey('make-${t.key}'), value: t.key, child: ListTile(leading: Icon(t.icon), title: Text.verbatim(t.label), contentPadding: EdgeInsets.zero)),
+      ],
+    ));
+    final primary = Material(
+      color: scheme.primary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: const ValueKey('new-note'),
+        onTap: _createNote,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 20, 14),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Symbols.add, color: on),
+            const SizedBox(width: 8),
+            Text('New Note', style: TextStyle(color: on, fontWeight: FontWeight.w500)),
+          ]),
         ),
-        FloatingActionButton.small(
-          key: const ValueKey('import-from-apps'),
-          heroTag: 'import-from-apps',
-          tooltip: tr('Bring your notes from another app'),
-          onPressed: () async {
-            await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
-            if (mounted) _reload();
-          },
-          child: const Icon(Symbols.move_to_inbox),
-        ),
-        ],
-        FloatingActionButton.extended(
-          heroTag: 'new-note',
-          onPressed: _createNote,
-          icon: const Icon(Symbols.add),
-          label: const Text('New Note'),
-        ),
+      ),
+    );
+    return Row(mainAxisSize: MainAxisSize.min, children: [more, const SizedBox(width: 8), pdf, const SizedBox(width: 12), primary]);
+  }
+
+  /// What the page says while there are no notes: where to start, with the one thing to do first made plain. (A call to act, so a
+  /// hairline box; the buttons at the foot of the page wait until there is a first note.)
+  Widget _emptyState(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const ValueKey('dashboard-empty'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('No notes yet', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w300)),
+        const SizedBox(height: 4),
+        Text('Write or draw on a blank page, or start from something you already have.', style: TextStyle(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 16),
+        Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          FilledButton.icon(key: const ValueKey('empty-new-note'), onPressed: _createNote, icon: const Icon(Symbols.add), label: const Text('Create your first note')),
+          OutlinedButton.icon(key: const ValueKey('empty-from-pdf'), onPressed: _fromPdf, icon: const Icon(Symbols.picture_as_pdf), label: const Text('Annotate a PDF')),
+          TextButton.icon(
+            key: const ValueKey('empty-import'),
+            onPressed: () async {
+              await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
+              if (mounted) _reload();
+            },
+            icon: const Icon(Symbols.move_to_inbox),
+            label: const Text('Bring notes from another app'),
+          ),
+        ]),
       ]),
     );
   }
@@ -565,6 +610,20 @@ class _DashboardViewState extends State<DashboardView> {
                   BoundedFileImage(File(note.themeImage!), key: ValueKey(note.themeImage), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
                 if (widget.previews != null)
                   NotePreviewImage(previews: widget.previews, noteId: note.id, changed: note.updatedAt, locked: note.locked, opacity: note.themeImage != null ? 0.75 : 0.95, borderRadius: corners),
+                // the star on the page's corner: a target of 44 pixels, which the title line has no room for
+                if (!_selecting)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: IconButton(
+                      key: ValueKey('star-${note.id}'),
+                      tooltip: tr(note.favorite ? 'Remove from favourites' : 'Add to favourites'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                      icon: Icon(note.favorite ? Symbols.star_rounded : Symbols.star_outline_rounded, size: 20, color: note.favorite ? scheme.primary : Colors.black45),
+                      onPressed: () => _toggleFavorite(note),
+                    ),
+                  ),
                 Positioned(
                   right: 8,
                   bottom: 6,
@@ -594,26 +653,13 @@ class _DashboardViewState extends State<DashboardView> {
           if (_selecting)
             Checkbox.adaptive(key: ValueKey('select-${note.id}'), value: selected, onChanged: (_) => _toggleSelected(note.id))
           else ...[
-            IconButton(
-              key: ValueKey('star-${note.id}'),
-              tooltip: tr(note.favorite ? 'Remove from favourites' : 'Add to favourites'),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-              icon: Icon(note.favorite ? Symbols.star_rounded : Symbols.star_outline_rounded, size: 18, color: note.favorite ? scheme.primary : scheme.onSurfaceVariant),
-              onPressed: () => _toggleFavorite(note),
-            ),
-            PopupMenuButton<void>(
+            PopupMenuButton<String>(
               tooltip: tr('More'),
               padding: EdgeInsets.zero,
               iconSize: 18,
               icon: Icon(Symbols.more_vert, size: 18, color: scheme.onSurfaceVariant),
-              itemBuilder: (_) => [
-                PopupMenuItem(onTap: () => _toggleFavorite(note), child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
-                if (widget.noteFiles != null && !note.locked)
-                  PopupMenuItem(onTap: () => saveNoteAsFile(context, widget.noteFiles!, note.id, note.title), child: const Text('Save as a file...')),
-                PopupMenuItem(onTap: () => _toggleSelected(note.id), child: const Text('Select')),
-                PopupMenuItem(onTap: () => _deleteNote(note), child: const Text('Delete')),
-              ],
+              onSelected: (choice) => _cardChoice(note, choice),
+              itemBuilder: (_) => _cardMenuItems(note),
             ),
           ],
         ]),

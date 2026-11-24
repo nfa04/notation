@@ -110,15 +110,15 @@ void main() {
     expect(note.strokes[0]!.last.points.first - orig.points.first, const Offset(48, 48));
 
     // one step to take back each
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pump();
     note = await saved(tester);
     expect(note.strokes[0], hasLength(2));
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pump();
     note = await saved(tester);
     expect(note.strokes[0]!.map((s) => s.id), ['orig']);
-    await tester.tap(find.byKey(const ValueKey('redo-button')));
+    await tester.tap(find.byKey(const ValueKey('redo-any')));
     await tester.pump();
     note = await saved(tester);
     expect(note.strokes[0], hasLength(2));

@@ -122,7 +122,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: DashboardView(repository: repo, templates: service, onOpenNote: (id) => opened = id)));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('new-from-template')));
+    await tester.tap(find.byKey(const ValueKey('new-note-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('make-new-from-template')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('template-search')), 'meeting');

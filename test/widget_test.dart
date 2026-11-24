@@ -47,6 +47,6 @@ void main() {
     for (final section in ['Folders', 'Calendar', 'Settings']) {
       expect(find.text(section), findsOneWidget);
     }
-    expect(find.text('New Note'), findsOneWidget);
+    expect(find.text('Create your first note'), findsOneWidget, reason: 'no notes yet: the page says where to start');
   });
 }

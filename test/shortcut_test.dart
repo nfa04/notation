@@ -207,10 +207,10 @@ void main() {
 
     testWidgets('the default keys change the mode, the tool and the color', (tester) async {
       await open(tester);
-      expect(find.byKey(const ValueKey('undo-button')), findsNothing); // select mode: no drawing bar
+      expect(find.byKey(const ValueKey('brush-picker')), findsNothing); // select mode: no drawing bar
       await press(tester, LogicalKeyboardKey.digit2, held: [alt]);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('brush-picker')), findsOneWidget);
 
       expect(find.byWidgetPredicate((w) => w is Icon && w.icon == Symbols.auto_fix_normal && w.fill == 1), findsNothing); // (the icon of the eraser when it is on)
       await press(tester, LogicalKeyboardKey.keyE);
@@ -231,7 +231,7 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.digit1, held: [alt]);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('undo-button')), findsNothing); // back in select mode
+      expect(find.byKey(const ValueKey('brush-picker')), findsNothing); // back in select mode
     });
 
     testWidgets('a key the person chose does what it is set to, and the old one does nothing', (tester) async {
@@ -241,11 +241,11 @@ void main() {
       });
       await press(tester, LogicalKeyboardKey.digit2, held: [alt]); // the usual key for draw mode is gone
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('undo-button')), findsNothing);
+      expect(find.byKey(const ValueKey('brush-picker')), findsNothing);
 
       await press(tester, LogicalKeyboardKey.keyX, held: [ctrl, shift]); // the eraser, which goes to draw mode by itself
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('brush-picker')), findsOneWidget);
       expect(find.byWidgetPredicate((w) => w is Icon && w.icon == Symbols.auto_fix_normal && w.fill == 1), findsOneWidget);
     });
 

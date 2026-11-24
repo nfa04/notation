@@ -405,13 +405,6 @@ class _CalendarViewState extends State<CalendarView> {
         title: const Text('Calendar'),
         backgroundColor: _style.backgroundFor(Theme.of(context).brightness),
         actions: _narrow ? _compactActions() : [
-          if (_writable.isNotEmpty)
-            IconButton(
-              key: const ValueKey('new-event'),
-              icon: const Icon(Symbols.event_available),
-              tooltip: tr('New event'),
-              onPressed: _newEvent,
-            ),
           if (widget.mirror != null)
             IconButton(
               key: const ValueKey('tasks-on-calendar'),
@@ -446,6 +439,10 @@ class _CalendarViewState extends State<CalendarView> {
           ],
         ],
       ),
+      // (the one thing to do on this page, with its name on it)
+      floatingActionButton: _writable.isEmpty
+          ? null
+          : FloatingActionButton.extended(key: const ValueKey('new-event'), heroTag: 'new-event', onPressed: _newEvent, icon: const Icon(Symbols.add), label: const Text('New event')),
       body: _narrow
           // a phone: the day's list sits under the calendar instead of beside it
           ? Column(
@@ -465,9 +462,8 @@ class _CalendarViewState extends State<CalendarView> {
     );
   }
 
-  /// A phone's app bar has room for the new-event button, a sync button and a menu with the rest.
+  /// A phone's app bar has room for a sync button and a menu with the rest (the new-event button is at the foot of the page).
   List<Widget> _compactActions() => [
-        if (_writable.isNotEmpty) IconButton(key: const ValueKey('new-event'), icon: const Icon(Symbols.event_available), tooltip: tr('New event'), onPressed: _newEvent),
         if (_caldav?.isConnected == true)
           _caldav!.syncing
               ? const Padding(padding: EdgeInsets.symmetric(horizontal: 14), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))))

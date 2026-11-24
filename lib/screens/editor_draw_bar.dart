@@ -89,8 +89,16 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
     final profiles = decodeToolbarProfiles(
       await widget.repository.settings.get('toolbar_profiles'),
     );
+    final savedMode = await widget.repository.settings.get('note_mode_${widget.noteId}');
+    final penSeen = await widget.repository.settings.get('pen_seen');
     if (mounted) {
       setState(() {
+        _savedMode = savedMode;
+        _penSeen = penSeen == '1';
+        _penSeenWritten = _penSeen;
+        _modeWritten = savedMode;
+        _modeSettingsRead = true;
+        _applyStartMode();
         _toolbarOrder = layout.top;
         _toolbarBottom = layout.bottom;
         _toolbarHidden = layout.hidden;
@@ -546,32 +554,6 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
     final primary = Theme.of(context).colorScheme.primary;
 
     final tools = <Widget>[
-      // (they follow the undo steps themselves: a line written builds nothing else)
-      Center(
-        heightFactor: 1,
-        child: ValueListenableBuilder<int>(
-          valueListenable: _undoTick,
-          builder: (context, _, _) => IconButton(
-            key: const ValueKey('undo-button'),
-            icon: const Icon(Symbols.undo_rounded, size: 22),
-            tooltip: tr('Undo'),
-            onPressed: _undoStack.canUndo ? _undoDrawing : null,
-          ),
-        ),
-      ),
-      Center(
-        heightFactor: 1,
-        child: ValueListenableBuilder<int>(
-          valueListenable: _undoTick,
-          builder: (context, _, _) => IconButton(
-            key: const ValueKey('redo-button'),
-            icon: const Icon(Symbols.redo_rounded, size: 22),
-            tooltip: tr('Redo'),
-            onPressed: _undoStack.canRedo ? _redoDrawing : null,
-          ),
-        ),
-      ),
-      const ToolGroupDivider(width: 32, height: 24),
       if (_availableBrushes.length > 1) Center(heightFactor: 1, child: _brushButton()),
       if (_on(Feature.highlighter))
         Center(

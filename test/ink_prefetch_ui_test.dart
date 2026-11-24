@@ -45,7 +45,7 @@ void main() {
     await tester.pumpAndSettle();
     final pageTop = tester.getTopLeft(find.byType(CustomScrollView));
     // (the drawing tools take a column of 56 pixels, or more of them when they do not fit the height)
-    final barLeft = tester.getCenter(find.byKey(const ValueKey('undo-button'))).dx - 28;
+    final barLeft = tester.getCenter(find.byKey(const ValueKey('brush-picker'))).dx - 28;
     final left = (barLeft - 1 - 800) / 2;
     Offset at(double x, double y) => Offset(left + x, pageTop.dy + 16 + y);
     final g = await tester.startGesture(at(280, 280), kind: PointerDeviceKind.mouse, buttons: kPrimaryMouseButton);

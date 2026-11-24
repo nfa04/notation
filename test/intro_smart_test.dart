@@ -236,6 +236,21 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       expect(welcomed, isNotNull);
     });
+
+    testWidgets('skipping at the first start still makes the note that shows the basic tools', (tester) async {
+      final store = <String, String>{};
+      profile = UserProfile((k) async => store[k], (k, v) async => store[k] = v);
+      features = FeatureSettings((k) async => store[k], (k, v) async => store[k] = v);
+      await tester.runAsync(() async {
+        await profile.load();
+        await features.load();
+      });
+      welcomed = null;
+      await tester.pumpWidget(MaterialApp(home: IntroScreen(profile: profile, features: features, welcome: (tools) async => welcomed = tools)));
+      await tap(tester, 'intro-skip');
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      expect(welcomed, FeaturePresets.basics);
+    });
   });
 
   group('the intro, the download and the look', () {

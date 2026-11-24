@@ -43,6 +43,9 @@ import '../style/platform_dialog.dart';
 class FolderView extends StatefulWidget {
   /// Tells the page it was brought to the front again (it was kept, out of sight): it reads what changed meanwhile.
   final Listenable? refresh;
+
+  /// Set to true to show the favourites (taken once: the view puts it back to false).
+  final ValueNotifier<bool>? showFavourites;
   final NoteRepository repository;
   final ValueChanged<String> onOpenNote;
   final NoteFileService? noteFiles;
@@ -65,7 +68,7 @@ class FolderView extends StatefulWidget {
   /// "Remind me" in a note's menu; null hides it.
   final ReminderService? reminders;
 
-  const FolderView({super.key, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.collab, this.previews, this.sync, this.tags, this.reminders, this.refresh});
+  const FolderView({super.key, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.collab, this.previews, this.sync, this.tags, this.reminders, this.refresh, this.showFavourites});
 
   @override
   State<FolderView> createState() => _FolderViewState();
@@ -159,7 +162,7 @@ class _FolderViewState extends State<FolderView> {
   Future<void> _trashSelected() async {
     final ids = _selectedHere;
     if (ids.isEmpty) return;
-    if (await trashNotes(context, _repo, ids)) _endSelecting();
+    if (await trashNotes(context, _repo, ids, onRestored: () => unawaited(_run(() async {})))) _endSelecting();
     await _reload();
   }
 
@@ -175,10 +178,21 @@ class _FolderViewState extends State<FolderView> {
   /// Loads again when notes, folders or tags change under the list (an agent, a sync).
   StreamSubscription<void>? _live;
 
+  void _wantFavourites() {
+    if (widget.showFavourites?.value != true) return;
+    widget.showFavourites!.value = false;
+    if (_scope != _favorites) {
+      _scope = _favorites;
+      if (mounted) setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     widget.refresh?.addListener(_reload);
+    widget.showFavourites?.addListener(_wantFavourites);
+    _wantFavourites();
     _reload().then((_) => _loadSort());
     _live = debouncedChanges([_repo.changes, _repo.created, widget.tags?.changes,]).listen((_) {
       if (mounted) _reload();
@@ -189,6 +203,7 @@ class _FolderViewState extends State<FolderView> {
   void dispose() {
     _live?.cancel();
     widget.refresh?.removeListener(_reload);
+    widget.showFavourites?.removeListener(_wantFavourites);
     super.dispose();
   }
 
@@ -555,8 +570,7 @@ class _FolderViewState extends State<FolderView> {
   }
 
   Future<void> _deleteNote(NoteSummary n) async {
-    final ok = await _confirm(tr('Move note to the trash?'), tr('"{title}" goes to the trash, where it stays for 30 days.', {'title': n.shownTitle}));
-    if (ok) await _run(() => _repo.trashNote(n.id));
+    await _run(() => trashNotes(context, _repo, [n.id], onRestored: () => unawaited(_run(() async {}))));
   }
 
   // ---- UI ------------------------------------------------------------------

@@ -69,11 +69,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // the tools are on the right, not in the top bar
-    expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
-    expect(find.byKey(const ValueKey('redo-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('undo-any')), findsOneWidget);
+    expect(find.byKey(const ValueKey('redo-any')), findsOneWidget);
     expect(find.byTooltip('Undo Last Stroke'), findsNothing);
-    expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-button'))).onPressed, isNull); // nothing to take back yet
-    expect(tester.widget<IconButton>(find.byKey(const ValueKey('redo-button'))).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-any'))).onPressed, isNull); // nothing to take back yet
+    expect(tester.widget<IconButton>(find.byKey(const ValueKey('redo-any'))).onPressed, isNull);
 
     List<DrawingStroke> strokes() {
       final paint = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is InkLayerPainter);
@@ -103,17 +103,17 @@ void main() {
     await draw('page-1', 300);
     await draw('page-0', 400);
     expect(ys(), [200.0, 300.0, 400.0]);
-    expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-button'))).onPressed, isNotNull);
+    expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-any'))).onPressed, isNotNull);
 
-    await tap('undo-button');
+    await tap('undo-any');
     expect(ys(), [200.0, 300.0]); // the one on the first page, not the last page that had a line
-    await tap('undo-button');
+    await tap('undo-any');
     expect(ys(), [200.0]);
-    await tap('redo-button');
+    await tap('redo-any');
     expect(ys(), [200.0, 300.0]);
     await draw('page-0', 400); // something new: the one taken back cannot come back any more
     await draw('page-0', 600);
-    expect(tester.widget<IconButton>(find.byKey(const ValueKey('redo-button'))).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.byKey(const ValueKey('redo-any'))).onPressed, isNull);
     expect(ys(), [200.0, 300.0, 400.0, 600.0]);
 
     // rubbing out is one step, however many lines it crosses
@@ -128,25 +128,25 @@ void main() {
     await g.up();
     await tester.pumpAndSettle();
     expect(ys(), [200.0, 300.0]);
-    await tap('undo-button');
+    await tap('undo-any');
     expect(ys(), [200.0, 300.0, 400.0, 600.0]); // both back, in one go
-    await tap('redo-button');
+    await tap('redo-any');
     expect(ys(), [200.0, 300.0]);
-    await tap('undo-button');
+    await tap('undo-any');
 
     // clearing the page on screen (the first) leaves the other page alone, and can be taken back
     expect(find.byTooltip('Clear All Annotations'), findsNothing); // no longer in the top bar
     await tap('clear-page');
     expect(ys(), [300.0]);
-    await tap('undo-button');
+    await tap('undo-any');
     expect(ys(), [200.0, 300.0, 400.0, 600.0]);
-    await tap('redo-button');
+    await tap('redo-any');
     expect(ys(), [300.0]);
-    await tap('undo-button');
+    await tap('undo-any');
     expect(ys(), [200.0, 300.0, 400.0, 600.0]);
 
     // and it is saved: what was taken back does not come back when the note is opened again
-    await tap('undo-button'); // the rubbing out is taken back no more; this was the last step of drawing: 600 goes
+    await tap('undo-any'); // the rubbing out is taken back no more; this was the last step of drawing: 600 goes
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1500)));
     final saved = (await tester.runAsync(() => repo.loadNote(id)))!;
     expect(saved.strokes.values.fold<int>(0, (n, l) => n + l.length), strokes().length);
@@ -209,11 +209,11 @@ void main() {
     expect(after.dx, greaterThan(before.dx + 50));
     expect(after.dy, greaterThan(before.dy + 100));
 
-    await tap('undo-button'); // the move
+    await tap('undo-any'); // the move
     expect(strokes().single.points.first, before);
-    await tap('redo-button');
+    await tap('redo-any');
     expect(strokes().single.points.first, after);
-    await tap('undo-button');
+    await tap('undo-any');
     expect(strokes().single.points.first, before);
   });
 }

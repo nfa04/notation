@@ -30,6 +30,9 @@ class NotationSidebar extends StatelessWidget {
   final Widget? header;
   final Widget? footer;
 
+  /// Something for the empty room under the places (wide bar only): it is told how much height is left, and shows what fits.
+  final Widget Function(double room)? fill;
+
   const NotationSidebar({
     super.key,
     required this.items,
@@ -41,6 +44,7 @@ class NotationSidebar extends StatelessWidget {
     this.groupStarts = const {9, 2, 4},
     this.header,
     this.footer,
+    this.fill,
   });
 
   static Color groundOf(BuildContext context) {
@@ -69,7 +73,16 @@ class NotationSidebar extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: wide ? 10 : 8, vertical: 12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               if (header != null) Flexible(flex: 0, child: Padding(padding: const EdgeInsets.only(bottom: 14), child: SingleChildScrollView(child: header))),
-              Expanded(child: ListView(padding: EdgeInsets.zero, children: children)),
+              Expanded(
+                child: LayoutBuilder(builder: (context, box) {
+                  final rows = grouped.length;
+                  final used = rows * (roomy ? 46.0 : (wide ? 38.0 : 42.0)) + (children.length - rows) * 17;
+                  return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Flexible(child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: children)),
+                    if (fill != null && wide && !roomy) fill!(box.maxHeight - used),
+                  ]);
+                }),
+              ),
               ?footer,
               if (foot.isNotEmpty) ...[
                 Padding(padding: EdgeInsets.symmetric(vertical: 8, horizontal: wide ? 8 : 4), child: Divider(height: 1, thickness: 1, color: rule)),

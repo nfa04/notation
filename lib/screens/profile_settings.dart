@@ -98,6 +98,12 @@ class ToolSettings extends StatelessWidget {
           'Switch off what you do not use and it goes away from the screens. Nothing is deleted: notes that use a tool that is off stay as they are.',
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
+        const SizedBox(height: 4),
+        Text(
+          'This holds for every toolbar profile: a profile can only leave out tools that are on here.',
+          key: const ValueKey('tools-all-profiles-note'),
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+        ),
         const SizedBox(height: 12),
         Wrap(spacing: 10, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
           FilledButton.tonalIcon(

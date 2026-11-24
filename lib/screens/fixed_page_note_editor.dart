@@ -246,6 +246,7 @@ import 'text_box_style_dialog.dart';
 import '../style/platform_dialog.dart';
 import '../style/platform_look.dart';
 import '../widgets/paper.dart';
+import '../widgets/overflow_strip.dart';
 
 part 'editor_pdf_export.dart';
 part 'editor_selection.dart';
@@ -1105,6 +1106,19 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   CanvasInteractionMode _mode = CanvasInteractionMode.selectText;
 
+  /// The mode this note was left in ('draw' or 'select'; null: never chosen), and whether a pen has ever touched this device
+  /// (then a blank note opens in Draw: the pen writes at once).
+  String? _savedMode;
+
+  /// A two-finger tap undoes: when the two fingers came down, and how far they moved since.
+  DateTime? _twoTapAt;
+  double _twoTapTravel = 0;
+  bool _penSeen = false;
+  bool _modeSettingsRead = false;
+  String? _modeWritten;
+  bool _penSeenWritten = false;
+  bool _startModeDone = false;
+
   String? _importedPdfName;
 
   /// The style this note is cited in when it is not the one for every note: its own, else its folder's (null: the one for every note).
@@ -1949,6 +1963,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         _totalPages = doc?.pages.length ?? 0;
         if (doc != null) _applyPageSizes(doc);
         _loaded = true;
+        _applyStartMode();
         if (!_ready.isCompleted) _ready.complete();
         _lastSavedSignature = _signature();
         _dbStamp = stamp;
@@ -2145,6 +2160,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         .then((_) async {
           _savedNow();
           _dbStamp = (await widget.repository.noteTimes(widget.noteId))?.edited;
+          // (only when there is something to write: one more step in this chain is one more the tests' fake clock has to turn)
+          if (_modeSettingsChanged) await _writeModeSettings();
         })
         .catchError((Object e) {
           _lastSavedSignature = null; // try again on the next change
@@ -2378,6 +2395,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         ]),
         actions: [
           // (beside the buttons, so that it is always in reach)
+          _undoRedoButtons(),
           ?_toolbarProfileMenu(),
           _customizeToolbarButton(),
         ],

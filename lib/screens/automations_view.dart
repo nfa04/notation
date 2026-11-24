@@ -64,51 +64,25 @@ class AutomationsView extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Automations'),
             actions: [
+              // the one thing to do first: a new automation. The assistant writes one from a description: a quiet menu beside it.
               if (ai != null && ai!.provider != null)
-                Padding(
-                  padding: EdgeInsets.only(right: narrow ? 0 : 8),
-                  child: narrow
-                      ? IconButton(
-                          key: const ValueKey('describe-rule'),
-                          tooltip: 'Describe a rule',
-                          onPressed: () async {
-                            final folders = await repository.listFolders();
-                            if (context.mounted) await showRuleWriter(context, service: service, folders: folders);
-                          },
-                          icon: const Icon(Symbols.edit_note),
-                        )
-                      : OutlinedButton.icon(
-                    key: const ValueKey('describe-rule'),
-                    onPressed: () async {
+                PopupMenuButton<String>(
+                  key: const ValueKey('automation-assistant-menu'),
+                  tooltip: tr('Let the assistant write one'),
+                  icon: const Icon(Symbols.auto_awesome),
+                  onSelected: (what) async {
+                    if (what == 'describe') {
                       final folders = await repository.listFolders();
                       if (context.mounted) await showRuleWriter(context, service: service, folders: folders);
-                    },
-                    icon: const Icon(Symbols.edit_note),
-                    label: const Text('Describe a rule'),
-                  ),
-                ),
-              if (ai != null && ai!.provider != null && extensions != null)
-                Padding(
-                  padding: EdgeInsets.only(right: narrow ? 0 : 8),
-                  child: narrow
-                      ? IconButton(
-                          key: const ValueKey('magic-automation'),
-                          tooltip: 'Create with AI',
-                          onPressed: () async {
-                            final made = await showMagicExtension(context, ai: ai!, extensions: extensions!, automations: service);
-                            if (made != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(made.message), duration: const Duration(seconds: 8)));
-                          },
-                          icon: const Icon(Symbols.auto_fix_high),
-                        )
-                      : OutlinedButton.icon(
-                    key: const ValueKey('magic-automation'),
-                    onPressed: () async {
+                    } else {
                       final made = await showMagicExtension(context, ai: ai!, extensions: extensions!, automations: service);
                       if (made != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(made.message), duration: const Duration(seconds: 8)));
-                    },
-                    icon: const Icon(Symbols.auto_fix_high),
-                    label: const Text('Create with AI'),
-                  ),
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(key: const ValueKey('describe-rule'), value: 'describe', child: ListTile(leading: const Icon(Symbols.edit_note), title: const Text('Describe a rule'), contentPadding: EdgeInsets.zero)),
+                    if (extensions != null) PopupMenuItem(key: const ValueKey('magic-automation'), value: 'magic', child: ListTile(leading: const Icon(Symbols.auto_fix_high), title: const Text('Create with AI'), contentPadding: EdgeInsets.zero)),
+                  ],
                 ),
               Padding(
                 padding: const EdgeInsets.only(right: 12),
@@ -120,11 +94,11 @@ class AutomationsView extends StatelessWidget {
                         icon: const Icon(Symbols.add),
                       )
                     : FilledButton.icon(
-                  key: const ValueKey('new-automation'),
-                  onPressed: () => _edit(context),
-                  icon: const Icon(Symbols.add),
-                  label: const Text('New automation'),
-                ),
+                        key: const ValueKey('new-automation'),
+                        onPressed: () => _edit(context),
+                        icon: const Icon(Symbols.add),
+                        label: const Text('New automation'),
+                      ),
               ),
             ],
           ),

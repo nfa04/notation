@@ -18,7 +18,8 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('import-from-apps')));
+    // (no notes yet: the box on the page has the button)
+    await tester.tap(find.byKey(const ValueKey('empty-import')));
     await tester.pumpAndSettle();
     for (final key in ['import-obsidian-folder', 'import-obsidian-zip', 'import-notion', 'import-goodnotes']) {
       expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);

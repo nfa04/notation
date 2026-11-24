@@ -33,8 +33,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const ValueKey('select-notes')), findsNothing, reason: 'it is in the menu');
     expect(find.byKey(const ValueKey('dashboard-more')), findsOneWidget);
-    expect(find.byKey(const ValueKey('new-from-pdf')), findsNothing, reason: 'the small round buttons are in the menu too');
-    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.byKey(const ValueKey('new-from-pdf')), findsOneWidget, reason: 'a PDF has its own button beside New Note');
+    expect(find.byKey(const ValueKey('new-note')), findsOneWidget);
     // the bar's buttons stay clear of the menu button the shell puts over the top left corner (56 px)
     expect(tester.getTopLeft(find.byKey(const ValueKey('dashboard-more'))).dx, greaterThan(56));
     final cards = find.byType(Card);
@@ -45,19 +45,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('menu-select-notes')), findsOneWidget);
     expect(find.byKey(const ValueKey('menu-join-session')), findsOneWidget);
-    expect(find.byKey(const ValueKey('menu-new-from-pdf')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('menu-select-notes')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('dashboard-more')), findsNothing, reason: 'selecting notes has its own bar');
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('on a wide screen the buttons are in the bar as before', (tester) async {
+  testWidgets('on a wide screen the bar holds one More menu, and New Note has the other ways to start one', (tester) async {
     await open(tester, const Size(1200, 900));
-    expect(find.byKey(const ValueKey('dashboard-more')), findsNothing);
-    expect(find.byKey(const ValueKey('select-notes')), findsOneWidget);
-    expect(find.byKey(const ValueKey('join-session')), findsOneWidget);
-    expect(find.byKey(const ValueKey('new-from-pdf')), findsOneWidget);
+    expect(find.byKey(const ValueKey('dashboard-more')), findsOneWidget);
+    expect(find.byKey(const ValueKey('select-notes')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('dashboard-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('menu-select-notes')), findsOneWidget);
+    expect(find.byKey(const ValueKey('menu-join-session')), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('new-note-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('new-from-pdf')), findsOneWidget, reason: 'beside New Note, not in its menu');
+    expect(find.byKey(const ValueKey('make-new-from-pdf')), findsNothing);
+    expect(find.byKey(const ValueKey('make-import-from-apps')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('with no notes the page says where to start, and the first button makes a note', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late NoteRepository repo;
+    String? opened;
+    await tester.runAsync(() async {
+      repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+      for (final n in await repo.listNotes()) {
+        await repo.deleteNote(n.id);
+      }
+    });
+    await tester.pumpWidget(MaterialApp(home: DashboardView(repository: repo, onOpenNote: (id) => opened = id)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    expect(find.text('No notes yet'), findsOneWidget);
+    expect(find.text('Welcome back'), findsNothing);
+    expect(find.byKey(const ValueKey('new-note')), findsNothing, reason: 'the box has the button, not a second one at the foot');
+    await tester.tap(find.byKey(const ValueKey('empty-new-note')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+    expect(opened, isNotNull);
     await tester.pumpWidget(const SizedBox());
   });
 }

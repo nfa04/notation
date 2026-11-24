@@ -605,7 +605,7 @@ class NotationApp extends StatelessWidget {
           final profile = services.profile, features = services.features;
           return profile != null && features != null && !profile.introDone
               // the first time the app opens: a name, what it is used for, the tools
-              ? IntroScreen(profile: profile, features: features, sync: services.sync, settings: services.repository.settings, smart: _introSmart(services), look: IntroLook(theme: services.appTheme, stylus: services.stylus), welcome: (tools) => _welcomeNote(services, tools))
+              ? IntroScreen(profile: profile, features: features, sync: services.sync, settings: services.repository.settings, smart: _introSmart(services), look: IntroLook(theme: services.appTheme, stylus: services.stylus), welcome: (tools) => _welcomeNote(services, tools, firstStart: !profile.introSeen))
               : MainShellNavigation(services: services);
         },
       ),
@@ -659,8 +659,10 @@ IntroSmart? _introSmart(AppServices services) {
 }
 
 /// The note of the intro that shows the tools (it is there in the list when the app opens).
-Future<void> _welcomeNote(AppServices services, Set<Feature> tools) async {
+Future<void> _welcomeNote(AppServices services, Set<Feature> tools, {bool firstStart = false}) async {
   final repository = services.repository;
+  // (at the first start a device that already has notes (linked to another, or filled by an import) does not get one more)
+  if (firstStart && (await repository.listNotes()).isNotEmpty) return;
   final id = await repository.createNote(title: tr('Welcome to Notation'));
   final note = (await repository.loadNote(id))!;
   fillWelcomeNote(note, tools);

@@ -141,22 +141,25 @@ enum UseArea {
   /// The tools this use adds to the ones everybody gets ([FeaturePresets.basics]).
   Set<Feature> get features => switch (this) {
         UseArea.maths => {Feature.solve, Feature.plots, Feature.mathInk, Feature.checkMaths, Feature.handwriting, Feature.tables, Feature.shapes, Feature.straighten},
-        UseArea.sciences => {Feature.diagrams, Feature.tables, Feature.citations, Feature.shapes, Feature.straighten, Feature.flashcards, Feature.assistant, Feature.handwriting, Feature.plots, Feature.solve},
-        UseArea.computing => {Feature.diagrams, Feature.tables, Feature.shapes, Feature.straighten, Feature.automations, Feature.lookup, Feature.assistant},
-        UseArea.humanities => {Feature.diagrams, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.themeImages, Feature.handwriting},
-        UseArea.languages => {Feature.lookup, Feature.flashcards, Feature.assistant, Feature.handwriting},
-        UseArea.society => {Feature.diagrams, Feature.tables, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.automations},
-        UseArea.arts => {Feature.diagrams, Feature.shapes, Feature.straighten, Feature.themeImages, Feature.handwriting, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket, Feature.freeTransform},
-        UseArea.together => {Feature.live, Feature.history},
-        UseArea.everyday => {Feature.shapes, Feature.tables, Feature.straighten, Feature.handwriting},
+        UseArea.sciences => {Feature.diagrams, Feature.tables, Feature.citations, Feature.shapes, Feature.straighten, Feature.flashcards, Feature.assistant, Feature.handwriting, Feature.plots, Feature.solve, Feature.echoes, Feature.present},
+        UseArea.computing => {Feature.diagrams, Feature.tables, Feature.shapes, Feature.straighten, Feature.automations, Feature.lookup, Feature.assistant, Feature.noteFiles},
+        UseArea.humanities => {Feature.diagrams, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.themeImages, Feature.handwriting, Feature.readAloud, Feature.outline, Feature.echoes},
+        UseArea.languages => {Feature.lookup, Feature.flashcards, Feature.assistant, Feature.handwriting, Feature.translate, Feature.readAloud, Feature.dictate},
+        UseArea.society => {Feature.diagrams, Feature.tables, Feature.citations, Feature.lookup, Feature.assistant, Feature.flashcards, Feature.automations, Feature.present, Feature.outline},
+        UseArea.arts => {Feature.diagrams, Feature.shapes, Feature.straighten, Feature.themeImages, Feature.handwriting, Feature.brushes, Feature.symmetry, Feature.stabiliser, Feature.layers, Feature.pictureEdit, Feature.guides, Feature.arrange, Feature.stamps, Feature.flipbook, Feature.ideas, Feature.exportImages, Feature.pathText, Feature.alignLines, Feature.colorPicker, Feature.fillBucket, Feature.freeTransform, Feature.roller, Feature.present},
+        UseArea.together => {Feature.live, Feature.history, Feature.noteFiles, Feature.present},
+        UseArea.everyday => {Feature.shapes, Feature.tables, Feature.straighten, Feature.handwriting, Feature.audio, Feature.dictate, Feature.lock, Feature.outline, Feature.noteFiles},
       };
 }
 
 /// Ready-made sets of tools.
 class FeaturePresets {
-  /// What everybody gets, whatever they use the app for. Working together is among them: a device without it takes no part in the live
+  /// What everybody gets, whatever they use the app for: what a notebook with a pen, a highlighter, pictures and PDFs needs, and
+  /// the reminders, the calendar and the history that keep what is written safe and in time. Tools that are used now and then
+  /// (lock, presenting, sounds, translation, dictation, reading aloud, the outline, the roller pen, note files) are a switch away.
+  /// Working together is among them: a device without it takes no part in the live
   /// sessions of the person's own devices (its editor does not register), whatever the others do.
-  static const basics = {Feature.live, Feature.favorites, Feature.lock, Feature.reminders, Feature.outline, Feature.echoes, Feature.present, Feature.audio, Feature.translate, Feature.dictate, Feature.readAloud, Feature.spelling, Feature.highlighter, Feature.roller, Feature.lasso, Feature.images, Feature.pdf, Feature.history, Feature.noteFiles, Feature.calendar};
+  static const basics = {Feature.live, Feature.favorites, Feature.reminders, Feature.highlighter, Feature.lasso, Feature.images, Feature.pdf, Feature.spelling, Feature.history, Feature.calendar};
 
   /// Only what a notebook with a pen needs.
   static const minimal = <Feature>{Feature.pdf};

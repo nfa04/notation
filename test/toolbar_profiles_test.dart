@@ -96,7 +96,9 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('customize-toolbar')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('profile-new')));
+        await tester.ensureVisible(find.byKey(const ValueKey('profile-new')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('profile-new')));
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const ValueKey('toolbar-profile-name')), name);
         await tester.tap(find.text('OK'));
@@ -121,6 +123,8 @@ void main() {
     Future<void> openTools(WidgetTester tester) async {
       await tester.tap(find.byKey(const ValueKey('customize-toolbar')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('toolbar-tools')).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.descendant(of: find.byKey(const ValueKey('toolbar-tools')), matching: find.byType(ListTile)).first);
       await tester.pumpAndSettle();
     }
@@ -134,12 +138,16 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('customize-toolbar')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('profile-new')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('profile-new')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('toolbar-profile-name')), 'Creative');
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
       // the new profile does without tables
+      await tester.ensureVisible(find.byKey(const ValueKey('toolbar-tools')).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.descendant(of: find.byKey(const ValueKey('toolbar-tools')), matching: find.byType(ListTile)).first);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('toolbar-tool-tables')));
@@ -240,6 +248,8 @@ void main() {
       await open(tester);
       await tester.tap(find.byKey(const ValueKey('customize-toolbar')));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('profile-new')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('profile-new')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('toolbar-profile-name')), 'Maths');
@@ -266,6 +276,8 @@ void main() {
     testWidgets('deleting down to one profile leaves just the toolbar again', (tester) async {
       await open(tester);
       await tester.tap(find.byKey(const ValueKey('customize-toolbar')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('profile-new')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('profile-new')));
       await tester.pumpAndSettle();

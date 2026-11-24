@@ -107,7 +107,7 @@ void main() {
     expect(pics.firstWhere((x) => x.id == 'pic-out').position, const Offset(300, 800));
 
     // the move is one step to take back
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().first.points.first, before);
     b = await boxes();
@@ -131,7 +131,7 @@ void main() {
     expect((await pictures()).map((x) => x.id), ['pic-out']);
 
     // and taking it back brings all three back
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().length, 2);
     expect((await boxes()).map((x) => x.id), ['in', 'out']);

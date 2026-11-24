@@ -147,7 +147,8 @@ class _IntroScreenState extends State<IntroScreen> {
     if (!skipped || _first) await widget.features.apply(skipped ? FeaturePresets.basics : _tools, areas: skipped ? const {} : _areas);
     if (!skipped && _profiles && _offerProfiles) await _makeProfiles();
     if (!skipped) await widget.smart?.apply(aiOn: _ai, download: _downloads);
-    if (!skipped && _welcomeNote) await widget.welcome?.call(_tools);
+    // (the note that shows the tools is made when the intro is skipped at the first start too: the person who skips is who needs it most)
+    if (_welcomeNote && (!skipped || _first)) await widget.welcome?.call(skipped ? FeaturePresets.basics : _tools);
     await widget.profile.finishIntro();
   }
 

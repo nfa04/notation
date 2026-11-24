@@ -161,7 +161,7 @@ void main() {
 
     await tester.drag(find.byKey(const ValueKey('layers-button')), const Offset(0, 900));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('undo-button')));
+    await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes().single.layer, baseLayerId);
     await settleSave(tester);

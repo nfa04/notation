@@ -62,15 +62,21 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    expect(find.text('Move note to the trash?'), findsOneWidget); // asks first
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    expect(find.text('Move note to the trash?'), findsNothing, reason: 'the trash keeps it: nothing to ask, there is an Undo instead');
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pumpAndSettle();
+    expect(find.text('Moved to the trash'), findsOneWidget);
 
     expect(find.text('Delete me'), findsNothing);
     expect(find.text('Keep me'), findsOneWidget);
     expect((await tester.runAsync(repo.listNotes))!.map((n) => n.title), ['Keep me']);
     expect((await tester.runAsync(repo.listTrash))!.map((n) => n.title), ['Delete me']); // not gone: in the trash
+
+    await tester.tap(find.byKey(const ValueKey('undo-trash')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete me'), findsOneWidget, reason: 'Undo brings it back');
+    expect((await tester.runAsync(repo.listTrash))!, isEmpty);
   });
 
   testWidgets('a right click or a long press on a card opens the menu with Delete', (tester) async {
@@ -93,9 +99,12 @@ void main() {
     expect(find.text('Open'), findsOneWidget);
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    expect(find.text('Move note to the trash?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pumpAndSettle();
-    expect(find.text('Only one'), findsOneWidget); // asked first, and nothing was lost
+    expect(find.text('Only one'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('undo-trash')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+    expect(find.text('Only one'), findsOneWidget, reason: 'nothing is lost: Undo brings it back');
   });
 }

@@ -77,7 +77,11 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: DashboardView(repository: repo, noteFiles: files, onOpenNote: (_) {})));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('open-note-file')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('new-note-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('make-open-note-file')), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10)); // (closes the menu)
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('More').first);
     await tester.pumpAndSettle();
     expect(find.text('Save as a file...'), findsOneWidget);

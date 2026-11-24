@@ -6,7 +6,6 @@ import '../data/note_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import 'folder_picker.dart';
-import '../style/platform_dialog.dart';
 
 /// Whether a click should add to a selection instead of opening (a Ctrl or Cmd click, as in a file manager).
 bool get selectModifierPressed => HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
@@ -28,23 +27,29 @@ Future<bool> moveNotesTo(BuildContext context, NoteRepository repository, List<S
   return true;
 }
 
-/// Asks, then moves [ids] to the trash. Returns whether they were trashed.
-Future<bool> trashNotes(BuildContext context, NoteRepository repository, List<String> ids) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (context) => PlatformAlertDialog(
-      title: Text.verbatim(trCount(ids.length, 'Move note to the trash?', 'Move {n} notes to the trash?')),
-      content: Text.verbatim(tr('They go to the trash, where they stay for 30 days.')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-        FilledButton(key: const ValueKey('bulk-confirm-delete'), onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-      ],
-    ),
-  );
-  if (ok != true) return false;
+/// Moves notes to the trash at once and says so, with an Undo that brings them back: the trash keeps them for 30 days, so there is
+/// nothing to ask first. [onRestored] runs when they are brought back (for a list to read again).
+Future<bool> trashNotes(BuildContext context, NoteRepository repository, List<String> ids, {VoidCallback? onRestored}) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
   for (final id in ids) {
     await repository.trashNote(id);
   }
+  messenger
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      duration: const Duration(seconds: 8),
+      content: Text.verbatim(trCount(ids.length, 'Moved to the trash', '{n} notes moved to the trash')),
+      action: SnackBarAction(
+        key: const ValueKey('undo-trash'),
+        label: tr('Undo'),
+        onPressed: () async {
+          for (final id in ids) {
+            await repository.restoreNote(id);
+          }
+          onRestored?.call();
+        },
+      ),
+    ));
   return true;
 }
 
