@@ -237,10 +237,14 @@ void main() {
     await tester.pumpAndSettle();
     final page = find.byKey(const ValueKey('page-0'));
     final alone = tester.getRect(page).width;
+    await tester.ensureVisible(find.text('Draw')); // (the tools share a line with the title and scroll sideways)
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Draw'));
     await tester.tap(find.text('Draw'));
     await tester.pumpAndSettle();
     final withDraw = tester.getRect(page).width;
     expect(withDraw, lessThan(alone - 20), reason: 'the page is fitted to the room, which the bar has taken');
+    await tester.ensureVisible(find.text('Document').first);
     await tester.tap(find.text('Document').first);
     await tester.pump();
     final first = tester.getRect(page).width;
@@ -256,9 +260,11 @@ void main() {
     expect(tester.getRect(page).width, withDocument);
 
     // a bar that comes while the page is on the screen alone: the page shrinks from its full width
+    await tester.ensureVisible(find.text('Select'));
     await tester.tap(find.text('Select'));
     await tester.pumpAndSettle();
     expect(tester.getRect(page).width, alone);
+    await tester.ensureVisible(find.text('Draw'));
     await tester.tap(find.text('Draw'));
     await tester.pump(); // (the slide starts when this frame is done)
     await tester.pump();
