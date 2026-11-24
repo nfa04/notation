@@ -380,7 +380,8 @@ extension _EditorFind on _FixedPageNoteEditorState {
         : (_findNote ?? (problem != null ? tr('Not a valid expression') : (_found.isEmpty ? tr('No matches') : '${_foundAt + 1} / ${_found.length}')));
     final canReplace = _found.any(_replaceable);
     return Material(
-      elevation: 2,
+      elevation: toolBarElevation(context, 2),
+      shape: flatBars(context) ? Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)) : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -597,7 +598,7 @@ extension _EditorFind on _FixedPageNoteEditorState {
                       child: Text.rich(
                         TextSpan(children: [
                           TextSpan(text: m.before),
-                          TextSpan(text: m.word, style: TextStyle(fontWeight: FontWeight.w700, backgroundColor: scheme.tertiaryContainer)),
+                          TextSpan(text: m.word, style: TextStyle(fontWeight: FontWeight.w500, backgroundColor: scheme.tertiaryContainer)),
                           TextSpan(text: m.after),
                         ]),
                         maxLines: 2,

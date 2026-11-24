@@ -352,7 +352,7 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
                       alignment: Alignment.centerLeft,
                       child: Padding(
                         padding: const EdgeInsets.only(top: 8, bottom: 2),
-                        child: Text(tr(f.group.title), style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                        child: Text(tr(f.group.title), style: PaperSection.style(context)),
                       ),
                     ),
                   SwitchListTile.adaptive(
