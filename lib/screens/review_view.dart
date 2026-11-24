@@ -243,7 +243,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Widget _finished(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(24), children: [
-      Icon(Symbols.task_alt, size: 48, color: scheme.primary),
+      Icon(Symbols.task_alt, size: 28, color: scheme.onSurfaceVariant),
       const SizedBox(height: 12),
       Text(_done == 0 ? 'No cards are due.' : 'All done for now.', key: const ValueKey('review-done'), style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 4),

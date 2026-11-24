@@ -347,7 +347,7 @@ class _QuizTabState extends State<_QuizTab> with AutomaticKeepAliveClientMixin {
       ]),
       const SizedBox(height: 16),
       if (q == null || (quiz.done && g == null)) ...[
-        Icon(Symbols.emoji_events, size: 40, color: scheme.primary),
+        Icon(Symbols.emoji_events, size: 28, color: scheme.onSurfaceVariant),
         const SizedBox(height: 8),
         Text('You have mastered every question.', key: const ValueKey('quiz-done')),
       ] else ...[

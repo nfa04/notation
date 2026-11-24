@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'paper_tokens.dart';
 import 'platform_look.dart';
 
 /// The bundled UI font (SIL Open Font License).
@@ -37,7 +38,7 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
     );
   }
   final rule = BorderSide(color: scheme.outlineVariant);
-  final r6 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
+  final r6 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(Paper.radius));
   final title = TextStyle(fontFamily: paperFont, color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w300, letterSpacing: 0.1);
   return base.copyWith(
     // Inter is bundled (SIL Open Font License), so the light weights look the same on every platform
@@ -67,7 +68,17 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       actionsIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
       shape: Border(bottom: rule),
     ),
-    cardTheme: base.cardTheme.copyWith(surfaceTintColor: Colors.transparent, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: rule)),
+    // a card stands alone: a hairline box, no shadow (a row of a list is a ruled card instead, see ruledCardShape)
+    cardTheme: base.cardTheme.copyWith(surfaceTintColor: Colors.transparent, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Paper.radiusPage), side: rule)),
+    snackBarTheme: base.snackBarTheme.copyWith(
+      backgroundColor: scheme.surface,
+      elevation: 0,
+      behavior: SnackBarBehavior.floating,
+      width: 420,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: BorderSide(color: scheme.onSurfaceVariant.withValues(alpha: 0.4))),
+      contentTextStyle: TextStyle(fontFamily: paperFont, fontSize: 13, color: scheme.onSurface),
+      actionTextColor: scheme.onSurface,
+    ),
     dialogTheme: base.dialogTheme.copyWith(
       backgroundColor: scheme.surface,
       surfaceTintColor: Colors.transparent,
@@ -160,4 +171,25 @@ TextTheme _scale(TextTheme t) {
     labelMedium: tab(t.labelMedium, weight: FontWeight.w500, spacing: 0.3),
     labelSmall: tab(t.labelSmall, weight: FontWeight.w500, spacing: 0.4),
   );
+}
+
+/// A shape with a line along its bottom edge only (the rule under a row).
+class BottomRule extends ShapeBorder {
+  final BorderSide side;
+  const BottomRule(this.side);
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.only(bottom: side.width);
+
+  @override
+  ShapeBorder scale(double t) => BottomRule(side.scale(t));
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) => canvas.drawLine(rect.bottomLeft, rect.bottomRight, side.toPaint());
 }

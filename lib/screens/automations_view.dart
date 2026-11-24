@@ -1,3 +1,4 @@
+import '../widgets/paper.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../ai/ai_service.dart';
 import '../extensions/extension_service.dart';
@@ -220,6 +221,9 @@ class AutomationsView extends StatelessWidget {
         ];
         return Card(
           key: ValueKey('automation-${a.id}'),
+          shape: ruledCardShape(context),
+          color: Colors.transparent,
+          margin: EdgeInsets.zero,
           child: ListTile(
             isThreeLine: true,
             leading: Icon(Symbols.bolt, color: a.enabled ? scheme.primary : scheme.outline),

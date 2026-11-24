@@ -1096,7 +1096,7 @@ _graphMenu(g),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Symbols.hub, size: 48, color: scheme.onSurfaceVariant),
+              Icon(Symbols.hub, size: 28, color: scheme.onSurfaceVariant),
               const SizedBox(height: 12),
               Text.verbatim(
                 tr(

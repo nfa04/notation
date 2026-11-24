@@ -663,7 +663,9 @@ class _SearchViewState extends State<SearchView> {
           final passages = ([for (final p in found.passages) if (p.noteId == n.id) p]..sort((a, b) => b.score.compareTo(a.score))).take(2).toList();
           return Card(
             key: ValueKey('search-meaning-${n.id}'),
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            shape: ruledCardShape(context),
+            color: Colors.transparent,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               ListTile(
                 leading: Icon(note?.isPdf ?? false ? Symbols.picture_as_pdf : Symbols.note_alt),
@@ -730,7 +732,9 @@ class _SearchViewState extends State<SearchView> {
     final query = _similar ? _query.withTypos : _query; // (a note opened from similar words finds them there too)
     return Card(
       key: ValueKey('search-note-$id'),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+            shape: ruledCardShape(context),
+            color: Colors.transparent,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         ListTile(
           leading: Icon(note?.isPdf ?? false ? Symbols.picture_as_pdf : Symbols.note_alt),

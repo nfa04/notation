@@ -256,7 +256,7 @@ class _SpeechRecorderState extends State<_SpeechRecorder> {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Symbols.record_voice_over, size: 40, color: scheme.onSurfaceVariant),
+        Icon(Symbols.record_voice_over, size: 28, color: scheme.onSurfaceVariant),
         const SizedBox(height: 12),
         Text.verbatim(
           tr('Writing down speech needs a model on this device (about {size} MB). It works without the internet, and nothing you say leaves the device.', {'size': speech.sizeMb}),

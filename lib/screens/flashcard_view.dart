@@ -47,7 +47,7 @@ class _FlashcardViewState extends State<FlashcardView> {
   Widget _setup(BuildContext context, AssistantChat chat) {
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Icon(Symbols.style, size: 40, color: scheme.primary),
+      Icon(Symbols.style, size: 28, color: scheme.onSurfaceVariant),
       const SizedBox(height: 12),
       Text('Flashcards from this document', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 8),
@@ -212,7 +212,7 @@ class DeckView extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final missed = deck.missed.length;
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Icon(missed == 0 ? Symbols.emoji_events : Symbols.check_circle_outline, size: 40, color: scheme.primary),
+      Icon(missed == 0 ? Symbols.emoji_events : Symbols.check_circle_outline, size: 28, color: scheme.onSurfaceVariant),
       const SizedBox(height: 12),
       Text.verbatim(tr('{known} of {total} known', {'known': deck.knownCount, 'total': deck.roundLength}),
           key: const ValueKey('flashcards-result'), style: Theme.of(context).textTheme.titleMedium),

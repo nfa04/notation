@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/text.dart';
+import '../style/paper_look.dart' show BottomRule;
+import '../style/paper_tokens.dart';
 
 /// Small building blocks of the paper look, so the screens say "a section", "a panel", "a row" instead of each styling its own.
 
@@ -9,7 +11,7 @@ class PaperSection extends StatelessWidget {
   final String label;
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
-  const PaperSection(this.label, {super.key, this.trailing, this.padding = const EdgeInsets.fromLTRB(16, 20, 16, 8)});
+  const PaperSection(this.label, {super.key, this.trailing, this.padding = const EdgeInsets.fromLTRB(Paper.gapL, Paper.gapXL - Paper.gapS, Paper.gapL, Paper.gapM)});
 
   /// The style of the label (for places that lay the text out themselves).
   static TextStyle style(BuildContext context) => TextStyle(fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant);
@@ -33,7 +35,7 @@ class PaperPanel extends StatelessWidget {
   /// A pale ground instead of the page's own (for something that sits on a page and should stand out a little).
   final bool tinted;
   final VoidCallback? onTap;
-  const PaperPanel({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.margin, this.tinted = false, this.onTap});
+  const PaperPanel({super.key, required this.child, this.padding = const EdgeInsets.all(Paper.gapL), this.margin, this.tinted = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +43,7 @@ class PaperPanel extends StatelessWidget {
     final box = Material(
       // ruled, not boxed: a hairline above and below (a pale ground with small corners when it is to stand out a little)
       color: tinted ? scheme.surfaceContainerLow : Colors.transparent,
-      shape: tinted ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)) : _Ruled(BorderSide(color: scheme.outlineVariant)),
+      shape: tinted ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(Paper.radius)) : _Ruled(BorderSide(color: scheme.outlineVariant)),
       clipBehavior: Clip.antiAlias,
       child: onTap == null ? Padding(padding: padding, child: child) : InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
     );
@@ -140,3 +142,6 @@ class _Ruled extends ShapeBorder {
     canvas.drawLine(rect.bottomLeft, rect.bottomRight, paint);
   }
 }
+
+/// The outline of a card that is a row of a list: a hairline under it, no box.
+ShapeBorder ruledCardShape(BuildContext context) => BottomRule(BorderSide(color: Theme.of(context).colorScheme.outlineVariant));
