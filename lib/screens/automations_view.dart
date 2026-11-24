@@ -16,6 +16,7 @@ import '../automations/note_sorter.dart';
 import '../data/note_data.dart';
 import '../data/note_repository.dart';
 import '../templates/templates.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 /// The automations: what happens in the app, and what to do about it.
@@ -573,7 +574,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Smooth(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (!widget.step) const Text('When'),
             if (!widget.step)
             DropdownButton<AutomationEvent>(
@@ -923,7 +924,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-          ]),
+          ])),
         ),
       ),
       actions: [

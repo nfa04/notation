@@ -30,6 +30,6 @@ class _AdvancedSectionState extends State<AdvancedSection> {
             label: Text(widget.label),
           ),
         ),
-        Reveal(open: _open, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.children)),
+        Reveal(open: _open, child: Smooth(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.children))),
       ]);
 }

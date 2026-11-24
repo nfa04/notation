@@ -16,6 +16,7 @@ import '../l10n/text.dart';
 import 'cloud_sign_in_ui.dart';
 import 'qr_code_view.dart';
 import 'scan_link_screen.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 String agoText(DateTime t) {
@@ -118,7 +119,7 @@ class _SyncSettingsState extends State<SyncSettings> {
       listenable: widget.service,
       builder: (context, _) {
         final s = widget.service;
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        return Smooth(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Sync profile', style: PaperSection.style(context)),
           const SizedBox(height: 6),
           Text(
@@ -255,7 +256,7 @@ class _SyncSettingsState extends State<SyncSettings> {
                   : TextButton(key: const ValueKey('sync-leave'), onPressed: _leave, child: const Text('Leave this profile')),
             ),
           ],
-        ]);
+        ]));
       },
     );
   }
@@ -600,7 +601,7 @@ class _CloudSyncCardState extends State<_CloudSyncCard> {
         final c = widget.service;
         if (_folder.text != c.folderName && !FocusScope.of(context).hasFocus) _folder.text = c.folderName;
         final usable = c.usable;
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        return Smooth(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           SwitchListTile.adaptive(
             key: const ValueKey('cloud-on'),
             contentPadding: EdgeInsets.zero,
@@ -682,7 +683,7 @@ class _CloudSyncCardState extends State<_CloudSyncCard> {
               const SizedBox(height: 8),
               CloudSignInCard(cloud: c),
             ],
-        ]);
+        ]));
       },
     );
   }

@@ -94,6 +94,21 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
       );
 }
 
+/// A column of settings or form fields where parts come and go (a choice that shows more options): the height eases to the new
+/// size in [Motion.fast] instead of jumping. The parts themselves are not faded; wrap them in [Reveal] for that.
+class Smooth extends StatelessWidget {
+  final Widget child;
+  const Smooth({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) => AnimatedSize(
+        duration: Motion.of(context, Motion.fast),
+        curve: Motion.curveIn,
+        alignment: Alignment.topCenter,
+        child: child,
+      );
+}
+
 /// A tool that comes and goes in a bar: it grows to its height and fades in, and folds up again, in [Motion.fast]. Unlike [Reveal]
 /// it is nothing at all when closed (no width asked for), so it sits in a Wrap or a Column of tools. Starts as it is (no motion on build).
 class Pop extends StatefulWidget {

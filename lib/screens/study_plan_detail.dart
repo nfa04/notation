@@ -1,3 +1,4 @@
+import '../style/motion.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
@@ -101,6 +102,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
           ),
         ),
         const SizedBox(height: 12),
+        FadeOnChange(token: _tab, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (_tab == _Tab.overview) ...[
           _hero(context, e, progress, days, done, sessions.length, left, now),
           if (parts.isNotEmpty) _standing(context, e, parts),
@@ -131,6 +133,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
             for (final s in d.value) _session(context, e, s, now),
           ],
         ],
+        ])),
       ]),
     );
   }
