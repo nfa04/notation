@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'platform_look.dart';
 
+/// The bundled UI font (SIL Open Font License).
+const paperFont = 'Inter';
+
 /// The default look of the app: ink on paper. Flat bars and cards with a hairline instead of a shadow, light titles, quiet
 /// grey icons, a square selection; the accent the person chose stays the accent (buttons, switches, links).
 ///
 /// A layer over the Material theme like [iosLook] (which is put over it, so the iOS look still wins where it has an opinion), and
 /// like it only about surfaces and type: no widget changes. With high contrast the colours of the scheme are left alone.
-const paperFont = 'Inter';
-
 ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
   final dark = base.brightness == Brightness.dark;
   var scheme = base.colorScheme;
@@ -26,9 +27,17 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       surfaceContainer: dark ? const Color(0xFF1A1A1D) : const Color(0xFFF7F7F5),
       surfaceContainerHigh: dark ? const Color(0xFF222226) : const Color(0xFFF1F1EF),
       surfaceContainerHighest: dark ? const Color(0xFF2A2A2E) : const Color(0xFFEAEAE7),
+      // the tinted containers of Material become the pale grey of the selection; the accent itself stays for marks
+      primaryContainer: dark ? const Color(0xFF26262A) : const Color(0xFFF0F0EE),
+      onPrimaryContainer: ink,
+      secondaryContainer: dark ? const Color(0xFF26262A) : const Color(0xFFF0F0EE),
+      onSecondaryContainer: ink,
+      tertiaryContainer: dark ? const Color(0xFF26262A) : const Color(0xFFF0F0EE),
+      onTertiaryContainer: ink,
     );
   }
   final rule = BorderSide(color: scheme.outlineVariant);
+  final r6 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
   final title = TextStyle(fontFamily: paperFont, color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w300, letterSpacing: 0.1);
   return base.copyWith(
     // Inter is bundled (SIL Open Font License), so the light weights look the same on every platform
@@ -78,6 +87,22 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: scheme.onSurfaceVariant.withValues(alpha: 0.5))),
+    ),
+    // buttons: small square corners, no pill; chips and segments flat with a hairline and a pale selection
+    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, textStyle: const TextStyle(fontWeight: FontWeight.w500))),
+    elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(shape: r6, elevation: 0, shadowColor: Colors.transparent, surfaceTintColor: Colors.transparent, backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, side: rule)),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(shape: r6, side: BorderSide(color: scheme.outlineVariant), foregroundColor: scheme.onSurface)),
+    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: r6)),
+    chipTheme: base.chipTheme.copyWith(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: rule), side: rule, backgroundColor: scheme.surface, selectedColor: scheme.secondaryContainer, surfaceTintColor: Colors.transparent, elevation: 0, pressElevation: 0, labelStyle: TextStyle(fontSize: 13, color: scheme.onSurface)),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: SegmentedButton.styleFrom(
+        shape: r6,
+        side: rule,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurfaceVariant,
+        selectedBackgroundColor: scheme.secondaryContainer,
+        selectedForegroundColor: scheme.onSurface,
+      ),
     ),
     tabBarTheme: base.tabBarTheme.copyWith(dividerColor: scheme.outlineVariant, indicatorColor: scheme.onSurface, labelColor: scheme.onSurface, unselectedLabelColor: scheme.onSurfaceVariant),
     listTileTheme: base.listTileTheme.copyWith(selectedTileColor: scheme.onSurface.withValues(alpha: 0.07), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),

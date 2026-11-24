@@ -44,6 +44,7 @@ import '../templates/templates.dart';
 import 'shared_badge.dart';
 import 'share_people.dart';
 import '../style/platform_dialog.dart';
+import '../widgets/paper.dart';
 
 /// The first screen: recent and starred notes, tasks, and the buttons that make a note (blank, from a PDF, a template,
 /// a recording) or ask the assistant about all notes.
@@ -517,7 +518,7 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   /// A small quiet label above a group of notes (letter-spaced, muted).
-  TextStyle _sectionLabel(BuildContext context) => TextStyle(fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant);
+  TextStyle _sectionLabel(BuildContext context) => PaperSection.style(context);
 
   Widget _grid(List<NoteSummary> notes, bool phone) => SliverGrid.builder(
         // (a phone shows two cards side by side, not one as big as the screen)
