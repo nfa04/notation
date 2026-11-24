@@ -394,7 +394,7 @@ void main() {
     expect(find.byKey(ValueKey('search-note-$loose')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('search-filters-toggle')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('search-folder')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Biology').last);
@@ -466,7 +466,7 @@ void main() {
 
     // by tag: "school" takes in "school/maths"
     await tester.tap(find.byKey(const ValueKey('search-filters-toggle')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('search-tags-add')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('search-tag-pick-school/maths')));

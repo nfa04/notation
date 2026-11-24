@@ -8,6 +8,7 @@ import 'weekly_review_dialog.dart';
 import '../app_services.dart';
 import '../mcp/mcp_service.dart' show McpActivity;
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform, exit;
 import '../l10n/language.dart';
 
@@ -50,6 +51,7 @@ import '../extensions/extension_manifest.dart' show ExtensionPermission;
 import '../automations/note_sorter.dart';
 import '../templates/templates.dart';
 import 'lock_dialogs.dart';
+import '../lock/note_lock_service.dart' show LockMode;
 import '../search/search_query.dart';
 import '../search/search_filter.dart';
 import '../automations/automation.dart';
@@ -76,6 +78,7 @@ import '../data/note_data.dart' show NoteSummary;
 import '../data/debounced_changes.dart';
 import 'bulk_note_actions.dart' show selectionBarsShowing;
 import 'fixed_page_note_editor.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 import 'phone_nav_settings.dart';
 
@@ -164,6 +167,45 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     if (!mounted) return;
     _pruneTabs(); // a place of the menu that goes away while it is shown: its tab goes
     setState(() {});
+  }
+
+  static const _tabsKey = 'workspace_tabs';
+
+  /// Keeps the open tabs, the ones on screen and the one with the keyboard for the next launch.
+  void _saveTabs() {
+    _app.repository.settings.set(_tabsKey, jsonEncode({'tabs': _tabs, 'shown': _shown, 'focused': _focused}));
+  }
+
+  /// Opens the tabs of the last run again (what is gone since, a note that was deleted or a place that was switched off, is left out;
+  /// a locked note stays a tab but is not opened before it is asked for). Not if something was opened in the meantime.
+  Future<void> _restoreTabs() async {
+    try {
+      final raw = await _app.repository.settings.get(_tabsKey);
+      if (raw == null || !mounted) return;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final saved = [for (final k in data['tabs'] as List) k as String];
+      final live = <String>[], openable = <String>{};
+      for (final k in saved) {
+        if (live.contains(k)) continue;
+        if (_isNote(k)) {
+          if (!await _app.repository.noteExists(k)) continue;
+          live.add(k);
+          if (await _app.locks?.modeOf(k) == LockMode.none || _app.locks == null) openable.add(k);
+        } else {
+          final p = _isGraph(k) ? 8 : _pageOf(k);
+          if (p != null && p != 3 && !_navItems.contains(p)) continue;
+          live.add(k);
+          openable.add(k);
+        }
+      }
+      if (!mounted || live.isEmpty || _tabs.length != 1 || _tabs.first != _homeKey || _shown.length != 1 || _navigating) return;
+      final shown = [for (final k in data['shown'] as List) if (openable.contains(k)) k as String];
+      if (shown.isEmpty) shown.add(openable.contains(_homeKey) ? _homeKey : openable.first);
+      final focus = data['focused'];
+      await _transition(tabs: live, shown: shown, focus: focus is String && shown.contains(focus) ? focus : shown.last);
+    } catch (_) {
+      // an unreadable record: start with the dashboard
+    }
   }
 
   /// A tab of a place that is not in the menu any more (the AI is off, a tool was switched off) goes.
@@ -487,6 +529,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       if (_lastNote != null && !newTabs.contains(_lastNote)) _lastNote = null;
     });
     _focusedPane.value = focused;
+    _saveTabs();
     final graphId = focused == null ? null : _graphIdOf(focused);
     if (graphId != null) _graphs.selectedId = graphId; // (the one looked at last is the one the menu opens)
     for (final k in newTabs) {
@@ -1099,6 +1142,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     phoneNavItems.addListener(_navChosen);
     _loadSideFavourites();
     _favouritesLive = debouncedChanges([_app.repository.changes, _app.repository.created]).listen((_) => _loadSideFavourites());
+    unawaited(_restoreTabs());
     _app.repository.settings.get(_railHiddenKey).then((v) {
       if (!mounted || v != '1') return;
       _railSlide.value = 0; // (hidden from the start: no sliding out at launch)
@@ -1486,7 +1530,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
               SizedBox(
                 key: ValueKey('pane-${visible[i]}'),
                 width: share * weights[i] / total,
-                child: _pane(visible[i], _viewFor(visible[i])),
+                child: _pane(visible[i], FadeOnChange(token: visible[i], child: _viewFor(visible[i]))),
               ),
             ],
           ]);
@@ -1521,7 +1565,10 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           if (pane != null) _focusPane(pane);
           _newTab();
         },
-        onReorder: (keys) => setState(() => _tabs = keys),
+        onReorder: (keys) {
+          setState(() => _tabs = keys);
+          _saveTabs();
+        },
         onToggleAll: _toggleAll,
         allShown: _shown.length > 1,
         // the menu button comes back where the menu was hidden: at the left end of the first strip

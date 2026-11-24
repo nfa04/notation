@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;import 'package:flutter/mat
 import 'package:flutter/services.dart';
 
 import '../devicesync/device_sync_service.dart';
+import '../style/motion.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../profile/user_profile.dart';
@@ -52,12 +53,13 @@ class _AccountPanelState extends State<AccountPanel> {
                     if (sync != null && sync.isSetUp) Text.verbatim(_status(sync), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
                   ]),
                 ),
-                Icon(_open ? Symbols.expand_less : Symbols.expand_more),
+                AnimatedRotation(turns: _open ? 0.5 : 0, duration: Motion.of(context, Motion.fast), child: const Icon(Symbols.expand_more)),
               ]),
             ),
           ),
-          if (_open)
-            Padding(
+          Reveal(
+            open: _open,
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 if (profile != null)
@@ -78,6 +80,7 @@ class _AccountPanelState extends State<AccountPanel> {
                       ),
               ]),
             ),
+          ),
           const Divider(height: 1),
         ]);
       },

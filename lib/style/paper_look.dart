@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'motion.dart';
 import 'paper_tokens.dart';
 import 'platform_look.dart';
 
@@ -48,6 +49,7 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
     iconTheme: base.iconTheme.copyWith(weight: 300, opticalSize: 24, fill: 0, grade: 0),
     primaryIconTheme: base.primaryIconTheme.copyWith(weight: 300, opticalSize: 24, fill: 0, grade: 0),
     // no ink splash: a pale grey on hover and press instead
+    pageTransitionsTheme: paperPageTransitions,
     splashFactory: NoSplash.splashFactory,
     splashColor: Colors.transparent,
     highlightColor: scheme.onSurface.withValues(alpha: 0.06),

@@ -83,8 +83,11 @@ class WorkspaceTabStrip extends StatelessWidget {
               },
               children: [
                 for (var i = 0; i < tabs.length; i++)
-                  // a pointer drags at once; on a touch screen a long press is the menu, which has "Move left/right" instead
-                  ReorderableDragStartListener(key: ValueKey('drag-${tabs[i].key}'), index: i, enabled: !_touch, child: _tab(context, tabs[i], i)),
+                  // a pointer drags at once; a finger holds the tab a moment first (a swipe along the strip still scrolls it)
+                  if (_touch)
+                    ReorderableDelayedDragStartListener(key: ValueKey('drag-${tabs[i].key}'), index: i, child: _tab(context, tabs[i], i))
+                  else
+                    ReorderableDragStartListener(key: ValueKey('drag-${tabs[i].key}'), index: i, child: _tab(context, tabs[i], i)),
               ],
             ),
           ),
@@ -145,11 +148,13 @@ class WorkspaceTabStrip extends StatelessWidget {
     return GestureDetector(
       key: ValueKey('tab-${t.key}'),
       behavior: HitTestBehavior.opaque,
-      onLongPressStart: (d) => menu(d.globalPosition),
+      // (a long press is the drag on a touch screen: there the menu comes with a tap on the tab that has the keyboard)
+      onLongPressStart: _touch ? null : (d) => menu(d.globalPosition),
       onSecondaryTapDown: (d) => menu(d.globalPosition),
+      onTapDown: (d) => _tapAt = d.globalPosition,
       // a middle click closes, as in a browser
       onTertiaryTapUp: (_) => onClose(t.key),
-      onTap: () => onSelect(t.key, beside: HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed),
+      onTap: () => _touch && hasKeys ? menu(_tapAt ?? Offset.zero) : onSelect(t.key, beside: HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed),
       child: _Hover(builder: (hovered) => Container(
         constraints: const BoxConstraints(minWidth: 90, maxWidth: 220),
         padding: const EdgeInsets.only(left: 10, right: 2),
@@ -177,6 +182,8 @@ class WorkspaceTabStrip extends StatelessWidget {
   }
 }
 
+
+Offset? _tapAt; // where the last tap on a tab went down (the menu opens there)
 
 bool get _touch => const {TargetPlatform.android, TargetPlatform.iOS}.contains(defaultTargetPlatform);
 

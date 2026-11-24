@@ -7,6 +7,7 @@ import '../ai/flashcards.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../markdown/markdown_table.dart';
+import '../style/motion.dart';
 
 /// The flashcards of the assistant: choose how many, wait while they are made, then turn them over one
 /// by one and say whether they were known. Missed cards can be studied again, or all of them put on the note.
@@ -146,17 +147,30 @@ class DeckView extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 4),
-        LinearProgressIndicator(value: deck.position / deck.roundLength),
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: deck.position / deck.roundLength),
+          duration: Motion.of(context, Motion.medium),
+          curve: Motion.curveIn,
+          builder: (context, v, _) => LinearProgressIndicator(value: v),
+        ),
         const SizedBox(height: 12),
         Expanded(
           child: GestureDetector(
             key: const ValueKey('flashcard'),
             onTap: deck.flip,
+            // the next card comes in from the right while the one before leaves to the left; turning the same card over is the flip inside
             child: AnimatedSwitcher(
-              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 220),
-              transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: ScaleTransition(scale: Tween(begin: 0.96, end: 1.0).animate(animation), child: child)),
-              child: Container(
-                key: ValueKey('${deck.position}-$front'),
+              duration: Motion.of(context, Motion.medium),
+              switchInCurve: Motion.curveIn,
+              switchOutCurve: Motion.curveOut,
+              transitionBuilder: (child, animation) {
+                final arriving = child.key == ValueKey(deck.position);
+                return FadeTransition(opacity: animation, child: SlideTransition(position: Tween(begin: Offset(arriving ? 0.12 : -0.12, 0), end: Offset.zero).animate(animation), child: child));
+              },
+              child: FlipCard(
+                key: ValueKey(deck.position),
+                front: front,
+                face: (front) => Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -191,6 +205,7 @@ class DeckView extends StatelessWidget {
                     if (front) Text('Tap to see the answer', style: TextStyle(fontSize: 12, color: scheme.onPrimaryContainer.withValues(alpha: 0.7))),
                   ]),
                 ]),
+              ),
               ),
             ),
           ),
@@ -309,4 +324,54 @@ class _KeepButtonState extends State<_KeepButton> {
           label: const Text('Keep for review'),
           onPressed: _kept ? null : _keep,
         );
+}
+
+
+/// A card that turns over when [front] changes: it rotates about its vertical middle, and the other face is put in at the edge-on
+/// moment, so the turn goes on in the same direction instead of mirroring. [face] builds one side.
+class FlipCard extends StatefulWidget {
+  final bool front;
+  final Widget Function(bool front) face;
+
+  const FlipCard({super.key, required this.front, required this.face});
+
+  @override
+  State<FlipCard> createState() => _FlipCardState();
+}
+
+class _FlipCardState extends State<FlipCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: Motion.slow, value: 1);
+  late bool _from = widget.front;
+
+  @override
+  void didUpdateWidget(FlipCard old) {
+    super.didUpdateWidget(old);
+    if (widget.front == old.front) return;
+    _from = old.front;
+    _c.duration = Motion.of(context, Motion.slow);
+    _c.forward(from: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          if (_c.isCompleted) return widget.face(widget.front);
+          final turn = Curves.easeInOutCubic.transform(_c.value) * 3.141592653589793;
+          final first = turn < 3.141592653589793 / 2;
+          return Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0012)
+              ..rotateY(first ? turn : turn - 3.141592653589793),
+            child: widget.face(first ? _from : widget.front),
+          );
+        },
+      );
 }

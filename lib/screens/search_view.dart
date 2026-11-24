@@ -15,6 +15,7 @@ import '../search/search_memory.dart';
 import '../ai/citations.dart' show quoteQuery;
 import '../ai/note_knowledge.dart';
 import '../search/search_query.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 /// Search across all notes: plain words or a regular expression, in titles, written documents, text boxes and the text of PDFs.
@@ -595,7 +596,7 @@ class _SearchViewState extends State<SearchView> {
             if (_reading != null) Text.verbatim(_reading!, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ])),
         ),
-        if (_showFilters) _filterPanel(),
+        Reveal(open: _showFilters, child: _filterPanel()),
         if (r != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
