@@ -2356,7 +2356,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     // the title gets the room it needs (up to half the width); the buttons take the rest and scroll sideways if it is too little
     final screenWidth = MediaQuery.sizeOf(context).width;
     final titlePainter = TextPainter(
-      text: TextSpan(text: _titleController.text.isEmpty ? tr('Note Title...') : _titleController.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      text: TextSpan(text: _titleController.text.isEmpty ? tr('Note Title...') : _titleController.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400)),
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();
@@ -2386,7 +2386,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
               _scheduleSave();
               setState(() {}); // the field grows with the title
             },
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
             decoration: InputDecoration(
               hintText: tr('Note Title...'),
               filled: false, border: InputBorder.none,

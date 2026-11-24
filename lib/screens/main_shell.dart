@@ -69,6 +69,7 @@ import '../review/study_generate.dart';
 import '../review/study_topics.dart';
 import '../reminders/reminder.dart' show ReminderKind;
 import '../widgets/notation_logo.dart';
+import '../widgets/notation_sidebar.dart';
 import 'folder_view.dart';
 import 'bulk_note_actions.dart' show selectionBarsShowing;
 import 'fixed_page_note_editor.dart';
@@ -143,6 +144,11 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     8: NavigationRailDestination(icon: Icon(Icons.hub_outlined), selectedIcon: Icon(Icons.hub), label: Text('Graph')),
     5: NavigationRailDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: Text('Settings')),
   };
+
+  SidebarItem _sidebarItem(int i) {
+    final d = _destinations[i]!;
+    return SidebarItem(id: i, icon: (d.icon as Icon).icon!, selectedIcon: (d.selectedIcon as Icon).icon!, label: (d.label as Text).data!);
+  }
 
   void _aiSwitched() {
     if (!mounted) return;
@@ -1094,59 +1100,28 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     final bar = RepaintBoundary(
       key: _railKey,
       child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        NavigationRail(
-            selectedIndex: _navItems.contains(_selectedNavIndex) ? _navItems.indexOf(_selectedNavIndex) : null,
-            extended: MediaQuery.of(context).size.width > 900,
-            onDestinationSelected: (position) => _go(index: _navItems[position]),
-            leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: MediaQuery.of(context).size.width > 900
-                  ? Row(
-                      children: [
-                        const NotationLogo( size: 32),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Notation',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(width: 8),
-                        _foldButton(),
-                      ],
-                    )
-                  : Column(
-                      children: [const NotationLogo( size: 32),
-                        _foldButton()
-                      ],
-                    ),
-            ),
-            destinations: [for (final i in _navItems) _destinations[i]!],
-            trailing: !kIsWeb || _app.sync == null
-                ? null
-                : Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: extended
-                            ? TextButton.icon(
-                                key: const ValueKey('rail-sign-out'),
-                                onPressed: () =>
-                                    confirmSignOut(context, _app.sync!),
-                                icon: const Icon(Icons.logout),
-                                label: Text(tr('Sign out')),
-                              )
-                            : IconButton(
-                                key: const ValueKey('rail-sign-out'),
-                                tooltip: tr('Sign out'),
-                                onPressed: () =>
-                                    confirmSignOut(context, _app.sync!),
-                                icon: const Icon(Icons.logout),
-                              ),
-                      ),
-                    ),
-                  ),
-          ),
-        const VerticalDivider(width: 1, thickness: 1),
+        NotationSidebar(
+          items: [for (final i in _navItems) _sidebarItem(i)],
+          selected: _navItems.contains(_selectedNavIndex) ? _selectedNavIndex : null,
+          wide: extended,
+          pinned: 5,
+          onSelect: (i) => _go(index: i),
+          header: extended
+              ? Row(children: [
+                  const SizedBox(width: 4),
+                  const NotationLogo(size: 28),
+                  const SizedBox(width: 10),
+                  const Expanded(child: Text('Notation', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w300, letterSpacing: 0.2))),
+                  _foldButton(),
+                ])
+              : Column(children: [const NotationLogo(size: 28), const SizedBox(height: 4), _foldButton()]),
+          footer: !kIsWeb || _app.sync == null
+              ? null
+              : (extended
+                  ? TextButton.icon(key: const ValueKey('rail-sign-out'), onPressed: () => confirmSignOut(context, _app.sync!), icon: const Icon(Icons.logout, size: 18), label: Text(tr('Sign out')))
+                  : IconButton(key: const ValueKey('rail-sign-out'), tooltip: tr('Sign out'), onPressed: () => confirmSignOut(context, _app.sync!), icon: const Icon(Icons.logout))),
+        ),
+        VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant),
       ]),
     );
     final page = RepaintBoundary(child: _workspace());
@@ -1170,34 +1145,6 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
             );
           }),
         ),
-        // a little tab at the left edge brings the bar back
-        if (_railHidden)
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Material(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                elevation: 4,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(right: Radius.circular(10))),
-                child: InkWell(
-                  key: const ValueKey('rail-show'),
-                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
-                  onTap: () => _setRailHidden(false),
-                  child: Tooltip(
-                    message: tr('Show the menu'),
-                    child: SizedBox(
-                      width: 28,
-                      height: 72,
-                      child: Icon(Icons.chevron_right, size: 24, color: Theme.of(context,).colorScheme.onPrimaryContainer),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
       ])),
     );
   }
@@ -1223,14 +1170,21 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       child: Scaffold(
       key: _phoneScaffold,
       drawerEnableOpenDragGesture: !editing,
-      drawer: NavigationDrawer(
-        selectedIndex: _navItems.contains(_selectedNavIndex) ? _navItems.indexOf(_selectedNavIndex) : null,
-        onDestinationSelected: (p) {
-          Navigator.pop(context);
-          _go(index: _navItems[p]);
-        },
-        children: [
-          AccountPanel(
+      drawer: Drawer(
+        width: 300,
+        shape: const RoundedRectangleBorder(),
+        backgroundColor: NotationSidebar.groundOf(context),
+        surfaceTintColor: Colors.transparent,
+        child: NotationSidebar(
+          roomy: true,
+          items: [for (final i in _navItems) _sidebarItem(i)],
+          selected: _navItems.contains(_selectedNavIndex) ? _selectedNavIndex : null,
+          pinned: 5,
+          onSelect: (i) {
+            Navigator.pop(context);
+            _go(index: i);
+          },
+          header: AccountPanel(
             profile: _app.profile,
             sync: _app.sync,
             onSettings: () {
@@ -1238,10 +1192,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
               _go(index: 5);
             },
           ),
-          const SizedBox(height: 8),
-          for (final i in _navItems)
-            NavigationDrawerDestination(icon: _destinations[i]!.icon, selectedIcon: _destinations[i]!.selectedIcon, label: Text(tr((_destinations[i]!.label as Text).data!))),
-        ],
+        ),
       ),
       body: SafeArea(
         bottom: false,
@@ -1483,6 +1434,10 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         },
         onToggleAll: _toggleAll,
         allShown: _shown.length > 1,
+        // the menu button comes back where the menu was hidden: at the left end of the first strip
+        leading: _railHidden && (pane == null || pane == _shown.first)
+            ? IconButton(key: const ValueKey('rail-show'), tooltip: tr('Show the menu'), visualDensity: VisualDensity.compact, icon: const Icon(Icons.menu, size: 20), onPressed: () => _setRailHidden(false))
+            : null,
       ),
     );
   }

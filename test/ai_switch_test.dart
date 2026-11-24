@@ -1,3 +1,4 @@
+import 'package:notes/widgets/notation_sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/app_services.dart';
@@ -187,11 +188,11 @@ void main() {
 
     expect(find.byKey(const ValueKey('ask-notes')), findsNothing, reason: 'no button on the dashboard any more');
     expect(find.text('Graph'), findsOneWidget);
-    await tester.tap(find.descendant(of: find.byType(NavigationRail), matching: find.text('Assistant')));
+    await tester.tap(find.descendant(of: find.byType(NotationSidebar), matching: find.text('Assistant')));
     await tester.pump(const Duration(milliseconds: 300));
     final panel = find.byKey(const ValueKey('notes-assistant'));
     expect(panel, findsOneWidget);
-    final rail = tester.getSize(find.byType(NavigationRail)).width;
+    final rail = tester.getSize(find.byType(NotationSidebar)).width;
     expect(tester.getSize(panel).width, closeTo(1600 - rail - 1, 2), reason: 'all of the screen but the menu');
     expect(tester.getSize(panel).height, closeTo(1000 - 43, 1), reason: 'under the tab strip');
     expect(find.byKey(const ValueKey('assistant-close')), findsNothing);

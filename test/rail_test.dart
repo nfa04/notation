@@ -1,3 +1,4 @@
+import 'package:notes/widgets/notation_sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/app_services.dart';
@@ -47,12 +48,12 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
 
-    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(NotationSidebar), findsOneWidget);
     expect(find.byKey(const ValueKey('rail-show')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('rail-hide')));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(NotationSidebar), findsNothing);
     expect(find.byKey(const ValueKey('rail-show')), findsOneWidget);
 
     // remembered for the next start
@@ -61,7 +62,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('rail-show')));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(NotationSidebar), findsOneWidget);
     expect(await tester.runAsync(() => repo.settings.get('rail_hidden')), '0');
   });
 
@@ -73,13 +74,13 @@ void main() {
     await tester.pumpWidget(await app(tester, () => NoteRepository(_db!)));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
-    final full = tester.getSize(find.byType(NavigationRail)).width;
+    final full = tester.getSize(find.byType(NotationSidebar)).width;
 
     await tester.tap(find.byKey(const ValueKey('rail-hide')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 110));
     // half way: still there, but not all of it is in view
-    final rail = find.byType(NavigationRail);
+    final rail = find.byType(NotationSidebar);
     expect(rail, findsOneWidget);
     expect(tester.getTopRight(rail).dx, lessThan(full));
     expect(tester.getTopRight(rail).dx, greaterThan(0));
@@ -108,7 +109,7 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(NotationSidebar), findsNothing);
     expect(find.byKey(const ValueKey('rail-show')), findsOneWidget);
   });
 
@@ -122,7 +123,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('rail-hide')));
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(NotationSidebar), findsNothing);
   });
 }
 

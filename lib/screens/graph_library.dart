@@ -111,7 +111,7 @@ class _GraphLibraryState extends State<GraphLibrary> {
     final graphs = _service.graphs;
     final front = _front;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Graph library'), style: const TextStyle(fontWeight: FontWeight.bold))),
+      appBar: AppBar(title: Text(tr('Graph library'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator.adaptive())
           : graphs.isEmpty

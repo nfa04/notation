@@ -1,3 +1,4 @@
+import 'package:notes/widgets/notation_sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/app_services.dart';
@@ -264,7 +265,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     final editor = tester.state(find.byType(FixedPageNoteEditor));
-    await tester.tap(find.descendant(of: find.byType(NavigationRail), matching: find.text('Dashboard')));
+    await tester.tap(find.descendant(of: find.byType(NotationSidebar), matching: find.text('Dashboard')));
     for (var i = 0; i < 6; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pump(const Duration(milliseconds: 100));

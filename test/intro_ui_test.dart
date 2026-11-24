@@ -1,3 +1,4 @@
+import 'package:notes/widgets/notation_sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/app_services.dart';
@@ -259,7 +260,7 @@ void main() {
       ));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pumpAndSettle();
-      Finder inMenu(String label) => find.descendant(of: find.byType(NavigationRail), matching: find.text(label));
+      Finder inMenu(String label) => find.descendant(of: find.byType(NotationSidebar), matching: find.text(label));
       for (final label in ['Dashboard', 'Folders', 'Calendar', 'Automations', 'Settings']) {
         expect(inMenu(label), findsOneWidget, reason: label);
       }

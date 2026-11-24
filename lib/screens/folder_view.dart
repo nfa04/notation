@@ -601,7 +601,7 @@ class _FolderViewState extends State<FolderView> {
               allFavorite: selectedHere.isNotEmpty && _visibleNotes.where((n) => _selected.contains(n.id)).every((n) => n.favorite),
             )
           : AppBar(
-              title: const Text('Folders', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('Folders'),
               actions: [
                 if (narrow) IconButton(icon: const Icon(Icons.account_tree_outlined), tooltip: tr('Folders'), onPressed: () => _scaffoldKey.currentState?.openDrawer()),
                 if (widget.sync != null) SyncNowButton(sync: widget.sync!, shares: widget.collab?.nativeShares),

@@ -35,6 +35,9 @@ class WorkspaceTabStrip extends StatelessWidget {
   final VoidCallback onToggleAll;
   final bool allShown;
 
+  /// A button at the left end (the one that brings the menu back).
+  final Widget? leading;
+
   const WorkspaceTabStrip({
     super.key,
     required this.tabs,
@@ -47,16 +50,19 @@ class WorkspaceTabStrip extends StatelessWidget {
     required this.onNewTab,
     required this.onToggleAll,
     required this.allShown,
+    this.leading,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainerHighest,
-      child: SizedBox(
+      color: scheme.surface,
+      child: Container(
         height: 40,
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: scheme.outlineVariant))),
         child: Row(children: [
+          ?leading,
           Expanded(
             child: ListView(
               scrollDirection: Axis.horizontal,
@@ -117,13 +123,12 @@ class WorkspaceTabStrip extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 90, maxWidth: 220),
         padding: const EdgeInsets.only(left: 10, right: 2),
         decoration: BoxDecoration(
-          color: hasKeys ? scheme.surface : (on ? scheme.surface.withValues(alpha: 0.5) : Colors.transparent),
-          border: Border(bottom: BorderSide(width: 2, color: hasKeys ? scheme.primary : (on ? scheme.primary.withValues(alpha: 0.4) : Colors.transparent))),
+          border: Border(bottom: BorderSide(width: 1.5, color: hasKeys ? scheme.onSurface : (on ? scheme.onSurface.withValues(alpha: 0.35) : Colors.transparent))),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(t.icon, size: 16, color: hasKeys ? scheme.primary : scheme.onSurfaceVariant),
+          Icon(t.icon, size: 16, color: hasKeys ? scheme.onSurface : scheme.onSurfaceVariant),
           const SizedBox(width: 6),
-          Flexible(child: Text.verbatim(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: hasKeys ? FontWeight.w600 : FontWeight.normal))),
+          Flexible(child: Text.verbatim(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: hasKeys ? FontWeight.w500 : FontWeight.normal, color: hasKeys ? scheme.onSurface : scheme.onSurfaceVariant))),
           IconButton(
             key: ValueKey('tab-close-${t.key}'),
             tooltip: tr('Close tab'),

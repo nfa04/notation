@@ -387,7 +387,7 @@ class SettingsScreen extends StatelessWidget {
           length: categories.length,
           child: Scaffold(
             appBar: AppBar(
-              title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text('Settings'),
               // (a single category needs no tabs)
               bottom: categories.length < 2
                   ? null

@@ -974,7 +974,7 @@ _graphMenu(g),
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Graph', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Graph'),
         actions: [
           if (_mode == 'facts' && widget.service.ai != null && widget.service.ai!.providers.length > 1)
             PopupMenuButton<String>(

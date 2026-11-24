@@ -11,6 +11,7 @@ import 'review/study_calendar.dart';
 import 'review/study_material_reader.dart';
 import 'review/study_planner.dart';
 import 'style/accessibility.dart';
+import 'style/paper_look.dart';
 import 'templates/templates.dart';
 import 'style/refresh_rate.dart';
 import 'style/stylus_settings.dart';
@@ -561,6 +562,7 @@ class NotationApp extends StatelessWidget {
   /// [t] in the look of the platform (iOS or Material) and then with the accessibility settings, which come last so they win.
 
   ThemeData _themed(ThemeData t) {
+    t = paperLook(t, highContrast: accessibility?.highContrast ?? false);
     if (appTheme.look.isIos) t = iosLook(t);
     return accessibility?.theme(t) ?? t;
   }

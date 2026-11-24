@@ -47,7 +47,7 @@ class _AccountPanelState extends State<AccountPanel> {
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text.verbatim(name.isEmpty ? 'Notation' : name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                    Text.verbatim(name.isEmpty ? 'Notation' : name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w300), overflow: TextOverflow.ellipsis),
                     if (sync != null && sync.isSetUp) Text.verbatim(_status(sync), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
                   ]),
                 ),

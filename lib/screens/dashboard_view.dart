@@ -152,7 +152,8 @@ class _DashboardViewState extends State<DashboardView> {
     _reload();
   }
 
-  static const _cardColors = [Color(0xFFE8F0FE), Color(0xFFFEF7E0), Color(0xFFFCE8E6), Color(0xFFE6F4EA)];
+  // (paper: the sheets are always light, like the page they show; white, cream and sand, as the paper tones of the pages)
+  static const _cardColors = [Color(0xFFFFFFFF), Color(0xFFFBF6E8), Color(0xFFF3EADA)];
 
   // ---- reading the notes again after a sync (direct or through the cloud folder) has ended
   CloudSyncService? _cloud;
@@ -396,7 +397,7 @@ class _DashboardViewState extends State<DashboardView> {
               allFavorite: selectedIds.isNotEmpty && _shown.where((n) => _selected.contains(n.id)).every((n) => n.favorite),
             )
           : AppBar(
-        title: const Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Dashboard'),
         actions: [
           if (widget.sync != null) SyncNowButton(sync: widget.sync!, shares: widget.collab?.nativeShares),
           if (phone) ...[
@@ -442,7 +443,7 @@ class _DashboardViewState extends State<DashboardView> {
                           if (widget.planner != null) StudySessionCard(planner: widget.planner!, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt),
                           Text(
                             'Welcome back 👋',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w300),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -459,9 +460,7 @@ class _DashboardViewState extends State<DashboardView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(children: [
-                              const Icon(Icons.star_rounded, color: Colors.amber),
-                              const SizedBox(width: 8),
-                              Text('Favourites', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              Text('Favourites', style: _sectionLabel(context)),
                             ]),
                             const SizedBox(height: 12),
                           ],
@@ -473,7 +472,7 @@ class _DashboardViewState extends State<DashboardView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const SizedBox(height: 24),
-                            if (others.isNotEmpty) Text('Recent notes', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                            if (others.isNotEmpty) Text('Recent notes', style: _sectionLabel(context)),
                             const SizedBox(height: 12),
                           ],
                         ),
@@ -517,6 +516,9 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
+  /// A small quiet label above a group of notes (letter-spaced, muted).
+  TextStyle _sectionLabel(BuildContext context) => TextStyle(fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 1.2, color: Theme.of(context).colorScheme.onSurfaceVariant);
+
   Widget _grid(List<NoteSummary> notes, bool phone) => SliverGrid.builder(
         // (a phone shows two cards side by side, not one as big as the screen)
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -534,13 +536,13 @@ class _DashboardViewState extends State<DashboardView> {
       elevation: 0,
       color: color,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         side: _selected.contains(note.id)
             ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 3)
-            : BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+            : BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         onTap: () => _selecting || selectModifierPressed ? _toggleSelected(note.id) : widget.onOpenNote(note.id),
         onSecondaryTapUp: (d) => _showCardMenu(note, d.globalPosition),
         onLongPress: () => _selecting ? _toggleSelected(note.id) : _showCardMenu(note, _lastPress),
@@ -548,7 +550,7 @@ class _DashboardViewState extends State<DashboardView> {
         child: Stack(fit: StackFit.expand, children: [
           if (note.themeImage != null) ...[
             ClipRRect(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(8),
               child: BoundedFileImage(
                 File(note.themeImage!),
                 key: ValueKey(note.themeImage),
@@ -565,14 +567,14 @@ class _DashboardViewState extends State<DashboardView> {
                 changed: note.updatedAt,
                 locked: note.locked,
                 opacity: note.themeImage != null ? 0.65 : 0.9,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
           if (note.themeImage != null) ...[
             // darkens the picture so that the title stays readable
             const DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderRadius: BorderRadius.all(Radius.circular(8)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -586,7 +588,7 @@ class _DashboardViewState extends State<DashboardView> {
             // the card colours are always light, so a light fade keeps the title clear of the page preview
             DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: const BorderRadius.all(Radius.circular(16)),
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -610,7 +612,7 @@ class _DashboardViewState extends State<DashboardView> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w500,
                           color: note.themeImage != null ? Colors.white : Colors.black87,
                           shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null),
                     ),

@@ -401,7 +401,7 @@ class _CalendarViewState extends State<CalendarView> {
     return Scaffold(
       backgroundColor: _style.backgroundFor(Theme.of(context).brightness),
       appBar: AppBar(
-        title: const Text('Calendar', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Calendar'),
         backgroundColor: _style.backgroundFor(Theme.of(context).brightness),
         actions: _narrow ? _compactActions() : [
           if (_writable.isNotEmpty)

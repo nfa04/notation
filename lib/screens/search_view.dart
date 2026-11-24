@@ -516,7 +516,7 @@ class _SearchViewState extends State<SearchView> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Search', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Search'),
         actions: [
           if (!_query.isEmpty && problem == null)
             IconButton(key: const ValueKey('search-save'), icon: const Icon(Icons.bookmark_add_outlined), tooltip: tr('Save this search'), onPressed: _saveCurrent),

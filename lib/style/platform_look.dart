@@ -32,6 +32,20 @@ class IosLookMarker extends ThemeExtension<IosLookMarker> {
   IosLookMarker lerp(IosLookMarker? other, double t) => this;
 }
 
+/// Marks a theme as the paper look (see `paperLook`): flat bars with a hairline.
+class PaperLookMarker extends ThemeExtension<PaperLookMarker> {
+  const PaperLookMarker();
+
+  @override
+  PaperLookMarker copyWith() => this;
+
+  @override
+  PaperLookMarker lerp(PaperLookMarker? other, double t) => this;
+}
+
+/// Whether the bars of tools are flat with a hairline (the iOS look and the paper look), not tinted with a shadow.
+bool flatBars(BuildContext context) => isIosLook(context) || Theme.of(context).extension<PaperLookMarker>() != null;
+
 /// Whether the theme above [context] is the iOS look.
 bool isIosLook(BuildContext context) => Theme.of(context).extension<IosLookMarker>() != null;
 
@@ -39,23 +53,31 @@ bool isIosLook(BuildContext context) => Theme.of(context).extension<IosLookMarke
 /// or the tinted surface of Material.
 Color toolBarColor(BuildContext context) {
   final theme = Theme.of(context);
-  return isIosLook(context) ? (theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface) : theme.colorScheme.surfaceContainerLow;
+  return flatBars(context) ? (theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface) : theme.colorScheme.surfaceContainerLow;
 }
 
 /// How high a bar of tools floats: [material] in the Material look, flat in the iOS one (which has a hairline instead, see [toolBarEdge]).
-double toolBarElevation(BuildContext context, double material) => isIosLook(context) ? 0 : material;
+double toolBarElevation(BuildContext context, double material) => flatBars(context) ? 0 : material;
 
 /// The hairline on the side of a bar that faces the page, in the iOS look; null in the Material one.
 Border? toolBarEdge(BuildContext context, {bool top = false, bool left = false}) {
-  if (!isIosLook(context)) return null;
-  final line = BorderSide(color: Theme.of(context).dividerTheme.color ?? Theme.of(context).dividerColor, width: 0.5);
+  if (!flatBars(context)) return null;
+  final line = BorderSide(color: Theme.of(context).dividerTheme.color ?? Theme.of(context).dividerColor, width: isIosLook(context) ? 0.5 : 1);
   return Border(top: top ? line : BorderSide.none, left: left ? line : BorderSide.none);
 }
 
 /// The look of a tool that is switched on or off (the eraser, the highlighter): in the iOS look the one that is on has a pale accent
 /// square behind it and the others nothing; null (the button's own style) in the Material look, where the tonal disc says it.
 ButtonStyle? toggleToolStyle(BuildContext context) {
-  if (!isIosLook(context)) return null;
+  if (!flatBars(context)) return null;
+  if (!isIosLook(context)) {
+    // the paper look: a pale grey square (the ink, faded), the shape of the selection in the menu
+    final ink = Theme.of(context).colorScheme.onSurface;
+    return ButtonStyle(
+      shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8)))),
+      backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? ink.withValues(alpha: 0.09) : Colors.transparent),
+    );
+  }
   final accent = Theme.of(context).colorScheme.primary;
   return ButtonStyle(backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? accent.withValues(alpha: 0.14) : Colors.transparent));
 }
