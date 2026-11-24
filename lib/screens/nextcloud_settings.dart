@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:caldav/caldav.dart';
 import 'package:flutter/material.dart' hide Text;
 
@@ -262,7 +263,7 @@ class _NextcloudSettingsState extends State<NextcloudSettings> {
                 child: FilledButton.icon(
                   key: const ValueKey('nextcloud-browser-login'),
                   onPressed: _busy ? null : _browserLogin,
-                  icon: const Icon(Icons.open_in_browser, size: 18),
+                  icon: const Icon(Symbols.open_in_browser, size: 18),
                   label: const Text('Log in with the browser'),
                 ),
               ),
@@ -304,7 +305,7 @@ class _NextcloudSettingsState extends State<NextcloudSettings> {
               onPressed: _busy ? null : _connect,
               icon: _busy
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2,))
-                  : const Icon(Icons.link),
+                  : const Icon(Symbols.link),
               label: Text(_calendars == null ? 'Connect' : 'Connect again'),
             ),
             const Spacer(),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'window_close.dart';
 import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import '../capture/capture_link.dart';
@@ -133,16 +134,16 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   AssistantChat? _notesChat;
 
   static const _destinations = {
-    9: NavigationRailDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: Text('Assistant')),
-    0: NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Dashboard')),
-    1: NavigationRailDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: Text('Folders')),
-    2: NavigationRailDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: Text('Calendar')),
-    10: NavigationRailDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: Text('Study plans')),
-    3: NavigationRailDestination(icon: Icon(Icons.note_alt_outlined), selectedIcon: Icon(Icons.note_alt), label: Text('Note')),
-    4: NavigationRailDestination(icon: Icon(Icons.bolt_outlined), selectedIcon: Icon(Icons.bolt), label: Text('Automations')),
-    6: NavigationRailDestination(icon: Icon(Icons.search), selectedIcon: Icon(Icons.search), label: Text('Search')),
-    8: NavigationRailDestination(icon: Icon(Icons.hub_outlined), selectedIcon: Icon(Icons.hub), label: Text('Graph')),
-    5: NavigationRailDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: Text('Settings')),
+    9: NavigationRailDestination(icon: Icon(Symbols.auto_awesome), selectedIcon: Icon(Symbols.auto_awesome), label: Text('Assistant')),
+    0: NavigationRailDestination(icon: Icon(Symbols.home), selectedIcon: Icon(Symbols.home), label: Text('Dashboard')),
+    1: NavigationRailDestination(icon: Icon(Symbols.folder), selectedIcon: Icon(Symbols.folder), label: Text('Folders')),
+    2: NavigationRailDestination(icon: Icon(Symbols.calendar_month), selectedIcon: Icon(Symbols.calendar_month), label: Text('Calendar')),
+    10: NavigationRailDestination(icon: Icon(Symbols.school), selectedIcon: Icon(Symbols.school), label: Text('Study plans')),
+    3: NavigationRailDestination(icon: Icon(Symbols.note_alt), selectedIcon: Icon(Symbols.note_alt), label: Text('Note')),
+    4: NavigationRailDestination(icon: Icon(Symbols.bolt), selectedIcon: Icon(Symbols.bolt), label: Text('Automations')),
+    6: NavigationRailDestination(icon: Icon(Symbols.search), selectedIcon: Icon(Symbols.search), label: Text('Search')),
+    8: NavigationRailDestination(icon: Icon(Symbols.hub), selectedIcon: Icon(Symbols.hub), label: Text('Graph')),
+    5: NavigationRailDestination(icon: Icon(Symbols.settings), selectedIcon: Icon(Symbols.settings), label: Text('Settings')),
   };
 
   SidebarItem _sidebarItem(int i) {
@@ -1118,8 +1119,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           footer: !kIsWeb || _app.sync == null
               ? null
               : (extended
-                  ? TextButton.icon(key: const ValueKey('rail-sign-out'), onPressed: () => confirmSignOut(context, _app.sync!), icon: const Icon(Icons.logout, size: 18), label: Text(tr('Sign out')))
-                  : IconButton(key: const ValueKey('rail-sign-out'), tooltip: tr('Sign out'), onPressed: () => confirmSignOut(context, _app.sync!), icon: const Icon(Icons.logout))),
+                  ? TextButton.icon(key: const ValueKey('rail-sign-out'), onPressed: () => confirmSignOut(context, _app.sync!), icon: const Icon(Symbols.logout, size: 18), label: Text(tr('Sign out')))
+                  : IconButton(key: const ValueKey('rail-sign-out'), tooltip: tr('Sign out'), onPressed: () => confirmSignOut(context, _app.sync!), icon: const Icon(Symbols.logout))),
         ),
         VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant),
       ]),
@@ -1211,7 +1212,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
                 // selecting notes puts a bar with its own close button where the menu button sits
                 builder: (context, selecting, _) => selecting > 0
                     ? const SizedBox.shrink()
-                    : IconButton(key: const ValueKey('phone-menu'), tooltip: tr('Menu'), icon: const Icon(Icons.menu), onPressed: () => _phoneScaffold.currentState?.openDrawer()),
+                    : IconButton(key: const ValueKey('phone-menu'), tooltip: tr('Menu'), icon: const Icon(Symbols.menu), onPressed: () => _phoneScaffold.currentState?.openDrawer()),
               ),
             ),
         ]),
@@ -1234,7 +1235,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         key: const ValueKey('rail-hide'),
         tooltip: tr('Hide the menu'),
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.chevron_left),
+        icon: const Icon(Symbols.chevron_left),
         onPressed: () => _setRailHidden(true),
       );
 
@@ -1436,7 +1437,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         allShown: _shown.length > 1,
         // the menu button comes back where the menu was hidden: at the left end of the first strip
         leading: _railHidden && (pane == null || pane == _shown.first)
-            ? IconButton(key: const ValueKey('rail-show'), tooltip: tr('Show the menu'), visualDensity: VisualDensity.compact, icon: const Icon(Icons.menu, size: 20), onPressed: () => _setRailHidden(false))
+            ? IconButton(key: const ValueKey('rail-show'), tooltip: tr('Show the menu'), visualDensity: VisualDensity.compact, icon: const Icon(Symbols.menu, size: 20), onPressed: () => _setRailHidden(false))
             : null,
       ),
     );
@@ -1450,10 +1451,10 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   }
 
   WorkspaceTab _tabOf(String k) {
-    if (_isNote(k)) return WorkspaceTab(key: k, icon: Icons.note_alt_outlined, title: _liveTitle(k) ?? _titles[k] ?? "", untitled: true); // (an editor that is leaving still answers during that very build)
+    if (_isNote(k)) return WorkspaceTab(key: k, icon: Symbols.note_alt, title: _liveTitle(k) ?? _titles[k] ?? "", untitled: true); // (an editor that is leaving still answers during that very build)
     if (_isGraph(k)) {
       final name = _graphName(k);
-      return WorkspaceTab(key: k, icon: Icons.hub_outlined, title: name.isEmpty ? tr('Graph') : name);
+      return WorkspaceTab(key: k, icon: Symbols.hub, title: name.isEmpty ? tr('Graph') : name);
     }
     final d = _destinations[_pageOf(k)] ?? _destinations[3]!;
     return WorkspaceTab(key: k, icon: (d.icon as Icon).icon!, title: tr((d.label as Text).data!));
@@ -1535,7 +1536,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
                 key: ValueKey('close-split-$key'),
                 tooltip: tr('Close this pane (end the split view)'),
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.close_fullscreen, size: 20),
+                icon: const Icon(Symbols.close_fullscreen, size: 20),
                 onPressed: () => _unshow(key),
               ),
             ])

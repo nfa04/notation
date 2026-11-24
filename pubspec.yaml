@@ -91,6 +91,7 @@ dependencies:
   web: ^1.1.2
   cryptography_flutter: ^2.3.4
   sodium: ^4.0.4
+  material_symbols_icons: ^4.2960.0
 
 dev_dependencies:
   flutter_test:

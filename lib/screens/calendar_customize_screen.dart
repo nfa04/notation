@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/text.dart';
 
@@ -232,7 +233,7 @@ class CalendarCustomizeScreen extends StatelessWidget {
         child: Text(resolved.emoji ?? '  '),
       ),
       title: Text.verbatim(c.name),
-      trailing: const Icon(Icons.brush_outlined),
+      trailing: const Icon(Symbols.brush),
       onTap: () async {
         final result = await showStyleDialog(
           context,

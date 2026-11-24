@@ -288,7 +288,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             value: _designBrushes,
             child: Row(
               children: [
-                const Icon(Icons.tune, size: 20),
+                const Icon(Symbols.tune, size: 20),
                 const SizedBox(width: 12),
                 Flexible(child: Text(tr('Design a brush...'), overflow: TextOverflow.ellipsis)),
               ],
@@ -303,7 +303,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           color: chosen ? scheme.secondaryContainer : null,
         ),
         child: Icon(
-          Icons.brush_outlined,
+          Symbols.brush,
           size: 20,
           color: chosen ? scheme.onSecondaryContainer : null,
         ),
@@ -346,7 +346,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           color: on ? scheme.secondaryContainer : null,
         ),
         child: Icon(
-          Icons.timeline,
+          Symbols.timeline,
           size: 20,
           color: on ? scheme.onSecondaryContainer : null,
         ),
@@ -406,7 +406,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           color: on ? scheme.secondaryContainer : null,
         ),
         child: Icon(
-          Icons.flip,
+          Symbols.flip,
           size: 20,
           color: on ? scheme.onSecondaryContainer : null,
         ),
@@ -450,7 +450,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           value: -1,
           child: Row(
             children: [
-              const Icon(Icons.edit_outlined, size: 20),
+              const Icon(Symbols.edit, size: 20),
               const SizedBox(width: 12),
               Text(tr('Plain pen')),
             ],
@@ -464,7 +464,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             value: i,
             child: Row(
               children: [
-                const Icon(Icons.auto_fix_high, size: 20),
+                const Icon(Symbols.auto_fix_high, size: 20),
                 const SizedBox(width: 12),
                 Text.verbatim(
                   _EditorExtensions.toolLabel(
@@ -483,7 +483,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           color: active != null ? scheme.secondaryContainer : null,
         ),
         child: Icon(
-          Icons.auto_fix_high,
+          Symbols.auto_fix_high,
           size: 20,
           color: active != null ? scheme.onSecondaryContainer : null,
         ),
@@ -553,7 +553,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           valueListenable: _undoTick,
           builder: (context, _, _) => IconButton(
             key: const ValueKey('undo-button'),
-            icon: const Icon(Icons.undo_rounded, size: 22),
+            icon: const Icon(Symbols.undo_rounded, size: 22),
             tooltip: tr('Undo'),
             onPressed: _undoStack.canUndo ? _undoDrawing : null,
           ),
@@ -565,7 +565,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           valueListenable: _undoTick,
           builder: (context, _, _) => IconButton(
             key: const ValueKey('redo-button'),
-            icon: const Icon(Icons.redo_rounded, size: 22),
+            icon: const Icon(Symbols.redo_rounded, size: 22),
             tooltip: tr('Redo'),
             onPressed: _undoStack.canRedo ? _redoDrawing : null,
           ),
@@ -579,8 +579,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           child: IconButton.filledTonal(
             isSelected: _highlighter,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Icons.border_color, size: 20),
-            icon: const Icon(Icons.border_color_outlined, size: 20),
+            selectedIcon: const Icon(Symbols.border_color, size: 20),
+            icon: const Icon(Symbols.border_color, size: 20),
             tooltip: tr('Highlighter (see-through, in the chosen color)'),
             onPressed: () => setState(() {
               _highlighter = !_highlighter;
@@ -606,7 +606,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
               key: const ValueKey('shape-style'),
               tooltip: tr('Style of the shapes: line, dashes and fill'),
               icon: Icon(
-                Icons.format_color_fill,
+                Symbols.format_color_fill,
                 size: 20,
                 color: _shapeFill ?? _selectedPenColor,
               ),
@@ -621,8 +621,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         child: IconButton.filledTonal(
           isSelected: _erasing,
             style: toggleToolStyle(context),
-          selectedIcon: const Icon(Icons.auto_fix_normal, size: 20),
-          icon: const Icon(Icons.auto_fix_normal_outlined, size: 20),
+          selectedIcon: const Icon(Symbols.auto_fix_normal, size: 20),
+          icon: const Icon(Symbols.auto_fix_normal, size: 20),
           tooltip: tr('Eraser (drawings only)'),
           onPressed: () => setState(() {
             _erasing = !_erasing;
@@ -642,8 +642,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           child: IconButton.filledTonal(
             isSelected: _lassoing,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Icons.gesture, size: 20),
-            icon: const Icon(Icons.gesture, size: 20),
+            selectedIcon: const Icon(Symbols.gesture, size: 20),
+            icon: const Icon(Symbols.gesture, size: 20),
             tooltip: tr(
               'Lasso: draw around drawings, text boxes and pictures to select them',
             ),
@@ -705,7 +705,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
       Center(
         heightFactor: 1,
         child: IconButton(
-          icon: const Icon(Icons.add_circle_outline, size: 22),
+          icon: const Icon(Symbols.add_circle_outline, size: 22),
           tooltip: tr('Add a color (hold an added color to remove it)'),
           onPressed: _addCustomColor,
         ),
@@ -717,8 +717,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             key: const ValueKey('eyedropper-button'),
             isSelected: _picking,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Icons.colorize, size: 20),
-            icon: const Icon(Icons.colorize_outlined, size: 20),
+            selectedIcon: const Icon(Symbols.colorize, size: 20),
+            icon: const Icon(Symbols.colorize, size: 20),
             tooltip: tr('Eyedropper: touch anything on the page to draw in its color (I)'),
             onPressed: _toggleEyedropper,
           ),
@@ -730,8 +730,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             key: const ValueKey('fill-bucket-button'),
             isSelected: _bucketOn,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Icons.format_color_fill, size: 20),
-            icon: const Icon(Icons.format_color_fill, size: 20),
+            selectedIcon: const Icon(Symbols.format_color_fill, size: 20),
+            icon: const Icon(Symbols.format_color_fill, size: 20),
             tooltip: tr('Fill bucket: touch a closed area to fill it with the pen color (G)'),
             onPressed: _toggleBucket,
           ),
@@ -765,7 +765,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
                   shape: BoxShape.circle,
                 ),
               ),
-              const Icon(Icons.arrow_drop_down, size: 16),
+              const Icon(Symbols.arrow_drop_down, size: 16),
             ],
           ),
           onSelected: (newWidth) => setState(() {
@@ -794,7 +794,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         heightFactor: 1,
         child: IconButton(
           key: const ValueKey('more-tools'),
-          icon: Icon(_moreTools ? Icons.expand_less : Icons.more_horiz, size: 22),
+          icon: Icon(_moreTools ? Symbols.expand_less : Symbols.more_horiz, size: 22),
           tooltip: _moreTools ? tr('Fewer tools') : tr('More tools: guides, stabiliser, symmetry, onion skin, straightening, clear the page'),
           onPressed: () {
             setState(() => _moreTools = !_moreTools);
@@ -807,7 +807,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
         heightFactor: 1,
         child: IconButton(
           key: const ValueKey('clear-page'),
-          icon: const Icon(Icons.cleaning_services_outlined, size: 22),
+          icon: const Icon(Symbols.cleaning_services, size: 22),
           tooltip: tr('Clear the drawings and highlights on this page'),
           onPressed: _clearPage,
         ),
@@ -823,8 +823,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             key: const ValueKey('straighten-toggle'),
             isSelected: _straighten,
             style: toggleToolStyle(context),
-            selectedIcon: const Icon(Icons.show_chart, size: 20),
-            icon: const Icon(Icons.show_chart, size: 20),
+            selectedIcon: const Icon(Symbols.show_chart, size: 20),
+            icon: const Icon(Symbols.show_chart, size: 20),
             tooltip: tr(
               _straighten
                   ? 'Straight lines and shapes: on (lines drawn nearly straight are straightened, and drawings very close to a rectangle, ellipse, triangle or diamond become that shape)'
@@ -844,7 +844,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           heightFactor: 1,
           child: IconButton(
             key: const ValueKey('empty-plot'),
-            icon: const Icon(Icons.auto_graph, size: 22),
+            icon: const Icon(Symbols.auto_graph, size: 22),
             tooltip: tr('Place an empty plot to draw into'),
             onPressed: _addEmptyPlot,
           ),

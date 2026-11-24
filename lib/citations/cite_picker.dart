@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -152,7 +153,7 @@ class _CitePickerState extends State<_CitePicker> {
                   child: TextField(
                     key: const ValueKey('cite-search'),
                     controller: _search,
-                    decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Search by author, title or key'), border: const OutlineInputBorder(), isDense: true),
+                    decoration: InputDecoration(prefixIcon: const Icon(Symbols.search), hintText: tr('Search by author, title or key'), border: const OutlineInputBorder(), isDense: true),
                   ),
                 ),
               Flexible(
@@ -175,10 +176,10 @@ class _CitePickerState extends State<_CitePicker> {
                         for (final p in _chosen.where((p) => !widget.service.byId.containsKey(p.key)))
                           ListTile(
                             dense: true,
-                            leading: Icon(Icons.error_outline, color: scheme.error),
+                            leading: Icon(Symbols.error_outline, color: scheme.error),
                             title: Text.verbatim('@${p.key}'),
                             subtitle: Text('This source is not in the library.'),
-                            trailing: IconButton(tooltip: tr('Remove'), icon: const Icon(Icons.close), onPressed: () => _toggle(p.key, false)),
+                            trailing: IconButton(tooltip: tr('Remove'), icon: const Icon(Symbols.close), onPressed: () => _toggle(p.key, false)),
                           ),
                       ]),
               ),
@@ -227,8 +228,8 @@ class _CitePickerState extends State<_CitePicker> {
                               key: ValueKey('cite-no-author-${p.key}'),
                               tooltip: tr('Leave out the author (the text names them)'),
                               isSelected: p.suppressAuthor,
-                              icon: const Icon(Icons.person_outline),
-                              selectedIcon: const Icon(Icons.person_off),
+                              icon: const Icon(Symbols.person_outline),
+                              selectedIcon: const Icon(Symbols.person_off),
                               onPressed: () => setState(() => p.suppressAuthor = !p.suppressAuthor),
                             ),
                           ]),
@@ -244,7 +245,7 @@ class _CitePickerState extends State<_CitePicker> {
                     TextButton.icon(
                       key: const ValueKey('cite-remove'),
                       onPressed: () => Navigator.pop(context, ''),
-                      icon: const Icon(Icons.delete_outline, size: 18),
+                      icon: const Icon(Symbols.delete_outline, size: 18),
                       label: const Text('Remove the citation'),
                     ),
                   const Spacer(),

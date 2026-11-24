@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -229,7 +230,7 @@ class _PresentationViewState extends State<PresentationView> {
       child: IconTheme(
         data: const IconThemeData(color: white),
         child: Row(children: [
-          IconButton(key: const ValueKey('presentation-close'), tooltip: tr('Leave the presentation'), icon: const Icon(Icons.close), onPressed: widget.onClose),
+          IconButton(key: const ValueKey('presentation-close'), tooltip: tr('Leave the presentation'), icon: const Icon(Symbols.close), onPressed: widget.onClose),
           const Spacer(),
           Text.verbatim(tr('Page {n} of {total}', {'n': _page + 1, 'total': widget.pageCount}), key: const ValueKey('presentation-page'), style: const TextStyle(color: white)),
           const SizedBox(width: 12),
@@ -239,7 +240,7 @@ class _PresentationViewState extends State<PresentationView> {
             IconButton(
               key: const ValueKey('flipbook-play'),
               tooltip: tr(_playing ? 'Stop' : 'Play'),
-              icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+              icon: Icon(_playing ? Symbols.pause : Symbols.play_arrow),
               onPressed: () => setState(() {
                 _playing = !_playing;
                 _startPlaying();
@@ -257,10 +258,10 @@ class _PresentationViewState extends State<PresentationView> {
               child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text.verbatim('$_fps / s', style: const TextStyle(color: white))),
             ),
           ],
-          IconButton(key: const ValueKey('presentation-previous'), tooltip: tr('Previous page'), icon: const Icon(Icons.chevron_left), onPressed: _page > 0 ? () => _go(_page - 1) : null),
-          IconButton(key: const ValueKey('presentation-next'), tooltip: tr('Next page'), icon: const Icon(Icons.chevron_right), onPressed: _page < widget.pageCount - 1 ? () => _go(_page + 1) : null),
-          IconButton(key: const ValueKey('presentation-laser-toggle'), tooltip: tr('Laser pointer (L)'), icon: Icon(Icons.adjust, color: _laser ? Colors.redAccent : white), onPressed: _toggleLaser),
-          IconButton(key: const ValueKey('presentation-blackout-toggle'), tooltip: tr('Black screen (B)'), icon: const Icon(Icons.brightness_1_outlined), onPressed: () => setState(() => _blackout = !_blackout)),
+          IconButton(key: const ValueKey('presentation-previous'), tooltip: tr('Previous page'), icon: const Icon(Symbols.chevron_left), onPressed: _page > 0 ? () => _go(_page - 1) : null),
+          IconButton(key: const ValueKey('presentation-next'), tooltip: tr('Next page'), icon: const Icon(Symbols.chevron_right), onPressed: _page < widget.pageCount - 1 ? () => _go(_page + 1) : null),
+          IconButton(key: const ValueKey('presentation-laser-toggle'), tooltip: tr('Laser pointer (L)'), icon: Icon(Symbols.adjust, color: _laser ? Colors.redAccent : white), onPressed: _toggleLaser),
+          IconButton(key: const ValueKey('presentation-blackout-toggle'), tooltip: tr('Black screen (B)'), icon: const Icon(Symbols.brightness_1), onPressed: () => setState(() => _blackout = !_blackout)),
         ]),
       ),
     );

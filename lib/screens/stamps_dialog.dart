@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -43,7 +44,7 @@ class StampsPanel extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
           child: Row(children: [
             Expanded(child: Text(tr('Stamps'), style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(key: const ValueKey('stamps-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: onClose),
+            IconButton(key: const ValueKey('stamps-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: onClose),
           ]),
         ),
         Expanded(child: Padding(padding: const EdgeInsets.all(12), child: StampsGrid(library: library, onPick: onPick, changed: changed))),
@@ -134,7 +135,7 @@ class _StampsGridState extends State<StampsGrid> {
                               tooltip: tr('Remove this stamp'),
                               visualDensity: VisualDensity.compact,
                               iconSize: 16,
-                              icon: const Icon(Icons.close),
+                              icon: const Icon(Symbols.close),
                               onPressed: () => _remove(s),
                             ),
                           ),

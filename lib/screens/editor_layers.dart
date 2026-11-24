@@ -208,7 +208,7 @@ extension _EditorLayers on _FixedPageNoteEditorState {
       key: const ValueKey('layers-button'),
       tooltip: tr('Layers: {layer}', {'layer': tr(_drawingLayer.name)}),
       style: on ? IconButton.styleFrom(backgroundColor: scheme.secondaryContainer, foregroundColor: scheme.onSecondaryContainer) : null,
-      icon: const Icon(Icons.layers_outlined, size: 20),
+      icon: const Icon(Symbols.layers, size: 20),
       onPressed: () => _openLayers(toggle: true),
     );
   }

@@ -205,10 +205,10 @@ extension _EditorPenTool on _FixedPageNoteEditorState {
         color: scheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(22),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          button('pen-done', Icons.check, tr('Finish the line'), path.drawable ? _finishPenPath : null),
-          button('pen-close', Icons.change_history_outlined, tr('Close the shape'), path.drawable ? () => _finishPenPath(close: true) : null),
-          button('pen-undo-point', Icons.undo, tr('Take the last point back'), _undoPenPoint),
-          button('pen-cancel', Icons.close, tr('Drop the line'), _cancelPenPath),
+          button('pen-done', Symbols.check, tr('Finish the line'), path.drawable ? _finishPenPath : null),
+          button('pen-close', Symbols.change_history, tr('Close the shape'), path.drawable ? () => _finishPenPath(close: true) : null),
+          button('pen-undo-point', Symbols.undo, tr('Take the last point back'), _undoPenPoint),
+          button('pen-cancel', Symbols.close, tr('Drop the line'), _cancelPenPath),
         ]),
       ),
     );

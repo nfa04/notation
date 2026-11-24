@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -155,10 +156,10 @@ class _NoteAiSheetState extends State<_NoteAiSheet> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
         child: Row(children: [
-          const Icon(Icons.auto_awesome, size: 18),
+          const Icon(Symbols.auto_awesome, size: 18),
           const SizedBox(width: 8),
           Expanded(child: Text('What the AI can make of this note', style: Theme.of(context).textTheme.titleSmall)),
-          IconButton(key: const ValueKey('note-ai-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          IconButton(key: const ValueKey('note-ai-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: () => Navigator.pop(context)),
         ]),
       ),
       const Divider(height: 1),
@@ -206,11 +207,11 @@ class _NoteAiSheetState extends State<_NoteAiSheet> {
     return ListTile(
       key: ValueKey('note-ai-${kind.id}'),
       leading: Icon(switch (kind) {
-        NoteAiKind.summary => Icons.short_text,
-        NoteAiKind.presentation => Icons.slideshow_outlined,
-        NoteAiKind.studyGuide => Icons.menu_book_outlined,
-        NoteAiKind.quiz => Icons.quiz_outlined,
-        NoteAiKind.actions => Icons.checklist,
+        NoteAiKind.summary => Symbols.short_text,
+        NoteAiKind.presentation => Symbols.slideshow,
+        NoteAiKind.studyGuide => Symbols.menu_book,
+        NoteAiKind.quiz => Symbols.quiz,
+        NoteAiKind.actions => Symbols.checklist,
       }),
       title: Text(kind.label),
       subtitle: Text.verbatim(row == null ? tr(kind.description) : '${tr('Made')} ${_ago(row.createdAt)}${stale ? ' - ${tr('the note has changed since')}' : ''}'),
@@ -256,10 +257,10 @@ class _Viewer extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
         child: Row(children: [
-          IconButton(key: const ValueKey('note-ai-back'), tooltip: tr('Back'), icon: const Icon(Icons.arrow_back), onPressed: onBack),
+          IconButton(key: const ValueKey('note-ai-back'), tooltip: tr('Back'), icon: const Icon(Symbols.arrow_back), onPressed: onBack),
           Expanded(child: Text(kind.label, style: Theme.of(context).textTheme.titleSmall)),
-          TextButton.icon(key: const ValueKey('note-ai-again'), onPressed: onAgain, icon: const Icon(Icons.refresh, size: 18), label: const Text('Make it again')),
-          IconButton(tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          TextButton.icon(key: const ValueKey('note-ai-again'), onPressed: onAgain, icon: const Icon(Symbols.refresh, size: 18), label: const Text('Make it again')),
+          IconButton(tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: () => Navigator.pop(context)),
         ]),
       ),
       const Divider(height: 1),
@@ -290,7 +291,7 @@ class _TextView extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.all(8),
         child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          TextButton.icon(onPressed: () => Clipboard.setData(ClipboardData(text: text)), icon: const Icon(Icons.copy, size: 18), label: const Text('Copy')),
+          TextButton.icon(onPressed: () => Clipboard.setData(ClipboardData(text: text)), icon: const Icon(Symbols.content_copy, size: 18), label: const Text('Copy')),
           if (onAddText != null)
             AddToNoteMenu(
               canKeep: false, // (it is kept already, in the list of what was made)
@@ -300,7 +301,7 @@ class _TextView extends StatelessWidget {
                 // (when the dialog has left: the page below is not changed while it is going)
                 WidgetsBinding.instance.addPostFrameCallback((_) => onAddText!(text, target, title: title));
               },
-              child: const Chip(avatar: Icon(Icons.note_add_outlined, size: 18), label: Text('Add to the note')),
+              child: const Chip(avatar: Icon(Symbols.note_add, size: 18), label: Text('Add to the note')),
             ),
         ]),
       ),
@@ -398,14 +399,14 @@ class _SlidesViewState extends State<_SlidesView> {
       Padding(
         padding: const EdgeInsets.all(8),
         child: Row(children: [
-          IconButton(key: const ValueKey('slide-prev'), tooltip: tr('Previous'), icon: const Icon(Icons.chevron_left), onPressed: _page == 0 ? null : () => _controller.previousPage(duration: const Duration(milliseconds: 200), curve: Curves.easeOut)),
+          IconButton(key: const ValueKey('slide-prev'), tooltip: tr('Previous'), icon: const Icon(Symbols.chevron_left), onPressed: _page == 0 ? null : () => _controller.previousPage(duration: const Duration(milliseconds: 200), curve: Curves.easeOut)),
           Text.verbatim('${_page + 1} / ${slides.length}'),
-          IconButton(key: const ValueKey('slide-next'), tooltip: tr('Next'), icon: const Icon(Icons.chevron_right), onPressed: _page >= slides.length - 1 ? null : () => _controller.nextPage(duration: const Duration(milliseconds: 200), curve: Curves.easeOut)),
+          IconButton(key: const ValueKey('slide-next'), tooltip: tr('Next'), icon: const Icon(Symbols.chevron_right), onPressed: _page >= slides.length - 1 ? null : () => _controller.nextPage(duration: const Duration(milliseconds: 200), curve: Curves.easeOut)),
           const Spacer(),
           FilledButton.tonalIcon(
             key: const ValueKey('slides-export'),
             onPressed: _exporting ? null : _export,
-            icon: _exporting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)) : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+            icon: _exporting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)) : const Icon(Symbols.picture_as_pdf, size: 18),
             label: const Text('Export as PDF'),
           ),
         ]),
@@ -605,7 +606,7 @@ class _ActionsViewState extends State<_ActionsView> {
             child: FilledButton.icon(
               key: const ValueKey('actions-add'),
               onPressed: _picked.difference(_added).isEmpty ? null : _addAll,
-              icon: const Icon(Icons.event_available_outlined, size: 18),
+              icon: const Icon(Symbols.event_available, size: 18),
               label: const Text('Add to the calendar'),
             ),
           ),

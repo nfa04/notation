@@ -102,7 +102,7 @@ extension _EditorFillBucket on _FixedPageNoteEditorState {
         tooltip: tr('Gap closing: how big a gap in the lines still closes an area'),
         padding: EdgeInsets.zero,
         iconSize: 20,
-        icon: const Icon(Icons.hdr_strong_outlined, size: 20),
+        icon: const Icon(Symbols.hdr_strong, size: 20),
         onSelected: (gap) => setState(() => _fillGap = gap),
         itemBuilder: (_) => [
           for (final gap in FillGap.values)

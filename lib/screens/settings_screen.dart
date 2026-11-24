@@ -1,4 +1,5 @@
 
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/paper.dart';
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart' hide Text;
@@ -137,7 +138,7 @@ class SettingsScreen extends StatelessWidget {
     return [
       (
         label: 'General',
-        icon: Icons.tune,
+        icon: Symbols.tune,
         sections: [
           title('Appearance'),
           const SizedBox(height: 16),
@@ -217,7 +218,7 @@ class SettingsScreen extends StatelessWidget {
             OutlinedButton.icon(
               key: const ValueKey('profile-intro'),
               onPressed: () => profile!.resetIntro(),
-              icon: const Icon(Icons.waving_hand_outlined, size: 18),
+              icon: const Icon(Symbols.waving_hand, size: 18),
               label: const Text('Show the intro again'),
             ),
           ],
@@ -233,7 +234,7 @@ class SettingsScreen extends StatelessWidget {
       ),
       (
         label: 'Tools and writing',
-        icon: Icons.build_outlined,
+        icon: Symbols.build,
         sections: [
           if (stylus != null) ...[
             StylusSettingsCard(settings: stylus!),
@@ -260,12 +261,12 @@ class SettingsScreen extends StatelessWidget {
       ),
       (
         label: 'Keyboard',
-        icon: Icons.keyboard_outlined,
+        icon: Symbols.keyboard,
         sections: [if (shortcuts != null) ShortcutSettings(service: shortcuts!)],
       ),
       (
         label: 'AI and models',
-        icon: Icons.auto_awesome_outlined,
+        icon: Symbols.auto_awesome,
         sections: [
           ..._spaced([
             if (aiSwitch != null) _AiSwitchCard(aiSwitch: aiSwitch!),
@@ -338,7 +339,7 @@ class SettingsScreen extends StatelessWidget {
       ),
       (
         label: 'Extensions',
-        icon: Icons.extension_outlined,
+        icon: Symbols.extension,
         sections: [
           ..._spaced([
             if (extensions != null) ExtensionSettings(service: extensions!, ai: aiSwitch?.enabled ?? true ? ai : null, automations: automations),
@@ -349,7 +350,7 @@ class SettingsScreen extends StatelessWidget {
       (
         // what is backed up, to which devices, and who else sees what: one place (the name is the one others see)
         label: 'Sync and sharing',
-        icon: Icons.group_outlined,
+        icon: Symbols.group,
         sections: [
           ..._spaced([
             if (profile != null) ProfileSettings(profile: profile!),
@@ -427,7 +428,7 @@ class SettingsScreen extends StatelessWidget {
               width: selected ? 3 : 1,
             ),
           ),
-          child: selected ? const Icon(Icons.check, size: 18, color: Colors.white) : null,
+          child: selected ? const Icon(Symbols.check, size: 18, color: Colors.white) : null,
         ),
       ),
     );
@@ -467,7 +468,7 @@ class _ModelSettings extends StatelessWidget {
             ])
           else
             Row(children: [
-              Icon(installed ? Icons.check_circle_outline : Icons.download_outlined, size: 20),
+              Icon(installed ? Symbols.check_circle_outline : Symbols.download, size: 20),
               const SizedBox(width: 8),
               Expanded(child: Text(installed ? 'Model installed' : 'Model not installed')),
               if (installed)
@@ -512,7 +513,7 @@ class _NoteFilesSettings extends StatelessWidget {
               final id = await openNoteFile(context, service);
               if (id != null) onOpenNote?.call(id);
             },
-            icon: const Icon(Icons.file_open_outlined, size: 18),
+            icon: const Icon(Symbols.file_open, size: 18),
             label: const Text('Open a note file...'),
           ),
         ),

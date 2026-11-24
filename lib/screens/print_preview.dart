@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -53,9 +54,9 @@ class PrintPreview extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Print preview'),
           actions: [
-            TextButton.icon(key: const ValueKey('preview-save'), onPressed: onSave, icon: const Icon(Icons.save_alt), label: const Text('Save as PDF')),
+            TextButton.icon(key: const ValueKey('preview-save'), onPressed: onSave, icon: const Icon(Symbols.save_alt), label: const Text('Save as PDF')),
             const SizedBox(width: 8),
-            FilledButton.icon(key: const ValueKey('preview-print'), onPressed: () => _print(context), icon: const Icon(Icons.print), label: const Text('Print')),
+            FilledButton.icon(key: const ValueKey('preview-print'), onPressed: () => _print(context), icon: const Icon(Symbols.print), label: const Text('Print')),
             const SizedBox(width: 12),
           ],
         ),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/language.dart';
 import '../l10n/text.dart';
@@ -196,7 +197,7 @@ class MarkdownView extends StatelessWidget {
     final Widget? marker = switch (b.type) {
       MdBlockType.bullet => Text.verbatim(b.depth.isOdd ? '◦' : '•', style: style),
       MdBlockType.numbered => Text.verbatim('${b.level}.', style: style),
-      MdBlockType.task => Icon(b.checked ? Icons.check_box : Icons.check_box_outline_blank, size: fontSize * 1.15, color: textColor.withValues(alpha: 0.7)),
+      MdBlockType.task => Icon(b.checked ? Symbols.check_box : Symbols.check_box_outline_blank, size: fontSize * 1.15, color: textColor.withValues(alpha: 0.7)),
       MdBlockType.quote => Container(width: 3, height: fontSize * 1.3, color: textColor.withValues(alpha: 0.3)),
       _ => null,
     };
@@ -299,7 +300,7 @@ class MarkdownView extends StatelessWidget {
           else if (run.comment)
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
-              child: Tooltip(message: run.text, child: Icon(Icons.mode_comment, size: fontSize * 0.9, color: const Color(0xFFF9A825))),
+              child: Tooltip(message: run.text, child: Icon(Symbols.mode_comment, size: fontSize * 0.9, color: const Color(0xFFF9A825))),
             )
           else if (run.footnote != null)
             WidgetSpan(

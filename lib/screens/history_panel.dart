@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import '../pdf/note_pdf_document.dart';
 import 'dart:ui' as ui;
@@ -322,7 +323,7 @@ class _HistoryPanelState extends State<HistoryPanel> {
       key: const ValueKey('branch-bar'),
       padding: const EdgeInsets.fromLTRB(12, 6, 4, 0),
       child: Row(children: [
-        Icon(Icons.account_tree_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(Symbols.account_tree, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 8),
         Expanded(
           child: DropdownButton<String>(
@@ -412,9 +413,9 @@ class _HistoryPanelState extends State<HistoryPanel> {
           padding: const EdgeInsets.fromLTRB(4, 6, 4, 2),
           child: Row(children: [
             if (shown != null)
-              IconButton(key: const ValueKey('history-back'), tooltip: tr('Back to the list'), icon: const Icon(Icons.arrow_back), onPressed: () => setState(() => _shown = null))
+              IconButton(key: const ValueKey('history-back'), tooltip: tr('Back to the list'), icon: const Icon(Symbols.arrow_back), onPressed: () => setState(() => _shown = null))
             else
-              const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Icon(Icons.history)),
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Icon(Symbols.history)),
             Expanded(
               child: shown == null
                   ? Text('History', style: Theme.of(context).textTheme.titleMedium)
@@ -427,10 +428,10 @@ class _HistoryPanelState extends State<HistoryPanel> {
               FilledButton.icon(
                 key: const ValueKey('preview-restore'),
                 onPressed: _busy ? null : () => _restore(shown),
-                icon: const Icon(Icons.restore, size: 18),
+                icon: const Icon(Symbols.restore, size: 18),
                 label: const Text('Restore'),
               ),
-            IconButton(key: const ValueKey('history-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: widget.onClose),
+            IconButton(key: const ValueKey('history-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: widget.onClose),
           ]),
         ),
         if (_busy) const LinearProgressIndicator() else const Divider(height: 1),
@@ -462,7 +463,7 @@ class _HistoryPanelState extends State<HistoryPanel> {
             child: FilledButton.tonalIcon(
               key: const ValueKey('version-save'),
               onPressed: _busy ? null : _saveNow,
-              icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+              icon: const Icon(Symbols.bookmark_add, size: 18),
               label: const Text('Save this version'),
             ),
           ),
@@ -513,7 +514,7 @@ class _HistoryPanelState extends State<HistoryPanel> {
         return ListTile(
           key: ValueKey('version-${v.id}'),
           dense: true,
-          leading: Icon(manual ? Icons.bookmark_outline : _iconOf(v.reason), size: 20, color: madeByAssistant(v) ? Theme.of(context).colorScheme.tertiary : null),
+          leading: Icon(manual ? Symbols.bookmark : _iconOf(v.reason), size: 20, color: madeByAssistant(v) ? Theme.of(context).colorScheme.tertiary : null),
           tileColor: madeByAssistant(v) ? Theme.of(context,).colorScheme.tertiaryContainer.withValues(alpha: 0.25) : null,
           title: Text.verbatim(versionTitle(v), maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Text.verbatim(_when(context, v.at)),
@@ -537,14 +538,14 @@ class _HistoryPanelState extends State<HistoryPanel> {
   }
 
   static IconData _iconOf(VersionReason r) => switch (r) {
-        VersionReason.merge => Icons.call_merge,
-        VersionReason.restore => Icons.restore,
-        VersionReason.joined => Icons.group_outlined,
-        VersionReason.left => Icons.logout,
-        VersionReason.branch => Icons.account_tree_outlined,
-        VersionReason.assistant => Icons.auto_awesome,
-        VersionReason.assistantBefore => Icons.auto_awesome_outlined,
-        _ => Icons.history,
+        VersionReason.merge => Symbols.call_merge,
+        VersionReason.restore => Symbols.restore,
+        VersionReason.joined => Symbols.group,
+        VersionReason.left => Symbols.logout,
+        VersionReason.branch => Symbols.account_tree,
+        VersionReason.assistant => Symbols.auto_awesome,
+        VersionReason.assistantBefore => Symbols.auto_awesome,
+        _ => Symbols.history,
       };
 }
 

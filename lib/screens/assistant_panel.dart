@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/language.dart';
@@ -204,7 +205,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
       child: Row(children: [
-        const Icon(Icons.auto_awesome, size: 18),
+        const Icon(Symbols.auto_awesome, size: 18),
         const SizedBox(width: 8),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -218,7 +219,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
           PopupMenuButton<String>(
             key: const ValueKey('assistant-provider'),
             tooltip: tr('Who answers (the model is chosen in the Settings)'),
-            icon: const Icon(Icons.swap_horiz, size: 20),
+            icon: const Icon(Symbols.swap_horiz, size: 20),
             onSelected: widget.ai.chooseProvider,
             itemBuilder: (context) => [
               for (final p in widget.ai.providers)
@@ -234,23 +235,23 @@ class _AssistantPanelState extends State<AssistantPanel> {
           IconButton(
             key: const ValueKey('assistant-note-ai'),
             tooltip: tr('What the AI made of this note, and what it can make'),
-            icon: const Icon(Icons.auto_fix_high_outlined, size: 20),
+            icon: const Icon(Symbols.auto_fix_high, size: 20),
             onPressed: () => widget.onMake!(null),
           ),
         if (widget.flashcards)
         IconButton(
           key: const ValueKey('assistant-flashcards'),
           tooltip: tr(widget.chat.cardMode ? 'Back to the conversation' : 'Flashcards'),
-          icon: Icon(Icons.style_outlined, size: 20, color: widget.chat.cardMode ? Theme.of(context).colorScheme.primary : null),
+          icon: Icon(Symbols.style, size: 20, color: widget.chat.cardMode ? Theme.of(context).colorScheme.primary : null),
           onPressed: () => widget.chat.openFlashcards(!widget.chat.cardMode),
         ),
         IconButton(
           key: const ValueKey('assistant-clear'),
           tooltip: tr('Start a new conversation'),
-          icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+          icon: const Icon(Symbols.delete_sweep, size: 20),
           onPressed: widget.chat.messages.isEmpty ? null : widget.chat.clear,
         ),
-        if (widget.onClose != null) IconButton(key: const ValueKey('assistant-close'), tooltip: tr('Close'), icon: const Icon(Icons.close, size: 20), onPressed: widget.onClose),
+        if (widget.onClose != null) IconButton(key: const ValueKey('assistant-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close, size: 20), onPressed: widget.onClose),
       ]),
     );
   }
@@ -265,8 +266,8 @@ class _AssistantPanelState extends State<AssistantPanel> {
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
             segments: [
-              ButtonSegment(value: false, icon: const Icon(Icons.chat_bubble_outline, size: 16), label: const Text('Ask'), tooltip: _allNotes ? tr('Answers questions; your notes stay as they are') : tr('Answers questions; the note stays as it is')),
-              ButtonSegment(value: true, icon: const Icon(Icons.auto_fix_normal, size: 16), label: const Text('Agent'), tooltip: _allNotes ? tr('Works on your notes, tasks and calendar; it asks before each change') : tr('Works on the note; it asks before each change')),
+              ButtonSegment(value: false, icon: const Icon(Symbols.chat_bubble_outline, size: 16), label: const Text('Ask'), tooltip: _allNotes ? tr('Answers questions; your notes stay as they are') : tr('Answers questions; the note stays as it is')),
+              ButtonSegment(value: true, icon: const Icon(Symbols.auto_fix_normal, size: 16), label: const Text('Agent'), tooltip: _allNotes ? tr('Works on your notes, tasks and calendar; it asks before each change') : tr('Works on the note; it asks before each change')),
             ],
             selected: {chat.acting},
             onSelectionChanged: chat.busy ? null : (v) => chat.acting = v.first,
@@ -275,11 +276,11 @@ class _AssistantPanelState extends State<AssistantPanel> {
       );
 
   static IconData _kindIcon(NoteAiKind kind) => switch (kind) {
-        NoteAiKind.summary => Icons.short_text,
-        NoteAiKind.presentation => Icons.slideshow_outlined,
-        NoteAiKind.studyGuide => Icons.menu_book_outlined,
-        NoteAiKind.quiz => Icons.quiz_outlined,
-        NoteAiKind.actions => Icons.checklist,
+        NoteAiKind.summary => Symbols.short_text,
+        NoteAiKind.presentation => Symbols.slideshow,
+        NoteAiKind.studyGuide => Symbols.menu_book,
+        NoteAiKind.quiz => Symbols.quiz,
+        NoteAiKind.actions => Symbols.checklist,
       };
 
   Widget _body(BuildContext context, TextModelProvider? provider, AssistantChat chat) {
@@ -331,7 +332,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
             if (widget.flashcards)
               ActionChip(
                 key: const ValueKey('assistant-suggestion-flashcards'),
-                avatar: const Icon(Icons.style_outlined, size: 16),
+                avatar: const Icon(Symbols.style, size: 16),
                 label: const Text('Flashcards'),
                 tooltip: tr('Cards to learn the note by, one question each.'),
                 onPressed: provider?.state == ProviderState.ready ? () => widget.chat.openFlashcards() : null,
@@ -438,7 +439,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
               padding: const EdgeInsets.only(top: 4),
               child: TextButton.icon(
                 key: const ValueKey('assistant-continue'),
-                icon: const Icon(Icons.keyboard_double_arrow_down, size: 16),
+                icon: const Icon(Symbols.keyboard_double_arrow_down, size: 16),
                 label: Text(tr('The answer was cut off: continue')),
                 onPressed: widget.chat.continueAnswer,
               ),
@@ -449,7 +450,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                 IconButton(
                   tooltip: tr('Copy'),
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.copy, size: 16),
+                  icon: const Icon(Symbols.content_copy, size: 16),
                   onPressed: () => Clipboard.setData(ClipboardData(text: m.text)),
                 ),
                 if (widget.onAddToNote != null)
@@ -464,7 +465,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   key: const ValueKey('assistant-retry'),
                   tooltip: tr('Ask again'),
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.refresh, size: 16),
+                  icon: const Icon(Symbols.refresh, size: 16),
                   onPressed: widget.chat.retry,
                 ),
               if (m.given.isNotEmpty)
@@ -472,7 +473,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   key: ValueKey('assistant-given-$i'),
                   tooltip: tr('What the assistant read'),
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.article_outlined, size: 16),
+                  icon: const Icon(Symbols.article, size: 16),
                   onPressed: () => _showGiven(context, m.given),
                 ),
             ])
@@ -503,9 +504,9 @@ class _AssistantPanelState extends State<AssistantPanel> {
               ActionChip(
                 key: ValueKey('assistant-cite-$i-$n'),
                 avatar: why != null
-                    ? Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$n'))
+                    ? Icon(Symbols.warning_amber_rounded, size: 16, color: scheme.error, key: ValueKey('assistant-cite-doubt-$i-$n'))
                     : src.handwriting
-                        ? Icon(Icons.draw_outlined, size: 16, key: ValueKey('assistant-cite-ink-$i-$n'))
+                        ? Icon(Symbols.draw, size: 16, key: ValueKey('assistant-cite-ink-$i-$n'))
                         : null,
                 label: Text.verbatim(label(src.mark)),
                 tooltip: src.handwriting ? tr('Read from handwriting by the app: it can be misread.') : null,
@@ -651,11 +652,11 @@ class _AssistantPanelState extends State<AssistantPanel> {
   Widget _step(BuildContext context, AgentStep step, int i, int j) {
     final scheme = Theme.of(context).colorScheme;
     final (icon, color) = switch (step.state) {
-      AgentStepState.asking => (Icons.help_outline, scheme.primary),
-      AgentStepState.running => (Icons.more_horiz, scheme.onSurfaceVariant),
-      AgentStepState.done => (Icons.check_circle_outline, scheme.primary),
-      AgentStepState.refused => (Icons.block, scheme.onSurfaceVariant),
-      AgentStepState.failed => (Icons.error_outline, scheme.error),
+      AgentStepState.asking => (Symbols.help_outline, scheme.primary),
+      AgentStepState.running => (Symbols.more_horiz, scheme.onSurfaceVariant),
+      AgentStepState.done => (Symbols.check_circle_outline, scheme.primary),
+      AgentStepState.refused => (Symbols.block, scheme.onSurfaceVariant),
+      AgentStepState.failed => (Symbols.error_outline, scheme.error),
     };
     final detail = step.action.detail;
     final permission = step.permission ?? step.tool?.permission;
@@ -765,7 +766,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
                   key: ValueKey('assistant-mention-${n.id}'),
                   dense: true,
                   visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.description_outlined, size: 18),
+                  leading: const Icon(Symbols.description, size: 18),
                   title: Text.verbatim(n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => _pick(n),
                 ),
@@ -788,7 +789,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
           IconButton(
             key: const ValueKey('assistant-mention'),
             tooltip: tr('Refer to a note (@)'),
-            icon: const Icon(Icons.alternate_email, size: 20),
+            icon: const Icon(Symbols.alternate_email, size: 20),
             onPressed: () {
               final t = _input.text;
               _input.value = TextEditingValue(text: t.isEmpty || t.endsWith(' ') ? '$t@' : '$t @', selection: TextSelection.collapsed(offset: t.isEmpty || t.endsWith(' ') ? t.length + 1 : t.length + 2));
@@ -796,9 +797,9 @@ class _AssistantPanelState extends State<AssistantPanel> {
           ),
         const SizedBox(width: 4),
         if (chat.busy)
-          IconButton.filledTonal(key: const ValueKey('assistant-stop'), tooltip: tr('Stop'), icon: const Icon(Icons.stop), onPressed: chat.stop)
+          IconButton.filledTonal(key: const ValueKey('assistant-stop'), tooltip: tr('Stop'), icon: const Icon(Symbols.stop), onPressed: chat.stop)
         else
-          IconButton.filled(key: const ValueKey('assistant-send'), tooltip: tr('Ask'), icon: const Icon(Icons.arrow_upward), onPressed: _send),
+          IconButton.filled(key: const ValueKey('assistant-send'), tooltip: tr('Ask'), icon: const Icon(Symbols.arrow_upward), onPressed: _send),
         ]),
       ]),
     );

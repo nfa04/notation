@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 import 'dart:ui' show PointerDeviceKind;
 
@@ -186,7 +187,7 @@ void main() {
       final frame = tester.getRect(find.byKey(const ValueKey('ungroup-selection')));
       expect(frame, isNotNull);
       // delete takes both
-      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.tap(find.byIcon(Symbols.delete_outline));
       await tester.pumpAndSettle();
       expect(strokes(), isEmpty, reason: 'the line was in the group');
       expect(find.text('Partner'), findsNothing);
@@ -202,7 +203,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tapAt(const Offset(1300, 900));
       await lassoAround(tester, const Rect.fromLTRB(60, 480, 330, 580));
-      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.tap(find.byIcon(Symbols.delete_outline));
       await tester.pumpAndSettle();
       expect(strokes().length, 1, reason: 'the line is on its own again');
       expect(find.text('Partner'), findsNothing);

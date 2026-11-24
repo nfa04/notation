@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -35,13 +36,13 @@ Future<void> showImportFromApps(
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             if (!kIsWeb)
-              _option(context, const ValueKey('import-obsidian-folder'), Icons.folder_open_outlined, 'Obsidian: a vault folder',
+              _option(context, const ValueKey('import-obsidian-folder'), Symbols.folder_open, 'Obsidian: a vault folder',
                   'Notes, folders, pictures, PDFs and tags are taken; links between notes keep working.', _From.obsidianFolder),
-            _option(context, const ValueKey('import-obsidian-zip'), Icons.folder_zip_outlined, 'Obsidian: a vault as a zip',
+            _option(context, const ValueKey('import-obsidian-zip'), Symbols.folder_zip, 'Obsidian: a vault as a zip',
                 'The same, from a zip of the vault folder.', _From.obsidianZip),
-            _option(context, const ValueKey('import-notion'), Icons.archive_outlined, 'Notion: an export',
+            _option(context, const ValueKey('import-notion'), Symbols.archive, 'Notion: an export',
                 'In Notion: Settings, Export all workspace content, Markdown & CSV. Pick the zip you get.', _From.notion),
-            _option(context, const ValueKey('import-goodnotes'), Icons.picture_as_pdf_outlined, 'GoodNotes: PDFs or a .goodnotes file',
+            _option(context, const ValueKey('import-goodnotes'), Symbols.picture_as_pdf, 'GoodNotes: PDFs or a .goodnotes file',
                 'In GoodNotes: Share, Export as PDF. Handwriting stays as it looks. A .goodnotes file can only give its PDFs.', _From.goodnotes),
           ]),
         ),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/note_data.dart';
@@ -78,7 +79,7 @@ class _StudyPlanScreenState extends State<StudyPlanScreen> {
           floatingActionButton: FloatingActionButton.extended(
             key: const ValueKey('new-study-plan'),
             onPressed: () => _create(context),
-            icon: const Icon(Icons.add),
+            icon: const Icon(Symbols.add),
             label: Text('New plan'),
           ),
           body: planner.plans.isEmpty
@@ -222,7 +223,7 @@ class _PlanCard extends StatelessWidget {
                   key: ValueKey('study-detail-${entry.id}'),
                   style: TextButton.styleFrom(padding: EdgeInsets.zero),
                   onPressed: () => _view(context),
-                  icon: const Icon(Icons.list_alt_outlined),
+                  icon: const Icon(Symbols.list_alt),
                   label: Text('View the plan'),
                 ),
               if (open != null)
@@ -230,7 +231,7 @@ class _PlanCard extends StatelessWidget {
                     key: ValueKey('study-open-${entry.id}'),
                     style: TextButton.styleFrom(padding: EdgeInsets.zero),
                     onPressed: () => openStudySession(context, planner, entry.id, open.key, cards: cards, onOpenNoteAt: onOpenNoteAt, clock: clock),
-                    icon: const Icon(Icons.play_circle_outline),
+                    icon: const Icon(Symbols.play_circle),
                     label: Text.verbatim(planner.running?.key == open.key && planner.running?.planId == entry.id ? tr('Go on with the session') : tr('Open the session')),
                   ),
               ]),
@@ -502,7 +503,7 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     OutlinedButton.icon(
                       key: const ValueKey('study-exam-day'),
-                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                      icon: const Icon(Symbols.calendar_today, size: 18),
                       label: Text.verbatim('${tr('Exam on')} ${l.formatMediumDate(_e.exam)}'),
                       onPressed: () async {
                         final picked = await showDatePicker(context: context, initialDate: _e.exam.isBefore(_today) ? _today : _e.exam, firstDate: _today, lastDate: DateTime(_today.year + 2));
@@ -511,7 +512,7 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                     ),
                     OutlinedButton.icon(
                       key: const ValueKey('study-exam-time'),
-                      icon: const Icon(Icons.schedule, size: 18),
+                      icon: const Icon(Symbols.schedule, size: 18),
                       label: Text.verbatim(_e.examTime == null ? tr('At what time? (optional)') : tr('At {time}', {'time': _minutesOfDay(context, _e.examTime!)})),
                       onPressed: () async {
                         final t = await _pickTime(_e.examTime ?? 9 * 60);
@@ -519,7 +520,7 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                       },
                     ),
                     if (_e.examTime != null)
-                      IconButton(tooltip: tr('No time'), icon: const Icon(Icons.close), onPressed: () => setState(() => _e = _e.copyWith(examTime: () => null))),
+                      IconButton(tooltip: tr('No time'), icon: const Icon(Symbols.close), onPressed: () => setState(() => _e = _e.copyWith(examTime: () => null))),
                   ]),
 
                   _heading(tr('What to study')),
@@ -529,7 +530,7 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(key: const ValueKey('study-add-note'), onPressed: _addNote, icon: const Icon(Icons.add), label: Text('Add a note')),
+                    child: OutlinedButton.icon(key: const ValueKey('study-add-note'), onPressed: _addNote, icon: const Icon(Symbols.add), label: Text('Add a note')),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<_Cards>(
@@ -563,12 +564,12 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                     const SizedBox(height: 8),
                     Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [
                       if (_making)
-                        OutlinedButton.icon(key: const ValueKey('study-make-stop'), onPressed: () => _makeCancel?.cancel(), icon: const Icon(Icons.stop_circle_outlined), label: Text('Stop'))
+                        OutlinedButton.icon(key: const ValueKey('study-make-stop'), onPressed: () => _makeCancel?.cancel(), icon: const Icon(Symbols.stop_circle), label: Text('Stop'))
                       else
                         FilledButton.tonalIcon(
                           key: const ValueKey('study-make'),
                           onPressed: widget.planner.canMakeMaterial && _splitting == null ? () => _make() : null,
-                          icon: const Icon(Icons.auto_awesome_outlined),
+                          icon: const Icon(Symbols.auto_awesome),
                           label: Text(_e.units.any((u) => u.included && !_e.material.containsKey(u.id)) ? 'Make them' : 'Make them again'),
                         ),
                       if (!_making && _e.material.isNotEmpty && !_e.units.any((u) => u.included && !_e.material.containsKey(u.id)))
@@ -657,7 +658,7 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
                   FilledButton.icon(
                     key: const ValueKey('study-see'),
                     onPressed: _ready && !_busy ? _see : null,
-                    icon: _busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.event_note_outlined),
+                    icon: _busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Symbols.event_note),
                     label: Text('See the plan'),
                   ),
                 ]),
@@ -683,20 +684,20 @@ class _StudyPlanSetupState extends State<StudyPlanSetup> {
               IconButton(
                 key: ValueKey('study-split-stop-$noteId'),
                 tooltip: tr('Stop'),
-                icon: const Icon(Icons.stop_circle_outlined),
+                icon: const Icon(Symbols.stop_circle),
                 onPressed: () => _splitCancel?.cancel(),
               )
             else if (_canSplit(noteId))
               IconButton(
                 key: ValueKey('study-split-$noteId'),
                 tooltip: tr('Cut the pages by their topics (with AI)'),
-                icon: const Icon(Icons.auto_awesome_outlined),
+                icon: const Icon(Symbols.auto_awesome),
                 onPressed: _splitting == null ? () => _split(noteId) : null,
               ),
             IconButton(
               key: ValueKey('study-drop-note-$noteId'),
               tooltip: tr('Take this note out'),
-              icon: const Icon(Icons.close),
+              icon: const Icon(Symbols.close),
               onPressed: _splitting == noteId ? null : () => setState(() => _e = _e.copyWith(units: [for (final u in _e.units) if (u.noteId != noteId) u])),
             ),
           ]),
@@ -979,7 +980,7 @@ class _StudyProposalPageState extends State<StudyProposalPage> {
           IconButton(
             key: ValueKey('study-refuse-${x.session.key}'),
             tooltip: tr('Not at this time'),
-            icon: Icon(Icons.close, color: scheme.onPrimaryContainer),
+            icon: Icon(Symbols.close, color: scheme.onPrimaryContainer),
             onPressed: _working ? null : () => _refuse(x.session),
           ),
         ]),

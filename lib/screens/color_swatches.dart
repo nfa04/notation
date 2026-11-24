@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -70,7 +71,7 @@ class ColorSwatches extends StatelessWidget {
           key: ValueKey('$keyPrefix-wheel'),
           visualDensity: VisualDensity.compact,
           tooltip: tr('Another color'),
-          icon: const Icon(Icons.add_circle_outline),
+          icon: const Icon(Symbols.add_circle_outline),
           onPressed: onMore,
         ),
     ]);

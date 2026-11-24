@@ -69,7 +69,7 @@ extension _EditorEchoes on _FixedPageNoteEditorState {
         child: Padding(
           padding: const EdgeInsets.only(left: 12, right: 4),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.hub_outlined, size: 16, color: scheme.onSecondaryContainer),
+            Icon(Symbols.hub, size: 16, color: scheme.onSecondaryContainer),
             const SizedBox(width: 6),
             Flexible(
               child: SingleChildScrollView(
@@ -95,7 +95,7 @@ extension _EditorEchoes on _FixedPageNoteEditorState {
               visualDensity: VisualDensity.compact,
               iconSize: 16,
               tooltip: tr('Hide'),
-              icon: const Icon(Icons.close),
+              icon: const Icon(Symbols.close),
               onPressed: () => setState(() => _echoHidden = true),
             ),
           ]),

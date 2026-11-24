@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show HardwareKeyboard;
 
@@ -105,23 +106,23 @@ class _SelectionBarState extends State<SelectionBar> {
     final onMove = widget.onMove, onDelete = widget.onDelete, onFavorite = widget.onFavorite, allFavorite = widget.allFavorite;
     return AppBar(
       backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-      leading: IconButton(key: const ValueKey('selection-close'), tooltip: tr('Stop selecting'), icon: const Icon(Icons.close), onPressed: onClose),
+      leading: IconButton(key: const ValueKey('selection-close'), tooltip: tr('Stop selecting'), icon: const Icon(Symbols.close), onPressed: onClose),
       title: Text.verbatim(trCount(count, '1 note selected', '{n} notes selected'), key: const ValueKey('selection-count')),
       actions: [
         IconButton(
           key: const ValueKey('selection-all'),
           tooltip: tr('Select all'),
-          icon: const Icon(Icons.select_all),
+          icon: const Icon(Symbols.select_all),
           onPressed: count == total ? null : onSelectAll,
         ),
         IconButton(
           key: const ValueKey('selection-star'),
           tooltip: tr(allFavorite ? 'Remove from favourites' : 'Add to favourites'),
-          icon: Icon(allFavorite ? Icons.star_rounded : Icons.star_outline_rounded),
+          icon: Icon(allFavorite ? Symbols.star_rounded : Symbols.star_outline_rounded),
           onPressed: count == 0 ? null : () => onFavorite(!allFavorite),
         ),
-        IconButton(key: const ValueKey('selection-move'), tooltip: tr('Move to...'), icon: const Icon(Icons.drive_file_move_outline), onPressed: count == 0 ? null : onMove),
-        IconButton(key: const ValueKey('selection-delete'), tooltip: tr('Delete'), icon: const Icon(Icons.delete_outline), onPressed: count == 0 ? null : onDelete),
+        IconButton(key: const ValueKey('selection-move'), tooltip: tr('Move to...'), icon: const Icon(Symbols.drive_file_move_outline), onPressed: count == 0 ? null : onMove),
+        IconButton(key: const ValueKey('selection-delete'), tooltip: tr('Delete'), icon: const Icon(Symbols.delete_outline), onPressed: count == 0 ? null : onDelete),
         const SizedBox(width: 8),
       ],
     );

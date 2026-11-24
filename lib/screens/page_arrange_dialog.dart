@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -199,11 +200,11 @@ class _PageArrangeDialogState extends State<PageArrangeDialog> {
               if (bytes == null) {
                 return Center(
                   child: snap.connectionState == ConnectionState.done
-                      ? const Icon(Icons.description_outlined, color: Colors.black26)
+                      ? const Icon(Symbols.description, color: Colors.black26)
                       : const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                 );
               }
-              return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.medium, errorBuilder: (_, _, _) => const Icon(Icons.description_outlined, color: Colors.black26));
+              return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true, filterQuality: FilterQuality.medium, errorBuilder: (_, _, _) => const Icon(Symbols.description, color: Colors.black26));
             },
           ),
         );
@@ -246,12 +247,12 @@ class _PageArrangeDialogState extends State<PageArrangeDialog> {
                   onTap: () => _toggleRemoved(page),
                   child: Tooltip(
                     message: tr(gone ? 'Put the page back' : 'Remove the page'),
-                    child: Padding(padding: const EdgeInsets.all(3), child: Icon(gone ? Icons.undo : Icons.close, size: 15, color: Colors.white)),
+                    child: Padding(padding: const EdgeInsets.all(3), child: Icon(gone ? Symbols.undo : Symbols.close, size: 15, color: Colors.white)),
                   ),
                 ),
               ),
             ),
-          if (fixed) const Positioned(right: 4, top: 4, child: Icon(Icons.lock_outline, size: 16, color: Colors.black45)),
+          if (fixed) const Positioned(right: 4, top: 4, child: Icon(Symbols.lock_outline, size: 16, color: Colors.black45)),
         ]),
       ),
     );
@@ -356,19 +357,19 @@ class _PageArrangeDialogState extends State<PageArrangeDialog> {
               OutlinedButton.icon(
                 key: const ValueKey('arrange-to-front'),
                 onPressed: canMove && selectedPlace > widget.locked ? () => _move(_selected!, widget.locked) : null,
-                icon: const Icon(Icons.first_page, size: 18),
+                icon: const Icon(Symbols.first_page, size: 18),
                 label: const Text('To the front'),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('arrange-to-end'),
                 onPressed: canMove && selectedPlace < _order.length - 1 ? () => _move(_selected!, _order.length - 1) : null,
-                icon: const Icon(Icons.last_page, size: 18),
+                icon: const Icon(Symbols.last_page, size: 18),
                 label: const Text('To the end'),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('arrange-remove'),
                 onPressed: canMove && !_removed.contains(_selected) && _order.length - _removed.length > 1 ? () => _toggleRemoved(_selected!) : null,
-                icon: const Icon(Icons.delete_outline, size: 18),
+                icon: const Icon(Symbols.delete_outline, size: 18),
                 label: const Text('Remove'),
               ),
               OutlinedButton(

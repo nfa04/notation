@@ -1,7 +1,8 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:flutter/material.dart' show Icons, IconData;
+import 'package:flutter/material.dart' show IconData;
 
 import '../data/note_data.dart';
 import '../data/note_file_service.dart';
@@ -104,16 +105,16 @@ BuiltInTemplate _document(String id, TemplateGroup group, String name) {
 
 /// The pages that come with the app. Words are looked up when a note is made, so they follow the language then in use.
 List<BuiltInTemplate> builtInTemplates() => [
-      _paper('canvas', tr('Infinite canvas'), tr('One surface without edges: move and zoom it, no pages (and no PDF export)'), Icons.all_inclusive, PageBackground.blank, format: PageFormat.infinite),
-      _paper('lines', tr('Lined paper'), tr('Ruled lines, nothing else'), Icons.format_align_justify, PageBackground.lines),
-      _paper('grid', tr('Graph paper'), tr('A grid for sketches, tables and maths'), Icons.grid_on, PageBackground.grid),
-      _paper('dots', tr('Dot grid'), tr('Dots to guide lettering, sketches and journals'), Icons.apps, PageBackground.dots),
-      _paper('isometric', tr('Isometric paper'), tr('A triangular grid for isometric drawings and 3D sketches'), Icons.view_in_ar_outlined, PageBackground.isometric),
-      _paper('music', tr('Music paper'), tr('Staves for writing notes by hand'), Icons.music_note_outlined, PageBackground.staff),
-      _paper('tab', tr('Guitar tab'), tr('Six-line tablature staves'), Icons.queue_music_outlined, PageBackground.tab),
+      _paper('canvas', tr('Infinite canvas'), tr('One surface without edges: move and zoom it, no pages (and no PDF export)'), Symbols.all_inclusive, PageBackground.blank, format: PageFormat.infinite),
+      _paper('lines', tr('Lined paper'), tr('Ruled lines, nothing else'), Symbols.format_align_justify, PageBackground.lines),
+      _paper('grid', tr('Graph paper'), tr('A grid for sketches, tables and maths'), Symbols.grid_on, PageBackground.grid),
+      _paper('dots', tr('Dot grid'), tr('Dots to guide lettering, sketches and journals'), Symbols.apps, PageBackground.dots),
+      _paper('isometric', tr('Isometric paper'), tr('A triangular grid for isometric drawings and 3D sketches'), Symbols.view_in_ar, PageBackground.isometric),
+      _paper('music', tr('Music paper'), tr('Staves for writing notes by hand'), Symbols.music_note, PageBackground.staff),
+      _paper('tab', tr('Guitar tab'), tr('Six-line tablature staves'), Symbols.queue_music, PageBackground.tab),
       // School
-      _text('lecture', TemplateGroup.school, tr('Lecture notes'), tr('Key ideas, definitions, examples and open questions, with the date filled in'), Icons.school_outlined, lectureText, background: PageBackground.lines),
-      BuiltInTemplate('cornell', tr('Cornell notes'), tr('Cues on the left, notes on the right, a summary at the bottom: write the questions after the lecture'), Icons.view_sidebar_outlined, (n, d) {
+      _text('lecture', TemplateGroup.school, tr('Lecture notes'), tr('Key ideas, definitions, examples and open questions, with the date filled in'), Symbols.school, lectureText, background: PageBackground.lines),
+      BuiltInTemplate('cornell', tr('Cornell notes'), tr('Cues on the left, notes on the right, a summary at the bottom: write the questions after the lecture'), Symbols.view_sidebar, (n, d) {
         n.background = PageBackground.blank;
         n.textBoxes = {
           0: [
@@ -123,39 +124,39 @@ List<BuiltInTemplate> builtInTemplates() => [
           ],
         };
       }, group: TemplateGroup.school),
-      _text('study', TemplateGroup.school, tr('Study sheet'), tr('What to know and a question and answer table that flashcards can be made from'), Icons.quiz_outlined, (d) => studyText()),
-      _text('exam', TemplateGroup.school, tr('Exam planner'), tr('Subjects, dates and how far you are, worked out as a percentage'), Icons.event_note_outlined, (d) => examText()),
-      _text('reading', TemplateGroup.school, tr('Reading notes'), tr('For a book or an article: the argument, quotes and what you think'), Icons.menu_book_outlined, readingText),
-      _text('lab', TemplateGroup.school, tr('Lab report'), tr('Aim, method, a table of measurements with the mean worked out, result and error'), Icons.science_outlined, labText),
+      _text('study', TemplateGroup.school, tr('Study sheet'), tr('What to know and a question and answer table that flashcards can be made from'), Symbols.quiz, (d) => studyText()),
+      _text('exam', TemplateGroup.school, tr('Exam planner'), tr('Subjects, dates and how far you are, worked out as a percentage'), Symbols.event_note, (d) => examText()),
+      _text('reading', TemplateGroup.school, tr('Reading notes'), tr('For a book or an article: the argument, quotes and what you think'), Symbols.menu_book, readingText),
+      _text('lab', TemplateGroup.school, tr('Lab report'), tr('Aim, method, a table of measurements with the mean worked out, result and error'), Symbols.science, labText),
       _document('doc-essay', TemplateGroup.school, 'Essay'),
       // Work
-      _text('meeting', TemplateGroup.work, tr('Meeting notes'), tr('Who was there, what was decided, and a table of who does what by when'), Icons.groups_outlined, meetingText),
-      _text('project', TemplateGroup.work, tr('Project plan'), tr('Goal, milestones with a status, next actions, risks and a log'), Icons.flag_outlined, projectText),
-      _text('weekly', TemplateGroup.work, tr('Weekly plan'), tr('Goals, a table for the seven days and a review at the end'), Icons.date_range_outlined, weeklyText),
+      _text('meeting', TemplateGroup.work, tr('Meeting notes'), tr('Who was there, what was decided, and a table of who does what by when'), Symbols.groups, meetingText),
+      _text('project', TemplateGroup.work, tr('Project plan'), tr('Goal, milestones with a status, next actions, risks and a log'), Symbols.flag, projectText),
+      _text('weekly', TemplateGroup.work, tr('Weekly plan'), tr('Goals, a table for the seven days and a review at the end'), Symbols.date_range, weeklyText),
       _document('doc-report', TemplateGroup.work, 'Report'),
       _document('doc-letter', TemplateGroup.work, 'Letter'),
       _document('doc-cover', TemplateGroup.work, 'Cover letter'),
       _document('doc-cv', TemplateGroup.work, 'CV'),
       // Personal
-      _text('daily', TemplateGroup.personal, tr('Daily plan'), tr('The three things that matter, the day by the hour and a look back in the evening'), Icons.today_outlined, dailyText, background: PageBackground.lines),
-      _text('todo', TemplateGroup.personal, tr('To-do list'), tr('Tasks to tick off: today, this week, some day'), Icons.checklist, (d) => todoText()),
-      _text('habits', TemplateGroup.personal, tr('Habit tracker'), tr('A week of habits; the days you kept each one are counted for you'), Icons.published_with_changes_outlined, habitsText),
-      _text('budget', TemplateGroup.personal, tr('Monthly budget'), tr('Income and expenses; what is left and the totals are worked out'), Icons.account_balance_wallet_outlined, budgetText),
-      _text('trip', TemplateGroup.personal, tr('Trip planner'), tr('Packing list, day by day and what it costs in all'), Icons.luggage_outlined, tripText),
-      _text('recipe', TemplateGroup.personal, tr('Recipe'), tr('Ingredients, steps and what to change next time'), Icons.restaurant_outlined, (d) => recipeText()),
-      _text('journal', TemplateGroup.personal, tr('Journal'), tr('Three good things, what is on your mind, what you learned'), Icons.edit_note_outlined, journalText, background: PageBackground.lines),
+      _text('daily', TemplateGroup.personal, tr('Daily plan'), tr('The three things that matter, the day by the hour and a look back in the evening'), Symbols.today, dailyText, background: PageBackground.lines),
+      _text('todo', TemplateGroup.personal, tr('To-do list'), tr('Tasks to tick off: today, this week, some day'), Symbols.checklist, (d) => todoText()),
+      _text('habits', TemplateGroup.personal, tr('Habit tracker'), tr('A week of habits; the days you kept each one are counted for you'), Symbols.published_with_changes, habitsText),
+      _text('budget', TemplateGroup.personal, tr('Monthly budget'), tr('Income and expenses; what is left and the totals are worked out'), Symbols.account_balance_wallet, budgetText),
+      _text('trip', TemplateGroup.personal, tr('Trip planner'), tr('Packing list, day by day and what it costs in all'), Symbols.luggage, tripText),
+      _text('recipe', TemplateGroup.personal, tr('Recipe'), tr('Ingredients, steps and what to change next time'), Symbols.restaurant, (d) => recipeText()),
+      _text('journal', TemplateGroup.personal, tr('Journal'), tr('Three good things, what is on your mind, what you learned'), Symbols.edit_note, journalText, background: PageBackground.lines),
       // Creative
-      BuiltInTemplate('storyboard', tr('Storyboard'), tr('Six frames to draw in, each with a line for the action'), Icons.movie_creation_outlined, (n, d) {
+      BuiltInTemplate('storyboard', tr('Storyboard'), tr('Six frames to draw in, each with a line for the action'), Symbols.movie_creation, (n, d) {
         n.background = PageBackground.blank;
         n.textBoxes = _storyboard(6);
       }, group: TemplateGroup.creative),
-      BuiltInTemplate('comic', tr('Comic page'), tr('Panels of different sizes with gutters between them'), Icons.dashboard_outlined, (n, d) {
+      BuiltInTemplate('comic', tr('Comic page'), tr('Panels of different sizes with gutters between them'), Symbols.dashboard, (n, d) {
         n.background = PageBackground.blank;
         n.textBoxes = _comicPage();
       }, group: TemplateGroup.creative),
-      _text('character', TemplateGroup.creative, tr('Character sheet'), tr('Looks, wants, needs and fears, relationships and how they speak'), Icons.face_outlined, (d) => characterText()),
-      _text('beats', TemplateGroup.creative, tr('Story outline'), tr('The three acts of a story, beat by beat, and the scenes left to write'), Icons.auto_stories_outlined, (d) => storyText(), background: PageBackground.lines),
-      _text('song', TemplateGroup.creative, tr('Song sheet'), tr('Key, tempo and chords, with verses and a chorus to fill in'), Icons.lyrics_outlined, (d) => songText(), background: PageBackground.lines),
+      _text('character', TemplateGroup.creative, tr('Character sheet'), tr('Looks, wants, needs and fears, relationships and how they speak'), Symbols.face, (d) => characterText()),
+      _text('beats', TemplateGroup.creative, tr('Story outline'), tr('The three acts of a story, beat by beat, and the scenes left to write'), Symbols.auto_stories, (d) => storyText(), background: PageBackground.lines),
+      _text('song', TemplateGroup.creative, tr('Song sheet'), tr('Key, tempo and chords, with verses and a chorus to fill in'), Symbols.lyrics, (d) => songText(), background: PageBackground.lines),
     ];
 
 /// New notes from templates (the ones that come with the app and the ones the person saved), and saving a note as a template.

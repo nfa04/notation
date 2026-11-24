@@ -46,7 +46,7 @@ extension _EditorCitations on _FixedPageNoteEditorState {
     return IconButton(
       key: const ValueKey('insert-bibliography'),
       tooltip: tr('Insert the list of sources'),
-      icon: const Icon(Icons.menu_book_outlined, size: 20),
+      icon: const Icon(Symbols.menu_book, size: 20),
       onPressed: _insertBibliography,
     );
   }
@@ -78,7 +78,7 @@ extension _EditorCitations on _FixedPageNoteEditorState {
     return PopupMenuButton<String>(
       key: const ValueKey('note-citations'),
       tooltip: tr('Citations of this note'),
-      icon: const Icon(Icons.format_quote, size: 20),
+      icon: const Icon(Symbols.format_quote, size: 20),
       onSelected: (v) async {
         if (v == 'pdf') return _citePdf();
         if (v == 'cite-here') {

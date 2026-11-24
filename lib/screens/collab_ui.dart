@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import '../l10n/language.dart';
@@ -152,7 +153,7 @@ class _LivePanelState extends State<LivePanel> {
       FilledButton.icon(
         key: const ValueKey('live-start'),
         onPressed: _starting ? null : _start,
-        icon: _starting ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2)) : const Icon(Icons.podcasts),
+        icon: _starting ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2)) : const Icon(Symbols.podcasts),
         label: const Text('Start a live session'),
       ),
     ]);
@@ -176,7 +177,7 @@ class _LivePanelState extends State<LivePanel> {
             if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows))
               FilledButton.icon(
                 key: const ValueKey('live-share'),
-                icon: const Icon(Icons.ios_share, size: 16),
+                icon: const Icon(Symbols.ios_share, size: 16),
                 label: const Text('Share the link'),
                 onPressed: () => SharePlus.instance.share(ShareParams(
                   text: tr('Join my live note in Notation: {link}', {'link': invite.toLink()}),
@@ -185,7 +186,7 @@ class _LivePanelState extends State<LivePanel> {
               ),
             OutlinedButton.icon(
               key: const ValueKey('live-copy'),
-              icon: const Icon(Icons.copy, size: 16),
+              icon: const Icon(Symbols.content_copy, size: 16),
               label: const Text('Copy the link'),
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
@@ -227,7 +228,7 @@ class _LivePanelState extends State<LivePanel> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
-            leading: p.site == session.site ? const Icon(Icons.person_outline) : Icon(Icons.circle, color: presenceColor(p.site), size: 18),
+            leading: p.site == session.site ? const Icon(Symbols.person_outline) : Icon(Symbols.circle, color: presenceColor(p.site), size: 18),
             title: Text.verbatim(p.site == session.site
                 ? tr('{name} (you)', {'name': Participant.labelOf(p, session.participants)})
                 : Participant.labelOf(p, session.participants)),
@@ -444,7 +445,7 @@ class _CopyShareState extends State<_CopyShare> {
             onPressed: _working ? null : _make,
             icon: _working
                 ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2))
-                : const Icon(Icons.cloud_upload_outlined, size: 18),
+                : const Icon(Symbols.cloud_upload, size: 18),
             label: const Text('Make a link to a copy'),
           ),
         )
@@ -464,13 +465,13 @@ class _CopyShareState extends State<_CopyShare> {
           if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows))
             FilledButton.icon(
               key: const ValueKey('copy-share'),
-              icon: const Icon(Icons.ios_share, size: 16),
+              icon: const Icon(Symbols.ios_share, size: 16),
               label: const Text('Share the link'),
               onPressed: () => SharePlus.instance.share(ShareParams(text: tr('Here is a copy of my note for Notation: {link}', {'link': _link}), subject: tr('A note from Notation'))),
             ),
           OutlinedButton.icon(
             key: const ValueKey('copy-copy'),
-            icon: const Icon(Icons.copy, size: 16),
+            icon: const Icon(Symbols.content_copy, size: 16),
             label: const Text('Copy the link'),
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);

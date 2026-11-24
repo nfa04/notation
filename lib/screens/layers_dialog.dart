@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/language.dart';
@@ -73,7 +74,7 @@ class LayersPanel extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
           child: Row(children: [
             Expanded(child: Text(tr('Layers'), style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(key: const ValueKey('layers-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: onClose),
+            IconButton(key: const ValueKey('layers-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: onClose),
           ]),
         ),
         Expanded(child: LayersList(layers: layers, active: active, selectedCount: selectedCount, onChanged: onChanged, onMoveSelection: onMoveSelection)),
@@ -105,7 +106,7 @@ class _AddLayerButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton.icon(
       key: const ValueKey('layer-add'),
-      icon: const Icon(Icons.add, size: 18),
+      icon: const Icon(Symbols.add, size: 18),
       label: Text(tr('Add layer')),
       onPressed: layers.length >= maxLayers
           ? null
@@ -214,20 +215,20 @@ class _LayersListState extends State<LayersList> {
               IconButton(
                 key: ValueKey('layer-visible-${layer.id}'),
                 tooltip: tr(layer.visible ? 'Hide layer' : 'Show layer'),
-                icon: Icon(layer.visible ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+                icon: Icon(layer.visible ? Symbols.visibility : Symbols.visibility_off, size: 20),
                 onPressed: () => widget.onChanged(layers.replaced(layer.copyWith(visible: !layer.visible)), current),
               ),
               IconButton(
                 key: ValueKey('layer-lock-${layer.id}'),
                 tooltip: tr(layer.locked ? 'Unlock layer' : 'Lock layer'),
-                icon: Icon(layer.locked ? Icons.lock_outline : Icons.lock_open_outlined, size: 20),
+                icon: Icon(layer.locked ? Symbols.lock_outline : Symbols.lock_open, size: 20),
                 onPressed: () => widget.onChanged(layers.replaced(layer.copyWith(locked: !layer.locked)), current),
               ),
               if (layer.isGroup)
                 IconButton(
                   key: ValueKey('group-fold-${layer.id}'),
                   tooltip: tr(layer.collapsed ? 'Show the layers of the group' : 'Fold the group'),
-                  icon: Icon(layer.collapsed ? Icons.folder_outlined : Icons.folder_open_outlined, size: 20),
+                  icon: Icon(layer.collapsed ? Symbols.folder : Symbols.folder_open, size: 20),
                   onPressed: () => widget.onChanged(layers.replaced(layer.copyWith(collapsed: !layer.collapsed)), current),
                 ),
               Expanded(

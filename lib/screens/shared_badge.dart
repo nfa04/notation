@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../collab/shared_notes.dart';
@@ -24,6 +25,6 @@ class SharedBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!kind.isShared) return const SizedBox.shrink();
-    return Tooltip(message: message, child: Icon(Icons.group, size: size, color: color ?? Theme.of(context).colorScheme.primary));
+    return Tooltip(message: message, child: Icon(Symbols.group, size: size, color: color ?? Theme.of(context).colorScheme.primary));
   }
 }

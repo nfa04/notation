@@ -436,7 +436,7 @@ extension _EditorPages on _FixedPageNoteEditorState {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             child: Text.rich(
               TextSpan(children: [
-                const WidgetSpan(alignment: PlaceholderAlignment.middle, child: Icon(Icons.picture_as_pdf, size: 12, color: Colors.white)),
+                const WidgetSpan(alignment: PlaceholderAlignment.middle, child: Icon(Symbols.picture_as_pdf, size: 12, color: Colors.white)),
                 TextSpan(text: ' ${file.name} · ${ref.page + 1}/${file.pages}'),
               ]),
               style: const TextStyle(color: Colors.white, fontSize: 11),
@@ -467,7 +467,7 @@ extension _EditorPages on _FixedPageNoteEditorState {
           PopupMenuItem(key: ValueKey('remove-pdf-$f'), value: () => _removePdfFile(f), enabled: table.files.length > 1, child: Text(tr('Remove {name}…', {'name': table.files[f].name}))),
       ],
       child: Chip(
-        avatar: const Icon(Icons.picture_as_pdf, size: 16),
+        avatar: const Icon(Symbols.picture_as_pdf, size: 16),
         label: Text(tr('{n} PDFs ({pages} Pages)', {'n': table.files.length, 'pages': _totalPages}), style: const TextStyle(fontSize: 12)),
       ),
     );
@@ -685,7 +685,7 @@ extension _EditorPages on _FixedPageNoteEditorState {
     return PopupMenuButton<VoidCallback>(
       key: const ValueKey('pages-menu'),
       tooltip: tr('Pages'),
-      icon: const Icon(Icons.auto_stories_outlined, size: 20),
+      icon: const Icon(Symbols.auto_stories, size: 20),
       onSelected: (action) => action(),
       itemBuilder: (_) => [
         PopupMenuItem(value: () => _movePage(page, -1), enabled: page > 0 && !document && !_isDocumentPage(page - 1), child: Text(tr('Move page up'))),

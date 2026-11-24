@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
@@ -72,11 +73,11 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
   }
 
   static IconData _icon(NoteAiKind kind) => switch (kind) {
-        NoteAiKind.summary => Icons.short_text,
-        NoteAiKind.presentation => Icons.slideshow_outlined,
-        NoteAiKind.studyGuide => Icons.menu_book_outlined,
-        NoteAiKind.quiz => Icons.quiz_outlined,
-        NoteAiKind.actions => Icons.checklist,
+        NoteAiKind.summary => Symbols.short_text,
+        NoteAiKind.presentation => Symbols.slideshow,
+        NoteAiKind.studyGuide => Symbols.menu_book,
+        NoteAiKind.quiz => Symbols.quiz,
+        NoteAiKind.actions => Symbols.checklist,
       };
 
   String _when(DateTime t) => '${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')}.${t.year}';
@@ -94,10 +95,10 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
           child: Row(children: [
-            const Icon(Icons.auto_fix_high_outlined, size: 18),
+            const Icon(Symbols.auto_fix_high, size: 18),
             const SizedBox(width: 8),
             Expanded(child: Text('Made by the AI', style: Theme.of(context).textTheme.titleSmall)),
-            if (widget.onClose != null) IconButton(key: const ValueKey('generated-close'), tooltip: tr('Close'), icon: const Icon(Icons.close, size: 20), onPressed: widget.onClose),
+            if (widget.onClose != null) IconButton(key: const ValueKey('generated-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close, size: 20), onPressed: widget.onClose),
           ]),
         ),
         const Divider(height: 1),
@@ -146,10 +147,10 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         ListTile(
           dense: true,
-          leading: const Icon(Icons.bookmark_outline, size: 20),
+          leading: const Icon(Symbols.bookmark, size: 20),
           title: Text.verbatim(_nameOf(row.content), maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text.verbatim(_when(row.createdAt)),
-          trailing: Icon(open ? Icons.expand_less : Icons.expand_more),
+          trailing: Icon(open ? Symbols.expand_less : Symbols.expand_more),
           onTap: () => setState(() => open ? _openKept.remove(id) : _openKept.add(id)),
         ),
         if (open)
@@ -164,7 +165,7 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
               key: ValueKey('generated-copy-$id'),
               tooltip: tr('Copy'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.copy, size: 16),
+              icon: const Icon(Symbols.content_copy, size: 16),
               onPressed: () => Clipboard.setData(ClipboardData(text: row.content)),
             ),
             AddToNoteMenu(canKeep: false, buttonKey: ValueKey('generated-add-$id'), onSelected: (target) => widget.onAdd(row.content, target)),
@@ -172,7 +173,7 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
               key: ValueKey('generated-delete-$id'),
               tooltip: tr('Remove it'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.delete_outline, size: 18),
+              icon: const Icon(Symbols.delete_outline, size: 18),
               onPressed: () async {
                 await widget.store.delete(widget.noteId, keptKind, id);
                 _read();
@@ -200,7 +201,7 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
           leading: Icon(_icon(kind), size: 20),
           title: Text(kind.label),
           subtitle: Text.verbatim('${_when(row.createdAt)}${stale ? '  ·  ${tr('the note has changed since')}' : ''}', style: TextStyle(color: stale ? scheme.tertiary : null)),
-          trailing: text ? Icon(open ? Icons.expand_less : Icons.expand_more) : null,
+          trailing: text ? Icon(open ? Symbols.expand_less : Symbols.expand_more) : null,
           onTap: text ? () => setState(() => open ? _open.remove(kind) : _open.add(kind)) : () => widget.onOpen(kind),
         ),
         if (text && open)
@@ -216,7 +217,7 @@ class _GeneratedPanelState extends State<GeneratedPanel> {
                 key: ValueKey('generated-copy-${kind.id}'),
                 tooltip: tr('Copy'),
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.copy, size: 16),
+                icon: const Icon(Symbols.content_copy, size: 16),
                 onPressed: () => Clipboard.setData(ClipboardData(text: row.content)),
               ),
             if (text) AddToNoteMenu(canKeep: false, buttonKey: ValueKey('generated-add-${kind.id}'), onSelected: (target) => widget.onAdd(row.content, target, title: kind.label)),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -229,7 +230,7 @@ class _PictureEditDialogState extends State<PictureEditDialog> {
             padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
             child: Row(children: [
               Expanded(child: Text(tr('Edit picture'), style: Theme.of(context).textTheme.titleMedium)),
-              IconButton(key: const ValueKey('pe-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: () => _finish(null)),
+              IconButton(key: const ValueKey('pe-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: () => _finish(null)),
             ]),
           ),
           Expanded(child: _broken ? Padding(padding: const EdgeInsets.all(16), child: Text(tr('This picture cannot be opened.'))) : SingleChildScrollView(padding: const EdgeInsets.symmetric(horizontal: 16), child: _body(scheme, e))),
@@ -279,14 +280,14 @@ class _PictureEditDialogState extends State<PictureEditDialog> {
       ),
       const SizedBox(height: 8),
       Wrap(spacing: 4, alignment: WrapAlignment.center, children: [
-        IconButton(key: const ValueKey('pe-rotate-left'), tooltip: tr('Turn left'), icon: const Icon(Icons.rotate_left), onPressed: () => _set(e.copyWith(turns: e.turns + 3))),
-        IconButton(key: const ValueKey('pe-rotate-right'), tooltip: tr('Turn right'), icon: const Icon(Icons.rotate_right), onPressed: () => _set(e.copyWith(turns: e.turns + 1))),
-        IconButton(key: const ValueKey('pe-flip-h'), tooltip: tr('Flip left to right'), isSelected: e.flipHorizontal, icon: const Icon(Icons.flip), onPressed: () => _set(e.copyWith(flipHorizontal: !e.flipHorizontal))),
+        IconButton(key: const ValueKey('pe-rotate-left'), tooltip: tr('Turn left'), icon: const Icon(Symbols.rotate_left), onPressed: () => _set(e.copyWith(turns: e.turns + 3))),
+        IconButton(key: const ValueKey('pe-rotate-right'), tooltip: tr('Turn right'), icon: const Icon(Symbols.rotate_right), onPressed: () => _set(e.copyWith(turns: e.turns + 1))),
+        IconButton(key: const ValueKey('pe-flip-h'), tooltip: tr('Flip left to right'), isSelected: e.flipHorizontal, icon: const Icon(Symbols.flip), onPressed: () => _set(e.copyWith(flipHorizontal: !e.flipHorizontal))),
         IconButton(
             key: const ValueKey('pe-flip-v'),
             tooltip: tr('Flip top to bottom'),
             isSelected: e.flipVertical,
-            icon: const RotatedBox(quarterTurns: 1, child: Icon(Icons.flip)),
+            icon: const RotatedBox(quarterTurns: 1, child: Icon(Symbols.flip)),
             onPressed: () => _set(e.copyWith(flipVertical: !e.flipVertical))),
         TextButton(key: const ValueKey('pe-reset'), onPressed: e.isNone ? null : () => _set(PictureEdit.none), child: Text(tr('Reset'))),
       ]),
@@ -320,7 +321,7 @@ class _PictureEditDialogState extends State<PictureEditDialog> {
             width: 20,
             height: 20,
             decoration: BoxDecoration(color: e.backgroundColor == null ? null : Color(e.backgroundColor!), border: Border.all(color: scheme.outline)),
-            child: e.backgroundColor == null ? const Icon(Icons.auto_awesome, size: 14) : null,
+            child: e.backgroundColor == null ? const Icon(Symbols.auto_awesome, size: 14) : null,
           ),
           const SizedBox(width: 8),
           Expanded(child: Text(tr(e.backgroundColor == null ? 'The colour of the edges. Tap the picture to choose another colour.' : 'The colour you chose.'), style: Theme.of(context).textTheme.bodySmall)),

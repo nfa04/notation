@@ -393,7 +393,7 @@ extension _EditorFind on _FixedPageNoteEditorState {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 26, height: 26),
               iconSize: 18,
-              icon: Icon(_replaceOpen ? Icons.expand_more : Icons.chevron_right),
+              icon: Icon(_replaceOpen ? Symbols.expand_more : Symbols.chevron_right),
               onPressed: () {
                 setState(() => _replaceOpen = !_replaceOpen);
                 (_replaceOpen ? _replaceFocus : _findFocus).requestFocus();
@@ -432,10 +432,10 @@ extension _EditorFind on _FixedPageNoteEditorState {
             _toggleChip('find-regex', '.*', 'Regular expression', q.regex, (v) => SearchQuery(q.text, regex: v, caseSensitive: q.caseSensitive, wholeWord: q.wholeWord)),
             const SizedBox(width: 12),
             Text.verbatim(label, key: const ValueKey('find-count'), style: const TextStyle(fontSize: 12)),
-            IconButton(key: const ValueKey('find-prev'), tooltip: tr('Previous match'), icon: const Icon(Icons.keyboard_arrow_up), onPressed: _found.isEmpty ? null : () => _findStep(-1)),
-            IconButton(key: const ValueKey('find-next'), tooltip: tr('Next match'), icon: const Icon(Icons.keyboard_arrow_down), onPressed: _found.isEmpty ? null : () => _findStep(1)),
+            IconButton(key: const ValueKey('find-prev'), tooltip: tr('Previous match'), icon: const Icon(Symbols.keyboard_arrow_up), onPressed: _found.isEmpty ? null : () => _findStep(-1)),
+            IconButton(key: const ValueKey('find-next'), tooltip: tr('Next match'), icon: const Icon(Symbols.keyboard_arrow_down), onPressed: _found.isEmpty ? null : () => _findStep(1)),
             const Spacer(),
-            IconButton(key: const ValueKey('find-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: _closeFind),
+            IconButton(key: const ValueKey('find-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: _closeFind),
           ]),
           if (_replaceOpen)
             Padding(
@@ -505,7 +505,7 @@ extension _EditorFind on _FixedPageNoteEditorState {
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
           child: Row(children: [
             Expanded(child: Text(tr('Find'), style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(key: const ValueKey('find-close'), tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: _closeFind),
+            IconButton(key: const ValueKey('find-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: _closeFind),
           ]),
         ),
         Padding(
@@ -536,15 +536,15 @@ extension _EditorFind on _FixedPageNoteEditorState {
             _toggleChip('find-regex', '.*', 'Regular expression', q.regex, (v) => SearchQuery(q.text, regex: v, caseSensitive: q.caseSensitive, wholeWord: q.wholeWord)),
             const Spacer(),
             Flexible(child: Text.verbatim(label, key: const ValueKey('find-count'), overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
-            IconButton(key: const ValueKey('find-prev'), tooltip: tr('Previous match'), icon: const Icon(Icons.keyboard_arrow_up), onPressed: _found.isEmpty ? null : () => _findStep(-1)),
-            IconButton(key: const ValueKey('find-next'), tooltip: tr('Next match'), icon: const Icon(Icons.keyboard_arrow_down), onPressed: _found.isEmpty ? null : () => _findStep(1)),
+            IconButton(key: const ValueKey('find-prev'), tooltip: tr('Previous match'), icon: const Icon(Symbols.keyboard_arrow_up), onPressed: _found.isEmpty ? null : () => _findStep(-1)),
+            IconButton(key: const ValueKey('find-next'), tooltip: tr('Next match'), icon: const Icon(Symbols.keyboard_arrow_down), onPressed: _found.isEmpty ? null : () => _findStep(1)),
           ]),
         ),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             key: const ValueKey('find-toggle-replace'),
-            icon: Icon(_replaceOpen ? Icons.expand_more : Icons.chevron_right, size: 18),
+            icon: Icon(_replaceOpen ? Symbols.expand_more : Symbols.chevron_right, size: 18),
             label: Text(tr('Replace')),
             onPressed: () {
               setState(() => _replaceOpen = !_replaceOpen);

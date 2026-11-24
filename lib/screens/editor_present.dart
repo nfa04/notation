@@ -6,7 +6,7 @@ extension _EditorPresent on _FixedPageNoteEditorState {
         key: const ValueKey('present-note'),
         tooltip: tr('Present the note, page by page'),
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.slideshow_outlined, size: 20),
+        icon: const Icon(Symbols.slideshow, size: 20),
         onPressed: _present,
       );
 
@@ -15,7 +15,7 @@ extension _EditorPresent on _FixedPageNoteEditorState {
         key: const ValueKey('flipbook-note'),
         tooltip: tr('Play the pages as a flipbook'),
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.movie_filter_outlined, size: 20),
+        icon: const Icon(Symbols.movie_filter, size: 20),
         onPressed: () => _present(flipbook: true),
       );
 

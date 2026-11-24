@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../diagram/advanced.dart';
@@ -157,7 +158,7 @@ class _DiagramDialogState extends State<_DiagramDialog> {
               if (_mode == DiagramMode.simple && widget.draft != null)
                 ActionChip(
                   key: const ValueKey('diagram-draft'),
-                  avatar: _drafting ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)) : const Icon(Icons.auto_awesome, size: 16),
+                  avatar: _drafting ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)) : const Icon(Symbols.auto_awesome, size: 16),
                   label: const Text('Draft from this note'),
                   onPressed: _drafting ? null : _draft,
                 ),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 import 'dart:ui' show CheckedState;
 
@@ -331,7 +332,7 @@ void main() {
         await open(tester, c);
         c.value = TextEditingValue(text: 'A longer first line\n- [ ] task', selection: const TextSelection.collapsed(offset: 0));
         await tester.pump();
-        await tester.tap(find.byIcon(Icons.check_box_outline_blank));
+        await tester.tap(find.byIcon(Symbols.check_box_outline_blank));
         await tester.pump(const Duration(milliseconds: 500));
         expect(c.text, 'A longer first line\n- [x] task');
       });

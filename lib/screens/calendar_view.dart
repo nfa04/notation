@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import '../l10n/language.dart';
 
@@ -364,7 +365,7 @@ class _CalendarViewState extends State<CalendarView> {
                   if (d != null) setLocal(() => due = dayOf(d));
                 },
               ),
-              if (due != null) IconButton(icon: const Icon(Icons.clear), tooltip: tr('No date'), onPressed: () => setLocal(() => due = null)),
+              if (due != null) IconButton(icon: const Icon(Symbols.clear), tooltip: tr('No date'), onPressed: () => setLocal(() => due = null)),
             ]),
           ]),
           actions: [
@@ -407,19 +408,19 @@ class _CalendarViewState extends State<CalendarView> {
           if (_writable.isNotEmpty)
             IconButton(
               key: const ValueKey('new-event'),
-              icon: const Icon(Icons.event_available_outlined),
+              icon: const Icon(Symbols.event_available),
               tooltip: tr('New event'),
               onPressed: _newEvent,
             ),
           if (widget.mirror != null)
             IconButton(
               key: const ValueKey('tasks-on-calendar'),
-              icon: Icon(widget.mirror!.target == null ? Icons.event_repeat_outlined : Icons.event_repeat),
+              icon: Icon(widget.mirror!.target == null ? Symbols.event_repeat : Symbols.event_repeat),
               tooltip: tr('Put tasks on a calendar'),
               onPressed: () => mirrorDialog(context, widget.mirror!),
             ),
           IconButton(
-            icon: const Icon(Icons.palette_outlined),
+            icon: const Icon(Symbols.palette),
             tooltip: tr('Make it cute'),
             onPressed: _openCustomize,
           ),
@@ -431,13 +432,13 @@ class _CalendarViewState extends State<CalendarView> {
                       child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))),
                     )
                   : IconButton(
-                      icon: Icon(_caldav!.lastSyncFailed ? Icons.sync_problem : Icons.sync,
+                      icon: Icon(_caldav!.lastSyncFailed ? Symbols.sync_problem : Symbols.sync,
                           color: _caldav!.lastSyncFailed ? Theme.of(context).colorScheme.error : null),
                       tooltip: tr('Sync now'),
                       onPressed: _caldav!.sync,
                     ),
             IconButton(
-              icon: const Icon(Icons.cloud_outlined),
+              icon: const Icon(Symbols.cloud),
               tooltip: tr('Calendar sync settings'),
               onPressed: _openSettings,
             ),
@@ -466,12 +467,12 @@ class _CalendarViewState extends State<CalendarView> {
 
   /// A phone's app bar has room for the new-event button, a sync button and a menu with the rest.
   List<Widget> _compactActions() => [
-        if (_writable.isNotEmpty) IconButton(key: const ValueKey('new-event'), icon: const Icon(Icons.event_available_outlined), tooltip: tr('New event'), onPressed: _newEvent),
+        if (_writable.isNotEmpty) IconButton(key: const ValueKey('new-event'), icon: const Icon(Symbols.event_available), tooltip: tr('New event'), onPressed: _newEvent),
         if (_caldav?.isConnected == true)
           _caldav!.syncing
               ? const Padding(padding: EdgeInsets.symmetric(horizontal: 14), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))))
               : IconButton(
-                  icon: Icon(_caldav!.lastSyncFailed ? Icons.sync_problem : Icons.sync, color: _caldav!.lastSyncFailed ? Theme.of(context).colorScheme.error : null),
+                  icon: Icon(_caldav!.lastSyncFailed ? Symbols.sync_problem : Symbols.sync, color: _caldav!.lastSyncFailed ? Theme.of(context).colorScheme.error : null),
                   tooltip: tr('Sync now'),
                   onPressed: _caldav!.sync,
                 ),
@@ -507,7 +508,7 @@ class _CalendarViewState extends State<CalendarView> {
   List<Widget> _navButtons(DateTime today) => [
         IconButton(
           tooltip: tr(_weekMode ? 'Previous week' : 'Previous month'),
-          icon: const Icon(Icons.chevron_left),
+          icon: const Icon(Symbols.chevron_left),
           onPressed: () => _weekMode ? _goToWeek(-1) : _goToMonth(DateTime(_month.year, _month.month - 1)),
         ),
         TextButton(
@@ -519,7 +520,7 @@ class _CalendarViewState extends State<CalendarView> {
         ),
         IconButton(
           tooltip: tr(_weekMode ? 'Next week' : 'Next month'),
-          icon: const Icon(Icons.chevron_right),
+          icon: const Icon(Symbols.chevron_right),
           onPressed: () => _weekMode ? _goToWeek(1) : _goToMonth(DateTime(_month.year, _month.month + 1)),
         ),
       ];
@@ -719,7 +720,7 @@ class _CalendarViewState extends State<CalendarView> {
           fillOpacity: t.done ? 0.12 : 0.28,
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
           child: Row(children: [
-            Icon(t.done ? Icons.check_circle : Icons.radio_button_unchecked, size: 10, color: st.color),
+            Icon(t.done ? Symbols.check_circle : Symbols.radio_button_unchecked, size: 10, color: st.color),
             const SizedBox(width: 3),
             Expanded(
               child: Text.verbatim(
@@ -759,7 +760,7 @@ class _CalendarViewState extends State<CalendarView> {
           ),
           IconButton(
             tooltip: tr('Decorate this day'),
-            icon: const Icon(Icons.auto_awesome_outlined),
+            icon: const Icon(Symbols.auto_awesome),
             onPressed: () => _styleDay(_selected),
           ),
         ]),
@@ -768,8 +769,8 @@ class _CalendarViewState extends State<CalendarView> {
           controller: _newTask,
           decoration: InputDecoration(
             hintText: tr('Add a task for this day'),
-            prefixIcon: const Icon(Icons.add_task),
-            suffixIcon: IconButton(icon: const Icon(Icons.send_rounded), tooltip: tr('Add'), onPressed: _add),
+            prefixIcon: const Icon(Symbols.add_task),
+            suffixIcon: IconButton(icon: const Icon(Symbols.send_rounded), tooltip: tr('Add'), onPressed: _add),
             border: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
             focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.onSurface)),
@@ -868,12 +869,12 @@ class _CalendarViewState extends State<CalendarView> {
               if (widget.reminders != null && !t.done)
                 IconButton(
                   key: ValueKey('remind-task-${t.id}'),
-                  icon: const Icon(Icons.add_alert_outlined, size: 20),
+                  icon: const Icon(Symbols.add_alert, size: 20),
                   tooltip: tr('Remind me'),
                   onPressed: () => showRemindDialog(context, widget.reminders!, kind: ReminderKind.task, refId: t.id, title: t.title),
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
+                icon: const Icon(Symbols.delete_outline, size: 20),
                 tooltip: tr('Delete'),
                 onPressed: () => _run(() => _repo.deleteTask(t.id)),
               ),

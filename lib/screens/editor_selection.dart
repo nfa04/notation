@@ -529,9 +529,9 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final (icon, tooltip, attribute) in [
-                    (Icons.format_bold_rounded, 'Bold', AttributeType.bold),
-                    (Icons.format_italic_rounded, 'Italic', AttributeType.italic),
-                    (Icons.format_underlined_rounded, 'Underline', AttributeType.underline),
+                    (Symbols.format_bold_rounded, 'Bold', AttributeType.bold),
+                    (Symbols.format_italic_rounded, 'Italic', AttributeType.italic),
+                    (Symbols.format_underlined_rounded, 'Underline', AttributeType.underline),
                   ])
                     IconButton(
                       icon: Icon(icon, size: 20),
@@ -541,7 +541,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                     ),
                   IconButton(
                     key: const ValueKey('box-style'),
-                    icon: const Icon(Icons.palette_outlined, size: 20),
+                    icon: const Icon(Symbols.palette, size: 20),
                     tooltip: tr('Style: background, border, opacity'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => showDialog<void>(
@@ -558,14 +558,14 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   ),
                   IconButton(
                     key: const ValueKey('duplicate-text-box'),
-                    icon: const Icon(Icons.copy_all_outlined, size: 20),
+                    icon: const Icon(Symbols.copy_all, size: 20),
                     tooltip: tr('Duplicate text box'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => _duplicateTextBox(b),
                   ),
                   IconButton(
                     key: const ValueKey('delete-text-box'),
-                    icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                    icon: Icon(Symbols.delete_outline, color: Theme.of(context).colorScheme.error),
                     tooltip: tr('Delete text box'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => _deleteTextBox(b),
@@ -589,7 +589,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (widget.handwriting != null && _selection.isNotEmpty)
                     IconButton(
                       key: const ValueKey('convert-to-text'),
-                      icon: _readyDot(Icons.abc, math: false),
+                      icon: _readyDot(Symbols.abc, math: false),
                       tooltip: tr('Convert handwriting to text'),
                       visualDensity: VisualDensity.compact,
                       onPressed: () => _convertSelection(widget.handwriting!),
@@ -597,7 +597,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (widget.math != null && _selection.isNotEmpty)
                     IconButton(
                       key: const ValueKey('convert-to-math'),
-                      icon: _readyDot(Icons.functions, math: true),
+                      icon: _readyDot(Symbols.functions, math: true),
                       tooltip: tr('Convert a handwritten formula to LaTeX'),
                       visualDensity: VisualDensity.compact,
                       onPressed: () =>
@@ -606,7 +606,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (_selection.length >= 3 && _on(Feature.diagrams))
                     IconButton(
                       key: const ValueKey('diagram-from-drawing'),
-                      icon: const Icon(Icons.account_tree_outlined),
+                      icon: const Icon(Symbols.account_tree),
                       tooltip: tr('Make a state diagram, tree or graph of this drawing'),
                       visualDensity: VisualDensity.compact,
                       onPressed: () => unawaited(_diagramFromDrawing()),
@@ -614,7 +614,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (widget.math != null && _selection.isNotEmpty && _on(Feature.checkMaths))
                     IconButton(
                       key: const ValueKey('check-selected-maths'),
-                      icon: const Icon(Icons.rule),
+                      icon: const Icon(Symbols.rule),
                       tooltip: tr('Check the maths in the selection'),
                       visualDensity: VisualDensity.compact,
                       onPressed: _checkSelectedMaths,
@@ -624,7 +624,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (_selection.isNotEmpty)
                     IconButton(
                       key: const ValueKey('style-selection'),
-                      icon: const Icon(Icons.palette_outlined),
+                      icon: const Icon(Symbols.palette),
                       tooltip: tr('Style: colour, width, dashes and fill'),
                       visualDensity: VisualDensity.compact,
                       onPressed: _styleSelection,
@@ -632,7 +632,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (_mayLabel)
                     IconButton(
                       key: const ValueKey('label-selection'),
-                      icon: Icon(Icons.text_rotation_angleup, color: _selection.first.label == null ? null : Theme.of(context).colorScheme.primary),
+                      icon: Icon(Symbols.text_rotation_angleup, color: _selection.first.label == null ? null : Theme.of(context).colorScheme.primary),
                       tooltip: tr('Text on the line or in the shape'),
                       visualDensity: VisualDensity.compact,
                       onPressed: _editLabel,
@@ -640,7 +640,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (_mayTransform)
                     IconButton(
                       key: const ValueKey('transform-selection'),
-                      icon: const Icon(Icons.transform),
+                      icon: const Icon(Symbols.transform),
                       tooltip: tr('Transform: distort, perspective, skew, rotate, warp'),
                       visualDensity: VisualDensity.compact,
                       onPressed: _beginTransform,
@@ -650,7 +650,7 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (_mayEditCurve)
                     IconButton(
                       key: const ValueKey('edit-points'),
-                      icon: const Icon(Icons.polyline_outlined),
+                      icon: const Icon(Symbols.polyline),
                       tooltip: tr('Edit the points of this line'),
                       visualDensity: VisualDensity.compact,
                       onPressed: _editCurve,
@@ -659,21 +659,21 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                   if (_selection.isNotEmpty && _on(Feature.stamps))
                     IconButton(
                       key: const ValueKey('save-stamp'),
-                      icon: const Icon(Icons.bookmark_add_outlined),
+                      icon: const Icon(Symbols.bookmark_add),
                       tooltip: tr('Save as a stamp'),
                       visualDensity: VisualDensity.compact,
                       onPressed: _saveAsStamp,
                     ),
                   IconButton(
                     key: const ValueKey('duplicate-selection'),
-                    icon: const Icon(Icons.copy_all_outlined),
+                    icon: const Icon(Symbols.copy_all),
                     tooltip: tr(_groupBoxes.isEmpty && _groupImages.isEmpty ? 'Duplicate drawing' : 'Duplicate the selection'),
                     visualDensity: VisualDensity.compact,
                     onPressed: _duplicateSelection,
                   ),
                   IconButton(
                     icon: Icon(
-                      Icons.delete_outline,
+                      Symbols.delete_outline,
                       color: Theme.of(context).colorScheme.error,
                     ),
                     tooltip: tr(_groupBoxes.isEmpty && _groupImages.isEmpty ? 'Delete drawing' : 'Delete the selection'),

@@ -137,7 +137,7 @@ extension _EditorLecture on _FixedPageNoteEditorState {
         key: const ValueKey('lecture-button'),
         tooltip: tr('Record the sound while you write: each line is tied to the moment it was written'),
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.fiber_manual_record_outlined, size: 20),
+        icon: const Icon(Symbols.fiber_manual_record, size: 20),
         onPressed: _startLecture,
       );
     }
@@ -147,7 +147,7 @@ extension _EditorLecture on _FixedPageNoteEditorState {
         key: const ValueKey('lecture-button'),
         onPressed: _stopLecture,
         style: TextButton.styleFrom(foregroundColor: Colors.red, visualDensity: VisualDensity.compact),
-        icon: const Icon(Icons.stop_circle_outlined, size: 20),
+        icon: const Icon(Symbols.stop_circle, size: 20),
         label: Text.verbatim('${rec.length.inMinutes}:${(rec.length.inSeconds % 60).toString().padLeft(2, '0')}'),
       ),
     );
@@ -250,7 +250,7 @@ extension _EditorLecture on _FixedPageNoteEditorState {
 
   Widget _playFromHereButton() => IconButton(
         key: const ValueKey('play-from-here'),
-        icon: const Icon(Icons.play_circle_outline),
+        icon: const Icon(Symbols.play_circle),
         tooltip: tr('Play the sound from when this was written'),
         visualDensity: VisualDensity.compact,
         onPressed: _playFromSelection,

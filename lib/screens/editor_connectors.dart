@@ -364,9 +364,9 @@ extension _EditorConnectors on _FixedPageNoteEditorState {
 
   /// The icon of a way for a connector to run.
   static IconData _routeIcon(ConnectorRoute route) => switch (route) {
-        ConnectorRoute.straight => Icons.call_made,
-        ConnectorRoute.elbow => Icons.subdirectory_arrow_right,
-        ConnectorRoute.curve => Icons.moving,
+        ConnectorRoute.straight => Symbols.call_made,
+        ConnectorRoute.elbow => Symbols.subdirectory_arrow_right,
+        ConnectorRoute.curve => Symbols.moving,
       };
 
   /// Chooses how the next connectors run, or (for [forSelection]) how the selected ones do.

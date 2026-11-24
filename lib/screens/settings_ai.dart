@@ -142,7 +142,7 @@ class _AiSettingsState extends State<_AiSettings> {
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Icon(
-                  o.id == models.selectedModelId ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  o.id == models.selectedModelId ? Symbols.radio_button_checked : Symbols.radio_button_unchecked,
                   size: 20,
                   color: o.supported ? null : scheme.outline,
                 ),
@@ -184,7 +184,7 @@ class _AiSettingsState extends State<_AiSettings> {
             padding: const EdgeInsets.all(12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Icon(chosen ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20),
+                Icon(chosen ? Symbols.radio_button_checked : Symbols.radio_button_unchecked, size: 20),
                 const SizedBox(width: 8),
                 Expanded(child: Text(p.label, style: const TextStyle(fontWeight: FontWeight.w600))),
                 if (!chosen)
@@ -205,7 +205,7 @@ class _AiSettingsState extends State<_AiSettings> {
                 ])
               else
                 Row(children: [
-                  Icon(state == ProviderState.ready ? Icons.check_circle_outline : Icons.download_outlined, size: 20),
+                  Icon(state == ProviderState.ready ? Symbols.check_circle_outline : Symbols.download, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(state == ProviderState.ready

@@ -680,8 +680,8 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
       items: [
         for (final (name, color) in highlightColors)
           if (color != hit.color)
-            PopupMenuItem(value: color, child: Row(children: [Icon(Icons.circle, color: color.withValues(alpha: 1), size: 16), const SizedBox(width: 8), Text(tr(name))])),
-        PopupMenuItem(value: Colors.transparent, child: Row(children: [const Icon(Icons.format_color_reset, size: 16), const SizedBox(width: 8), Text(tr('Remove highlight'))])),
+            PopupMenuItem(value: color, child: Row(children: [Icon(Symbols.circle, color: color.withValues(alpha: 1), size: 16), const SizedBox(width: 8), Text(tr(name))])),
+        PopupMenuItem(value: Colors.transparent, child: Row(children: [const Icon(Symbols.format_color_reset, size: 16), const SizedBox(width: 8), Text(tr('Remove highlight'))])),
       ],
     ).then((picked) {
       if (picked == null || !mounted) return;
@@ -714,7 +714,7 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
             key: ValueKey('highlight-colour-$name'),
             value: color,
             child: Row(children: [
-              Icon(color == _highlightColor ? Icons.check_circle : Icons.circle, color: color.withValues(alpha: 1), size: 16),
+              Icon(color == _highlightColor ? Symbols.check_circle : Symbols.circle, color: color.withValues(alpha: 1), size: 16),
               const SizedBox(width: 8),
               Text(tr(name)),
             ]),

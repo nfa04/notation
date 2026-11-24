@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/bounded_image.dart';
 import '../pdf/open_pdf.dart';
 import '../web/picked_file.dart';
@@ -346,15 +347,15 @@ const _pagesAhead = 5, _pagesBehind = 2;
 bool _looksLikePng(Uint8List b) => b.length > 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47;
 
 const _shapeIcons = {
-  ShapeTool.freehand: Icons.draw_outlined,
-  ShapeTool.line: Icons.horizontal_rule,
-  ShapeTool.arrow: Icons.arrow_right_alt,
-  ShapeTool.connector: Icons.account_tree_outlined,
-  ShapeTool.rectangle: Icons.crop_square,
-  ShapeTool.ellipse: Icons.circle_outlined,
-  ShapeTool.triangle: Icons.change_history,
-  ShapeTool.diamond: Icons.diamond_outlined,
-  ShapeTool.bezier: Icons.polyline_outlined,
+  ShapeTool.freehand: Symbols.draw,
+  ShapeTool.line: Symbols.horizontal_rule,
+  ShapeTool.arrow: Symbols.arrow_right_alt,
+  ShapeTool.connector: Symbols.account_tree,
+  ShapeTool.rectangle: Symbols.crop_square,
+  ShapeTool.ellipse: Symbols.circle,
+  ShapeTool.triangle: Symbols.change_history,
+  ShapeTool.diamond: Symbols.diamond,
+  ShapeTool.bezier: Symbols.polyline,
 };
 
 /// The icon of a shape: a Material one where there is one, else the outline of the shape itself.

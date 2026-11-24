@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -61,7 +62,7 @@ class _ReviewButtonState extends State<ReviewButton> {
       icon: Badge(
         isLabelVisible: _due > 0,
         label: Text.verbatim('$_due'),
-        child: const Icon(Icons.event_repeat),
+        child: const Icon(Symbols.event_repeat),
       ),
       onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReviewScreen(cards: widget.cards, planner: widget.planner, repository: widget.repository))),
     );
@@ -156,7 +157,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
           IconButton(
             key: const ValueKey('import-anki'),
             tooltip: tr('Import from Anki'),
-            icon: const Icon(Icons.file_download_outlined),
+            icon: const Icon(Symbols.file_download),
             onPressed: () async {
               if (await importCardsFromAnki(context, widget.cards) != null && mounted) _load();
             },
@@ -164,7 +165,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
           IconButton(
             key: const ValueKey('export-anki'),
             tooltip: tr('Export to Anki'),
-            icon: const Icon(Icons.ios_share_outlined),
+            icon: const Icon(Symbols.ios_share),
             onPressed: () => exportCardsToAnki(context, widget.cards, repository: widget.repository, source: widget.source),
           ),
         ],
@@ -242,7 +243,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Widget _finished(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(24), children: [
-      Icon(Icons.task_alt, size: 48, color: scheme.primary),
+      Icon(Symbols.task_alt, size: 48, color: scheme.primary),
       const SizedBox(height: 12),
       Text(_done == 0 ? 'No cards are due.' : 'All done for now.', key: const ValueKey('review-done'), style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 4),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/note_data.dart';
@@ -33,7 +34,7 @@ class _NotePickerDialogState extends State<NotePickerDialog> {
           TextField(
             key: const ValueKey('note-picker-search'),
             autofocus: true,
-            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Find a note'), border: const OutlineInputBorder(), isDense: true),
+            decoration: InputDecoration(prefixIcon: const Icon(Symbols.search), hintText: tr('Find a note'), border: const OutlineInputBorder(), isDense: true),
             onChanged: (v) => setState(() => _query = v),
           ),
           const SizedBox(height: 8),
@@ -45,7 +46,7 @@ class _NotePickerDialogState extends State<NotePickerDialog> {
                       ListTile(
                         key: ValueKey('pick-note-${n.id}'),
                         dense: true,
-                        leading: Icon(n.locked ? Icons.lock_outline : (n.isPdf ? Icons.picture_as_pdf_outlined : Icons.note_alt_outlined)),
+                        leading: Icon(n.locked ? Symbols.lock_outline : (n.isPdf ? Symbols.picture_as_pdf : Symbols.note_alt)),
                         title: Text.verbatim(n.shownTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
                         onTap: () => Navigator.pop(context, n.id),
                       ),

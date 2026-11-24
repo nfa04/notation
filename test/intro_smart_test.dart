@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
@@ -81,9 +82,9 @@ void main() {
     math = _Model(300);
     chat = _Model(600);
     smart = IntroSmart(aiSwitch: ai, models: [
-      IntroModel(id: 'handwriting', title: 'Handwriting to text', description: 'd', icon: Icons.edit, service: hand, wantedFor: const {Feature.handwriting}),
-      IntroModel(id: 'maths', title: 'Formulas and maths check', description: 'd', icon: Icons.rule, service: math, wantedFor: const {Feature.mathInk, Feature.checkMaths}),
-      IntroModel(id: 'assistant', title: 'Assistant', description: 'd', icon: Icons.auto_awesome, service: chat),
+      IntroModel(id: 'handwriting', title: 'Handwriting to text', description: 'd', icon: Symbols.edit, service: hand, wantedFor: const {Feature.handwriting}),
+      IntroModel(id: 'maths', title: 'Formulas and maths check', description: 'd', icon: Symbols.rule, service: math, wantedFor: const {Feature.mathInk, Feature.checkMaths}),
+      IntroModel(id: 'assistant', title: 'Assistant', description: 'd', icon: Symbols.auto_awesome, service: chat),
     ], onMobileData: mobile == null ? null : () async => mobile);
     await tester.pumpWidget(MaterialApp(home: ListenableBuilder(listenable: profile, builder: (_, _) => IntroScreen(profile: profile, features: features, smart: smart, welcome: (tools) async => welcomed = tools))));
   }

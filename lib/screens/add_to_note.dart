@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -43,12 +44,12 @@ class AddToNoteMenu extends StatelessWidget {
         tooltip: tr('Add to the note'),
         onSelected: onSelected,
         itemBuilder: (_) => [
-          if (canKeep) PopupMenuItem(key: const ValueKey('add-target-keep'), value: AddTarget.keep, child: _item(Icons.bookmark_add_outlined, 'Keep with the note, apart from its pages')),
-          PopupMenuItem(key: const ValueKey('add-target-document'), value: AddTarget.document, child: _item(Icons.article_outlined, 'At the end of the written document')),
-          PopupMenuItem(key: const ValueKey('add-target-page'), value: AddTarget.page, child: _item(Icons.insert_page_break_outlined, 'On a page of its own')),
-          PopupMenuItem(key: const ValueKey('add-target-textBox'), value: AddTarget.textBox, child: _item(Icons.text_fields, 'As a text box on the page')),
+          if (canKeep) PopupMenuItem(key: const ValueKey('add-target-keep'), value: AddTarget.keep, child: _item(Symbols.bookmark_add, 'Keep with the note, apart from its pages')),
+          PopupMenuItem(key: const ValueKey('add-target-document'), value: AddTarget.document, child: _item(Symbols.article, 'At the end of the written document')),
+          PopupMenuItem(key: const ValueKey('add-target-page'), value: AddTarget.page, child: _item(Symbols.insert_page_break, 'On a page of its own')),
+          PopupMenuItem(key: const ValueKey('add-target-textBox'), value: AddTarget.textBox, child: _item(Symbols.text_fields, 'As a text box on the page')),
         ],
-        icon: child == null ? const Icon(Icons.note_add_outlined, size: 16) : null,
+        icon: child == null ? const Icon(Symbols.note_add, size: 16) : null,
         padding: EdgeInsets.zero,
         child: child,
       );

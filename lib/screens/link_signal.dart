@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../collab/link_stats.dart';
@@ -40,15 +41,15 @@ class LinkSignal extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(
           switch (band) {
-            LinkBand.good => Icons.signal_cellular_alt,
-            LinkBand.fair => Icons.signal_cellular_alt_2_bar,
-            _ => Icons.signal_cellular_alt_1_bar,
+            LinkBand.good => Symbols.signal_cellular_alt,
+            LinkBand.fair => Symbols.signal_cellular_alt_2_bar,
+            _ => Symbols.signal_cellular_alt_1_bar,
           },
           key: ValueKey('link-signal-${band.name}'),
           size: size,
           color: color,
         ),
-        if (relayed) Icon(Icons.alt_route, key: const ValueKey('link-signal-relayed'), size: size * 0.7, color: color),
+        if (relayed) Icon(Symbols.alt_route, key: const ValueKey('link-signal-relayed'), size: size * 0.7, color: color),
       ]),
     );
   }

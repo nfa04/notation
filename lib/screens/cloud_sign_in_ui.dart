@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -52,7 +53,7 @@ class _RecoveryKeyDialogState extends State<_RecoveryKeyDialog> {
             child: TextButton.icon(
               key: const ValueKey('recovery-key-copy'),
               onPressed: () => Clipboard.setData(ClipboardData(text: widget.keyText)),
-              icon: const Icon(Icons.copy, size: 18),
+              icon: const Icon(Symbols.content_copy, size: 18),
               label: const Text('Copy'),
             ),
           ),
@@ -156,7 +157,7 @@ class _SignInDialogState extends State<_SignInDialog> {
                 const SizedBox(height: 10),
                 if (p.available())
                   Row(children: [
-                    Icon(Icons.check_circle_outline, size: 18, color: Colors.green[700]),
+                    Icon(Symbols.check_circle_outline, size: 18, color: Colors.green[700]),
                     const SizedBox(width: 8),
                     Text.verbatim(tr('{service} is connected.', {'service': p.label})),
                   ])
@@ -313,7 +314,7 @@ class CloudSignInCard extends StatelessWidget {
               OutlinedButton.icon(
                 key: const ValueKey('cloud-signin-renew'),
                 onPressed: usable ? () => _renew(context) : null,
-                icon: const Icon(Icons.vpn_key_outlined, size: 18),
+                icon: const Icon(Symbols.vpn_key, size: 18),
                 label: const Text('Make a new recovery key'),
               ),
             ]),

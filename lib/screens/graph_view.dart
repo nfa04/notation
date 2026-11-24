@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:math' as math;
 
 import 'dart:convert';
@@ -477,7 +478,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
             for (final e in pairs) ...[
               const Divider(height: 24),
               side(e.a),
-              Padding(padding: const EdgeInsets.only(left: 4), child: Icon(Icons.compare_arrows, size: 18, color: Theme.of(context).colorScheme.error)),
+              Padding(padding: const EdgeInsets.only(left: 4), child: Icon(Symbols.compare_arrows, size: 18, color: Theme.of(context).colorScheme.error)),
               side(e.b),
             ],
           ]),
@@ -626,7 +627,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
       padding: const EdgeInsets.only(left: 12),
       decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(8)),
       child: Row(children: [
-        Icon(Icons.compare_arrows, size: 18, color: scheme.onSecondaryContainer),
+        Icon(Symbols.compare_arrows, size: 18, color: scheme.onSecondaryContainer),
         const SizedBox(width: 8),
         Expanded(
           child: Padding(
@@ -641,7 +642,7 @@ final made = widget.service.lastMade, madeId = widget.service.lastMadeId;
           ),
         ),
         if (!d.isEmpty) TextButton(key: const ValueKey('graph-compare-changes'), onPressed: () => _changesSheet(graph, c), child: Text(tr('Changes'))),
-        IconButton(key: const ValueKey('graph-compare-close'), tooltip: tr('Close'), icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _compare = null)),
+        IconButton(key: const ValueKey('graph-compare-close'), tooltip: tr('Close'), icon: const Icon(Symbols.close, size: 18), onPressed: () => setState(() => _compare = null)),
       ]),
     );
   }
@@ -792,7 +793,7 @@ PopupMenuButton<String>(
                               tooltip: tr('This graph'),
                               padding: EdgeInsets.zero,
                               iconSize: 18,
-                              icon: const Icon(Icons.more_vert),
+                              icon: const Icon(Symbols.more_vert),
                               onSelected: (v) {
                                 switch (v) {
                                   case 'rename':
@@ -886,8 +887,8 @@ PopupMenuButton<String>(
                         children: [
                           Icon(
                             g.mode == 'notes'
-                                ? Icons.description_outlined
-                                : Icons.lightbulb_outline,
+                                ? Symbols.description
+                                : Symbols.lightbulb_outline,
                             size: 16,
                           ),
                           const SizedBox(width: 6),
@@ -911,7 +912,7 @@ _graphMenu(g),
           IconButton(
             key: const ValueKey('graph-new'),
             tooltip: tr('Make a new graph'),
-            icon: const Icon(Icons.add),
+            icon: const Icon(Symbols.add),
             visualDensity: VisualDensity.compact,
             onPressed: _generating ? null : _generate,
           ),
@@ -980,7 +981,7 @@ _graphMenu(g),
             PopupMenuButton<String>(
               key: const ValueKey('graph-provider'),
               tooltip: tr('Who writes the facts (the model is chosen in the Settings)'),
-              icon: const Icon(Icons.swap_horiz),
+              icon: const Icon(Symbols.swap_horiz),
               enabled: !_generating,
               onSelected: widget.service.ai!.chooseProvider,
               itemBuilder: (context) => [
@@ -991,9 +992,9 @@ _graphMenu(g),
           if (widget.pinned && _saved != null) _graphMenu(_saved!),
           // (a graph tab has no strip of graphs with its "+": the new graph gets a tab of its own)
           if (widget.pinned && widget.service.graphs.isNotEmpty)
-            IconButton(key: const ValueKey('graph-new'), tooltip: tr('Make a new graph'), icon: const Icon(Icons.add), onPressed: _generating ? null : _generate),
+            IconButton(key: const ValueKey('graph-new'), tooltip: tr('Make a new graph'), icon: const Icon(Symbols.add), onPressed: _generating ? null : _generate),
           if (widget.service.graphs.isNotEmpty)
-            IconButton(key: const ValueKey('graph-library'), tooltip: tr('Graph library'), icon: const Icon(Icons.collections_bookmark_outlined), onPressed: _openLibrary),
+            IconButton(key: const ValueKey('graph-library'), tooltip: tr('Graph library'), icon: const Icon(Symbols.collections_bookmark), onPressed: _openLibrary),
           const SizedBox(width: 8),
         ],
       ),
@@ -1014,12 +1015,12 @@ _graphMenu(g),
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         if (_generating)
-                          TextButton.icon(key: const ValueKey('graph-stop'), onPressed: widget.service.stop, icon: const Icon(Icons.stop), label: const Text('Stop'))
+                          TextButton.icon(key: const ValueKey('graph-stop'), onPressed: widget.service.stop, icon: const Icon(Symbols.stop), label: const Text('Stop'))
                         else if (widget.service.graphs.isEmpty)
                           FilledButton.icon(
                             key: const ValueKey('graph-generate'),
                             onPressed: _generate,
-                            icon: const Icon(Icons.hub_outlined, size: 18),
+                            icon: const Icon(Symbols.hub, size: 18),
                             label: const Text( 'Generate graph'),
                           ),
                       ],
@@ -1095,7 +1096,7 @@ _graphMenu(g),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.hub_outlined, size: 48, color: scheme.onSurfaceVariant),
+              Icon(Symbols.hub, size: 48, color: scheme.onSurfaceVariant),
               const SizedBox(height: 12),
               Text.verbatim(
                 tr(
@@ -1137,7 +1138,7 @@ _graphMenu(g),
                         onChanged: (_) => setState(() {}),
                         onSubmitted: (_) => _goToFirstMatch(graph),
                         decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.search, size: 18),
+                          prefixIcon: const Icon(Symbols.search, size: 18),
                           suffixText: _search.text.trim().isEmpty ? null : trCount(matches?.length ?? 0, '{n} match', '{n} matches'),
                           hintText: tr('Find in the graph'),
                           isDense: true,
@@ -1154,16 +1155,16 @@ _graphMenu(g),
                       IconButton(
                         key: const ValueKey('graph-clashes'),
                         tooltip: tr('Facts that disagree'),
-                        icon: Badge(label: Text.verbatim('${graph.edges.where((e) => e.kind == GraphEdgeKind.contradicts).length}'), child: Icon(Icons.warning_amber_rounded, color: scheme.error)),
+                        icon: Badge(label: Text.verbatim('${graph.edges.where((e) => e.kind == GraphEdgeKind.contradicts).length}'), child: Icon(Symbols.warning_amber_rounded, color: scheme.error)),
                         onPressed: () => _clashDialog(graph),
                       ),
                     IconButton(
                       key: const ValueKey('graph-filter'),
                       tooltip: tr('Filter the graph'),
-                      icon: Badge(isLabelVisible: _filter.active, label: Text.verbatim('${_filter.count}'), child: const Icon(Icons.filter_list)),
+                      icon: Badge(isLabelVisible: _filter.active, label: Text.verbatim('${_filter.count}'), child: const Icon(Symbols.filter_list)),
                       onPressed: () => _filterDialog(graph),
                     ),
-                    IconButton(tooltip: tr('Show everything'), icon: const Icon(Icons.fit_screen_outlined), onPressed: () => setState(() => _fittedFor = null)),
+                    IconButton(tooltip: tr('Show everything'), icon: const Icon(Symbols.fit_screen), onPressed: () => setState(() => _fittedFor = null)),
                   ],
                 ),
               ),
@@ -1180,7 +1181,7 @@ _graphMenu(g),
                       padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
                       decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(8)),
                       child: Row(children: [
-                        Icon(Icons.info_outline, size: 16, color: scheme.onTertiaryContainer),
+                        Icon(Symbols.info, size: 16, color: scheme.onTertiaryContainer),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1277,9 +1278,9 @@ _graphMenu(g),
       runSpacing: 6,
       children: [
         for (final (tool, icon, label) in [
-          (StudyTool.cards, Icons.style_outlined, 'Flashcards'),
-          (StudyTool.quiz, Icons.quiz_outlined, 'Quiz'),
-          (StudyTool.ask, Icons.question_answer_outlined, 'Ask'),
+          (StudyTool.cards, Symbols.style, 'Flashcards'),
+          (StudyTool.quiz, Symbols.quiz, 'Quiz'),
+          (StudyTool.ask, Symbols.question_answer, 'Ask'),
         ])
           OutlinedButton.icon(
             key: ValueKey('graph-study-${tool.name}'),
@@ -1307,7 +1308,7 @@ _graphMenu(g),
           Row(
             children: [
               Expanded(child: Text.verbatim(n.label, style: Theme.of(context).textTheme.titleMedium)),
-              IconButton(tooltip: tr('Close'), icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => _selected = null)),
+              IconButton(tooltip: tr('Close'), icon: const Icon(Symbols.close, size: 18), onPressed: () => setState(() => _selected = null)),
             ],
           ),
           if (n.tag != null)
@@ -1323,7 +1324,7 @@ _graphMenu(g),
                 color: scheme.errorContainer,
                 child: ListTile(
                   dense: true,
-                  leading: Icon(Icons.warning_amber_rounded, color: scheme.error),
+                  leading: Icon(Symbols.warning_amber_rounded, color: scheme.error),
                   title: Text(tr('Says something else in {note}', {'note': _noteTitles[g.nodes[e.a == i ? e.b : e.a].noteId] ?? tr('another note')})),
                   subtitle: Text.verbatim(g.nodes[e.a == i ? e.b : e.a].detail, maxLines: 4, overflow: TextOverflow.ellipsis),
                   onTap: () => _select(g, e.a == i ? e.b : e.a),
@@ -1338,7 +1339,7 @@ _graphMenu(g),
             FilledButton.tonalIcon(
               key: const ValueKey('graph-open-note'),
               onPressed: () => widget.onOpen(n.noteId!, n.page),
-              icon: const Icon(Icons.open_in_new, size: 16),
+              icon: const Icon(Symbols.open_in_new, size: 16),
               label: Text(n.page == null ? 'Open the note' : 'Open the note at the page'),
             ),
           if (n.kind == GraphNodeKind.topic) FilledButton.tonal(onPressed: () => setState(() => _topic = n.cluster), child: const Text('Show only this topic')),

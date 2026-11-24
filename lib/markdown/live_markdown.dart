@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async' show scheduleMicrotask;
 import 'dart:math' as math;
 import 'dart:ui' show BoxHeightStyle;
@@ -581,7 +582,7 @@ class _LiveBuilder {
                 onTap: toggle == null ? null : () => toggle(box),
                 child: Padding(
                   padding: EdgeInsets.only(right: fontSize * 0.15),
-                  child: Icon(b.checked ? Icons.check_box : Icons.check_box_outline_blank, size: fontSize * 1.15, color: textColor.withValues(alpha: b.checked ? 0.6 : 0.8)),
+                  child: Icon(b.checked ? Symbols.check_box : Symbols.check_box_outline_blank, size: fontSize * 1.15, color: textColor.withValues(alpha: b.checked ? 0.6 : 0.8)),
                 ),
               ),
             ),
@@ -885,7 +886,7 @@ class _LiveBuilder {
             onTap: tap == null ? null : () => tap(context, m),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Icon(Icons.mode_comment, size: fontSize * 0.9, color: const Color(0xFFF9A825)),
+              child: Icon(Symbols.mode_comment, size: fontSize * 0.9, color: const Color(0xFFF9A825)),
             ),
           ),
         ),

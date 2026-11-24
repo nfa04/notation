@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/text.dart';
 
@@ -24,7 +25,7 @@ class _AdvancedSectionState extends State<AdvancedSection> {
           child: TextButton.icon(
             key: ValueKey('advanced-${widget.label}'),
             onPressed: () => setState(() => _open = !_open),
-            icon: Icon(_open ? Icons.expand_less : Icons.expand_more, size: 20),
+            icon: Icon(_open ? Symbols.expand_less : Symbols.expand_more, size: 20),
             label: Text(widget.label),
           ),
         ),

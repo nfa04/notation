@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -8,7 +9,7 @@ const documentTemplates = <(String, String, IconData, String)>[
   (
     'Letter',
     'A formal letter with the addresses, a date and a signature',
-    Icons.mail_outline,
+    Symbols.mail_outline,
     '{align=right}[Your name]\n{align=right}[Your street and number]\n{align=right}[Postcode and town]\n\n'
         '[Their name]\n[Their street and number]\n[Postcode and town]\n\n'
         '{align=right}[Town], [date]\n\n'
@@ -21,7 +22,7 @@ const documentTemplates = <(String, String, IconData, String)>[
   (
     'Essay',
     'A title, an introduction, the main part and a conclusion, the sources at the end',
-    Icons.history_edu_outlined,
+    Symbols.history_edu,
     '[footer]: {page}\n\n'
         '{align=center}# [Title]\n'
         '{align=center}[Your name] - [course] - [date]\n\n'
@@ -34,7 +35,7 @@ const documentTemplates = <(String, String, IconData, String)>[
   (
     'Report',
     'A title page, the contents, numbered pages and sections',
-    Icons.summarize_outlined,
+    Symbols.summarize,
     '[header]: {title}\n[footer]: Page {page} of {pages}\n\n'
         '\n\n\n{align=center}# [Title of the report]\n'
         '{align=center}[Subtitle]\n\n'
@@ -51,7 +52,7 @@ const documentTemplates = <(String, String, IconData, String)>[
   (
     'CV',
     'A curriculum vitae: contact, experience, education, skills',
-    Icons.badge_outlined,
+    Symbols.badge,
     '{align=center}# [Your name]\n'
         '{align=center}[Email] - [phone] - [town]\n\n'
         '---\n'
@@ -65,7 +66,7 @@ const documentTemplates = <(String, String, IconData, String)>[
   (
     'Meeting notes',
     'Who was there, the agenda, what was decided and what is to be done',
-    Icons.groups_outlined,
+    Symbols.groups,
     '# [Meeting] - [date]\n\n'
         '**Present:** [names]\n\n'
         '## Agenda\n\n1. [...]\n2. [...]\n\n'
@@ -76,7 +77,7 @@ const documentTemplates = <(String, String, IconData, String)>[
   (
     'Cover letter',
     'For a job application',
-    Icons.work_outline,
+    Symbols.work_outline,
     '{align=right}[Your name] - [email] - [phone]\n\n'
         '{align=right}[Town], [date]\n\n'
         '[Company]\n[Their address]\n\n'

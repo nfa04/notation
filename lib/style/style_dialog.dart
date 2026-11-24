@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/language.dart';
 import '../l10n/text.dart';
@@ -138,7 +139,7 @@ class _StyleDialogState extends State<_StyleDialog> {
                   onChanged: (v) => setState(() => _style = v.trim().isEmpty ? _style.copyWith(clearEmoji: true) : _style.copyWith(emoji: v.trim())),
                 ),
               ),
-              IconButton(tooltip: tr('No emoji'), icon: const Icon(Icons.clear), onPressed: () => _setEmoji(null)),
+              IconButton(tooltip: tr('No emoji'), icon: const Icon(Symbols.clear), onPressed: () => _setEmoji(null)),
             ]),
           ]),
         ),
@@ -168,7 +169,7 @@ class _StyleDialogState extends State<_StyleDialog> {
             color: color ?? widget.base.color.withValues(alpha: 0.25),
             border: Border.all(color: selected ? scheme.primary : Colors.black12, width: selected ? 3 : 1),
           ),
-          child: color == null ? const Icon(Icons.auto_awesome, size: 15) : null,
+          child: color == null ? const Icon(Symbols.auto_awesome, size: 15) : null,
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/note_data.dart';
@@ -16,7 +17,7 @@ Future<(String?,)?> pickFolder(
   Widget tile(String? id, String name, int depth) => ListTile(
         dense: true,
         contentPadding: EdgeInsets.only(left: 16.0 + depth * 20, right: 16),
-        leading: Icon(id == null ? Icons.home_outlined : Icons.folder_outlined, size: 20),
+        leading: Icon(id == null ? Symbols.home : Symbols.folder, size: 20),
         title: Text.verbatim(id == null ? tr(name) : name),
         selected: id == current,
         onTap: () => Navigator.pop(context, (id,)),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/note_data.dart';
@@ -102,7 +103,7 @@ class _TemplateDialogState extends State<_TemplateDialog> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             key: const ValueKey('template-search'),
-            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Search the templates'), isDense: true),
+            decoration: InputDecoration(prefixIcon: const Icon(Symbols.search), hintText: tr('Search the templates'), isDense: true),
             onChanged: (v) => setState(() => _query = v),
           ),
           Flexible(
@@ -136,13 +137,13 @@ class _TemplateDialogState extends State<_TemplateDialog> {
             for (final t in _saved)
               ListTile(
                 key: ValueKey('saved-template-${t.id}'),
-                leading: const Icon(Icons.bookmark_outline),
+                leading: const Icon(Symbols.bookmark),
                 title: Text.verbatim(t.name),
                 onTap: () => Navigator.pop(context, t),
                 trailing: IconButton(
                   key: ValueKey('remove-template-${t.id}'),
                   tooltip: tr('Remove this template'),
-                  icon: const Icon(Icons.delete_outline),
+                  icon: const Icon(Symbols.delete_outline),
                   onPressed: () async {
                     await widget.templates.remove(t.id);
                     if (mounted) setState(() => _saved = [for (final s in _saved) if (s.id != t.id) s]);

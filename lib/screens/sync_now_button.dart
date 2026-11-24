@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../devicesync/device_sync_service.dart';
@@ -32,7 +33,7 @@ class SyncNowButton extends StatelessWidget {
           onPressed: busy ? null : () => _run(context, viaCloud),
           icon: busy
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))
-              : const Icon(Icons.sync),
+              : const Icon(Symbols.sync),
         );
       },
     );

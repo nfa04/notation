@@ -1,4 +1,5 @@
 
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/paper.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -123,10 +124,10 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
           ],
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
-            FilledButton.tonalIcon(key: const ValueKey('extension-install-file'), onPressed: _installFile, icon: const Icon(Icons.upload_file, size: 18), label: const Text('Install from a file (.zip)')),
+            FilledButton.tonalIcon(key: const ValueKey('extension-install-file'), onPressed: _installFile, icon: const Icon(Symbols.upload_file, size: 18), label: const Text('Install from a file (.zip)')),
             if (widget.ai != null && widget.ai!.provider != null)
-              FilledButton.icon(key: const ValueKey('extension-magic'), onPressed: _magic, icon: const Icon(Icons.auto_fix_high, size: 18), label: const Text('Create with AI')),
-            OutlinedButton.icon(key: const ValueKey('extension-write'), onPressed: _write, icon: const Icon(Icons.code, size: 18), label: const Text('Write one')),
+              FilledButton.icon(key: const ValueKey('extension-magic'), onPressed: _magic, icon: const Icon(Symbols.auto_fix_high, size: 18), label: const Text('Create with AI')),
+            OutlinedButton.icon(key: const ValueKey('extension-write'), onPressed: _write, icon: const Icon(Symbols.code, size: 18), label: const Text('Write one')),
           ]),
           const SizedBox(height: 8),
           if (service.installed.isEmpty) Text(tr('No extensions yet.'), style: TextStyle(color: scheme.onSurfaceVariant)),
@@ -169,7 +170,7 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
             ),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton.icon(key: ValueKey('extension-remove-${m.id}'), onPressed: () => service.remove(m.id), icon: const Icon(Icons.delete_outline, size: 18), label: const Text('Remove')),
+            child: TextButton.icon(key: ValueKey('extension-remove-${m.id}'), onPressed: () => service.remove(m.id), icon: const Icon(Symbols.delete_outline, size: 18), label: const Text('Remove')),
           ),
         ],
       ),
@@ -205,7 +206,7 @@ class _WriteDialogState extends State<_WriteDialog> {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(key: const ValueKey('extension-docs'), onPressed: () => showExtensionDocs(context), icon: const Icon(Icons.menu_book_outlined, size: 18), label: const Text('Read the documentation')),
+                child: TextButton.icon(key: const ValueKey('extension-docs'), onPressed: () => showExtensionDocs(context), icon: const Icon(Symbols.menu_book, size: 18), label: const Text('Read the documentation')),
               ),
               const Text('The manifest says what it is called, what it adds and what it asks to be allowed to do (JSON):'),
               const SizedBox(height: 6),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide Text;
 
@@ -243,7 +244,7 @@ class _IntroScreenState extends State<IntroScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.devices_outlined, size: 22),
+                const Icon(Symbols.devices, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -253,7 +254,7 @@ class _IntroScreenState extends State<IntroScreen> {
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
                       key: const ValueKey('intro-sync'),
-                      icon: const Icon(Icons.link, size: 18),
+                      icon: const Icon(Symbols.link, size: 18),
                       label: const Text('Use a link from that device'),
                       onPressed: _syncFromDevice,
                     ),
@@ -262,7 +263,7 @@ class _IntroScreenState extends State<IntroScreen> {
                             OutlinedButton.icon(
                               key: const ValueKey('intro-signin'),
                               icon: const Icon(
-                                Icons.cloud_download_outlined,
+                                Symbols.cloud_download,
                                 size: 18,
                               ),
                               label: const Text(
@@ -275,7 +276,7 @@ class _IntroScreenState extends State<IntroScreen> {
                       const SizedBox(height: 6),
                       OutlinedButton.icon(
                         key: const ValueKey('intro-connect'),
-                        icon: const Icon(Icons.qr_code_2, size: 18),
+                        icon: const Icon(Symbols.qr_code_2, size: 18),
                         label: const Text('Connect temporarily'),
                         onPressed: _connectTemporarily,
                       ),
@@ -305,7 +306,7 @@ class _IntroScreenState extends State<IntroScreen> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.fingerprint, size: 22),
+              const Icon(Symbols.fingerprint, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -342,7 +343,7 @@ class _IntroScreenState extends State<IntroScreen> {
                 padding: const EdgeInsets.all(12),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Icon(Icons.dashboard_customize_outlined, size: 22),
+                    const Icon(Symbols.dashboard_customize, size: 22),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -368,7 +369,7 @@ class _IntroScreenState extends State<IntroScreen> {
           OutlinedButton.icon(
             key: const ValueKey('intro-everything'),
             onPressed: _everything ? null : () => setState(_chooseEverything),
-            icon: const Icon(Icons.done_all, size: 18),
+            icon: const Icon(Symbols.done_all, size: 18),
             label: const Text('Show me everything'),
           ),
           const SizedBox(height: 8),
@@ -417,7 +418,7 @@ class _IntroScreenState extends State<IntroScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.devices_outlined, size: 22),
+          const Icon(Symbols.devices, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -427,7 +428,7 @@ class _IntroScreenState extends State<IntroScreen> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 key: const ValueKey('intro-set-up-sync'),
-                icon: const Icon(Icons.sync, size: 18),
+                icon: const Icon(Symbols.sync, size: 18),
                 label: const Text('Set up syncing'),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => Scaffold(
@@ -453,7 +454,7 @@ class _IntroScreenState extends State<IntroScreen> {
           child: SwitchListTile.adaptive(
             key: const ValueKey('intro-welcome-note'),
             contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.note_add_outlined),
+            secondary: const Icon(Symbols.note_add),
             title: Text('Make a note that shows the tools'),
             subtitle: Text('One page, with the tools you chose on it, to try them on. You can delete it.'),
             value: _welcomeNote,
@@ -526,7 +527,7 @@ class _IntroScreenState extends State<IntroScreen> {
         if (_mobile && mb > 0) ...[
           const SizedBox(height: 8),
           Row(key: const ValueKey('intro-mobile-hint'), crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.network_cell, size: 18, color: scheme.error),
+            Icon(Symbols.network_cell, size: 18, color: scheme.error),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

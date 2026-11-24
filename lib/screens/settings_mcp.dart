@@ -80,27 +80,27 @@ class _McpSettingsState extends State<_McpSettings> {
               IconButton(
                 key: const ValueKey('mcp-token-show'),
                 tooltip: tr(_show ? 'Hide the token' : 'Show the token'),
-                icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                icon: Icon(_show ? Symbols.visibility_off : Symbols.visibility),
                 onPressed: () => setState(() => _show = !_show),
               ),
-              IconButton(key: const ValueKey('mcp-token-copy'), tooltip: tr('Copy the token'), icon: const Icon(Icons.copy_outlined), onPressed: () => _copy('the token', token)),
+              IconButton(key: const ValueKey('mcp-token-copy'), tooltip: tr('Copy the token'), icon: const Icon(Symbols.content_copy), onPressed: () => _copy('the token', token)),
             ]),
             Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton.icon(
                 key: const ValueKey('mcp-copy-claude'),
-                icon: const Icon(Icons.terminal),
+                icon: const Icon(Symbols.terminal),
                 label: const Text('Copy the command for Claude Code'),
                 onPressed: () => _copy('the command', service.claudeCodeCommand),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('mcp-copy-json'),
-                icon: const Icon(Icons.data_object),
+                icon: const Icon(Symbols.data_object),
                 label: const Text('Copy the settings as JSON'),
                 onPressed: () => _copy('the settings', service.jsonSettings),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('mcp-new-token'),
-                icon: const Icon(Icons.refresh),
+                icon: const Icon(Symbols.refresh),
                 label: const Text('New token'),
                 onPressed: service.regenerateToken,
               ),

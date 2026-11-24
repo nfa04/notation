@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -161,12 +162,12 @@ class AddSourceButton extends StatelessWidget {
         if (added != null) onAdded?.call(added);
       },
       itemBuilder: (_) => [
-        PopupMenuItem(value: 0, child: ListTile(leading: const Icon(Icons.travel_explore), title: const Text('From a DOI or ISBN'), dense: true, contentPadding: EdgeInsets.zero)),
-        PopupMenuItem(value: 1, child: ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Enter by hand'), dense: true, contentPadding: EdgeInsets.zero)),
-        PopupMenuItem(value: 2, child: ListTile(leading: const Icon(Icons.upload_file_outlined), title: const Text('Import a file (BibTeX, RIS, CSL-JSON)'), dense: true, contentPadding: EdgeInsets.zero)),
+        PopupMenuItem(value: 0, child: ListTile(leading: const Icon(Symbols.travel_explore), title: const Text('From a DOI or ISBN'), dense: true, contentPadding: EdgeInsets.zero)),
+        PopupMenuItem(value: 1, child: ListTile(leading: const Icon(Symbols.edit), title: const Text('Enter by hand'), dense: true, contentPadding: EdgeInsets.zero)),
+        PopupMenuItem(value: 2, child: ListTile(leading: const Icon(Symbols.upload_file), title: const Text('Import a file (BibTeX, RIS, CSL-JSON)'), dense: true, contentPadding: EdgeInsets.zero)),
       ],
       child: IgnorePointer(
-        child: FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.add, size: 18), label: const Text('Add a source')),
+        child: FilledButton.icon(onPressed: () {}, icon: const Icon(Symbols.add, size: 18), label: const Text('Add a source')),
       ),
     );
   }
@@ -254,7 +255,7 @@ class _CitationLibraryScreenState extends State<CitationLibraryScreen> {
               PopupMenuButton<(bool, ExportFormat)>(
                 key: const ValueKey('export-sources'),
                 tooltip: tr('Export the sources'),
-                icon: const Icon(Icons.ios_share),
+                icon: const Icon(Symbols.ios_share),
                 onSelected: (v) => v.$1 ? copySources(context, service, v.$2) : exportSourcesFile(context, service, v.$2),
                 itemBuilder: (_) => [
                   for (final f in ExportFormat.values) PopupMenuItem(value: (false, f), child: Text.verbatim(tr('Save as {format}...', {'format': f.label}))),
@@ -429,7 +430,7 @@ class CitationSettings extends StatelessWidget {
         FilledButton.tonalIcon(
           key: const ValueKey('open-library'),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CitationLibraryScreen(service: service))),
-          icon: const Icon(Icons.format_quote, size: 18),
+          icon: const Icon(Symbols.format_quote, size: 18),
           label: Text.verbatim(trCount(service.sources.length, 'Open the library (1 source)', 'Open the library ({n} sources)')),
         ),
       ]),

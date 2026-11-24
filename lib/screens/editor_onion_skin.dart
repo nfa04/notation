@@ -44,7 +44,7 @@ extension _EditorOnionSkin on _FixedPageNoteEditorState {
         key: const ValueKey('onion-skin'),
         tooltip: tr('Onion skin: show the pages before and after this one faintly, to draw the frames of an animation'),
         position: PopupMenuPosition.under,
-        icon: Icon(Icons.layers_outlined, size: 20, color: _onionBack > 0 || _onionNext ? Theme.of(context).colorScheme.primary : null),
+        icon: Icon(Symbols.layers, size: 20, color: _onionBack > 0 || _onionNext ? Theme.of(context).colorScheme.primary : null),
         onSelected: (v) {
           if (v == 'next') {
             _setOnion(next: !_onionNext);

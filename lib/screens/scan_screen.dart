@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../util/apart.dart';
 import 'dart:async';
 import 'dart:typed_data';
@@ -164,12 +165,12 @@ class _ScanScreenState extends State<ScanScreen> {
       appBar: AppBar(
         title: const Text('Scan a page'),
         actions: [
-          IconButton(key: const ValueKey('scan-rotate-left'), tooltip: tr('Turn left'), icon: const Icon(Icons.rotate_left), onPressed: _busy ? null : () => _rotate(-1)),
-          IconButton(key: const ValueKey('scan-rotate-right'), tooltip: tr('Turn right'), icon: const Icon(Icons.rotate_right), onPressed: _busy ? null : () => _rotate(1)),
+          IconButton(key: const ValueKey('scan-rotate-left'), tooltip: tr('Turn left'), icon: const Icon(Symbols.rotate_left), onPressed: _busy ? null : () => _rotate(-1)),
+          IconButton(key: const ValueKey('scan-rotate-right'), tooltip: tr('Turn right'), icon: const Icon(Symbols.rotate_right), onPressed: _busy ? null : () => _rotate(1)),
           IconButton(
             key: const ValueKey('scan-detect'),
             tooltip: tr('Find the page again'),
-            icon: const Icon(Icons.auto_fix_high),
+            icon: const Icon(Symbols.auto_fix_high),
             onPressed: _busy || _source == null ? null : () => setState(() => _corners = findPageCorners(_source!)),
           ),
           const SizedBox(width: 8),
@@ -208,7 +209,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 message: tr(_canRead ? 'Read the text on the page with the text reader' : 'Install the text reader in the settings first'),
                 child: FilterChip(
                   key: const ValueKey('scan-read'),
-                  avatar: const Icon(Icons.text_snippet_outlined, size: 18),
+                  avatar: const Icon(Symbols.text_snippet, size: 18),
                   label: const Text('Read the text'),
                   selected: _read && _canRead,
                   onSelected: _canRead ? (v) => setState(() => _read = v) : null,

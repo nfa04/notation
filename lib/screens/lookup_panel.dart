@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io' show Platform;
 import '../l10n/language.dart';
 
@@ -304,7 +305,7 @@ class _LookupPanelState extends State<LookupPanel> {
                     key: const ValueKey('lookup-with-source'),
                     onTap: () => setState(() => _withSource = !_withSource),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(_withSource ? Icons.check_box : Icons.check_box_outline_blank, size: 16, color: scheme.onSecondaryContainer),
+                      Icon(_withSource ? Symbols.check_box : Symbols.check_box_outline_blank, size: 16, color: scheme.onSecondaryContainer),
                       const SizedBox(width: 4),
                       Text('with a link to the page', style: TextStyle(fontSize: 12, color: scheme.onSecondaryContainer)),
                     ]),
@@ -315,7 +316,7 @@ class _LookupPanelState extends State<LookupPanel> {
               FilledButton.icon(
                 key: const ValueKey('lookup-add-text'),
                 onPressed: () => _addSelection(asked),
-                icon: const Icon(Icons.note_add_outlined, size: 18),
+                icon: const Icon(Symbols.note_add, size: 18),
                 label: const Text('Add to the note'),
               ),
             ]),
@@ -347,18 +348,18 @@ class _LookupPanelState extends State<LookupPanel> {
               IconButton(
                 key: const ValueKey('lookup-link'),
                 tooltip: tr('Link this page on the note'),
-                icon: const Icon(Icons.add_link, size: 20),
+                icon: const Icon(Symbols.add_link, size: 20),
                 onPressed: () => _link(url),
               ),
             IconButton(
               tooltip: tr('Open in the browser'),
-              icon: const Icon(Icons.open_in_new, size: 18),
+              icon: const Icon(Symbols.open_in_new, size: 18),
               onPressed: () => openInBrowser(url),
             ),
             IconButton(
               key: const ValueKey('lookup-close'),
               tooltip: tr('Close'),
-              icon: const Icon(Icons.close, size: 20),
+              icon: const Icon(Symbols.close, size: 20),
               onPressed: widget.onClose,
             ),
           ]),

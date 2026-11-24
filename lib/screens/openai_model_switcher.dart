@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../ai/ai_service.dart';
@@ -31,13 +32,13 @@ class OpenAiModelSwitcher extends StatelessWidget {
           return IconButton(
             key: const ValueKey('openai-switch-model'),
             tooltip: tr('Model: {model}', {'model': label}),
-            icon: const Icon(Icons.model_training, size: 20),
+            icon: const Icon(Symbols.model_training, size: 20),
             onPressed: open,
           );
         }
         return ActionChip(
           key: const ValueKey('openai-switch-model'),
-          avatar: const Icon(Icons.model_training, size: 16),
+          avatar: const Icon(Symbols.model_training, size: 16),
           label: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 220), child: Text.verbatim(label, overflow: TextOverflow.ellipsis)),
           tooltip: tr('Switch model'),
           onPressed: open,
@@ -104,7 +105,7 @@ class _ModelListState extends State<_ModelList> {
             return Column(children: [
               TextField(
                 key: const ValueKey('openai-model-filter'),
-                decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Search {count} models', {'count': all.length})),
+                decoration: InputDecoration(prefixIcon: const Icon(Symbols.search), hintText: tr('Search {count} models', {'count': all.length})),
                 onChanged: (v) => setState(() => _filter = v),
               ),
               Expanded(
@@ -113,7 +114,7 @@ class _ModelListState extends State<_ModelList> {
                     ListTile(
                       dense: true,
                       title: Text.verbatim(m),
-                      trailing: m == current ? const Icon(Icons.check, size: 18) : null,
+                      trailing: m == current ? const Icon(Symbols.check, size: 18) : null,
                       onTap: () async {
                         await widget.provider.selectModel(m);
                         if (context.mounted) Navigator.of(context).pop();

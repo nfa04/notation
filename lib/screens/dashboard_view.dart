@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/bounded_image.dart';
 import '../web/picked_file.dart';
 import 'dart:async';
@@ -332,15 +333,15 @@ class _DashboardViewState extends State<DashboardView> {
     final selectedIds = _selectedIds;
     final phone = MediaQuery.sizeOf(context).width < 600;
     final tools = <_DashboardTool>[
-      (key: 'select-notes', icon: Icons.checklist_rtl, label: tr('Select notes'), onTap: () => setState(() => _selecting = true), widget: null),
+      (key: 'select-notes', icon: Symbols.checklist_rtl, label: tr('Select notes'), onTap: () => setState(() => _selecting = true), widget: null),
       if (widget.capture != null) ...[
-        (key: 'quick-note', icon: Icons.bolt_outlined, label: tr('Quick note'), onTap: _quickNote, widget: null),
-        (key: 'clip-page', icon: Icons.language, label: tr('Keep a web page'), onTap: _clipPage, widget: null),
+        (key: 'quick-note', icon: Symbols.bolt, label: tr('Quick note'), onTap: _quickNote, widget: null),
+        (key: 'clip-page', icon: Symbols.language, label: tr('Keep a web page'), onTap: _clipPage, widget: null),
       ],
       if (widget.review != null)
         (
           key: 'weekly-review',
-          icon: Icons.event_note_outlined,
+          icon: Symbols.event_note,
           label: tr('Weekly review'),
           onTap: () => showWeeklyReview(context, service: widget.review!, reminders: widget.reminders, onOpenNote: widget.onOpenNote),
           widget: null,
@@ -348,21 +349,21 @@ class _DashboardViewState extends State<DashboardView> {
       if (widget.reminders != null)
         (
           key: 'open-reminders',
-          icon: Icons.notifications_none,
+          icon: Symbols.notifications_none,
           label: tr('Reminders'),
           onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => RemindersScreen(service: widget.reminders!))),
           widget: RemindersButton(service: widget.reminders!),
         ),
       if (widget.cards != null)
-        (key: 'review-cards', icon: Icons.event_repeat, label: tr('Review cards'), onTap: () {}, widget: ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository)),
-      if (widget.speech != null) (key: 'record-meeting', icon: Icons.mic_none, label: tr('Record a meeting'), onTap: _meeting, widget: null),
-      if (widget.templates != null) (key: 'new-from-template', icon: Icons.dashboard_customize_outlined, label: tr('New note from a template'), onTap: _fromTemplate, widget: null),
+        (key: 'review-cards', icon: Symbols.event_repeat, label: tr('Review cards'), onTap: () {}, widget: ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository)),
+      if (widget.speech != null) (key: 'record-meeting', icon: Symbols.mic_none, label: tr('Record a meeting'), onTap: _meeting, widget: null),
+      if (widget.templates != null) (key: 'new-from-template', icon: Symbols.dashboard_customize, label: tr('New note from a template'), onTap: _fromTemplate, widget: null),
       if (widget.onJoinSession != null)
-        (key: 'join-session', icon: Icons.group_add_outlined, label: tr('Join a live session or open a shared note (paste a link)'), onTap: widget.onJoinSession!, widget: null),
+        (key: 'join-session', icon: Symbols.group_add, label: tr('Join a live session or open a shared note (paste a link)'), onTap: widget.onJoinSession!, widget: null),
       if (widget.noteFiles != null)
         (
           key: 'open-note-file',
-          icon: Icons.file_open_outlined,
+          icon: Symbols.file_open,
           label: tr('Open a note file (.uninote)'),
           onTap: () async {
             final id = await openNoteFile(context, widget.noteFiles!);
@@ -372,10 +373,10 @@ class _DashboardViewState extends State<DashboardView> {
         ),
       // (the two round buttons at the foot of the page on a wide screen)
       if (phone) ...[
-        (key: 'new-from-pdf', icon: Icons.picture_as_pdf_outlined, label: tr('New note from a PDF'), onTap: _fromPdf, widget: null),
+        (key: 'new-from-pdf', icon: Symbols.picture_as_pdf, label: tr('New note from a PDF'), onTap: _fromPdf, widget: null),
         (
           key: 'import-from-apps',
-          icon: Icons.move_to_inbox_outlined,
+          icon: Symbols.move_to_inbox,
           label: tr('Bring your notes from another app'),
           onTap: () async {
             await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
@@ -494,7 +495,7 @@ class _DashboardViewState extends State<DashboardView> {
           heroTag: 'new-from-pdf',
           tooltip: tr('New note from a PDF'),
           onPressed: _fromPdf,
-          child: const Icon(Icons.picture_as_pdf_outlined),
+          child: const Icon(Symbols.picture_as_pdf),
         ),
         FloatingActionButton.small(
           key: const ValueKey('import-from-apps'),
@@ -504,13 +505,13 @@ class _DashboardViewState extends State<DashboardView> {
             await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
             if (mounted) _reload();
           },
-          child: const Icon(Icons.move_to_inbox_outlined),
+          child: const Icon(Symbols.move_to_inbox),
         ),
         ],
         FloatingActionButton.extended(
           heroTag: 'new-note',
           onPressed: _createNote,
-          icon: const Icon(Icons.add),
+          icon: const Icon(Symbols.add),
           label: const Text('New Note'),
         ),
       ]),
@@ -574,7 +575,7 @@ class _DashboardViewState extends State<DashboardView> {
                       from: widget.collab?.shared.fromWhom(note.id),
                       color: Colors.black54,
                     ),
-                    if (note.locked || note.isPdf) Icon(note.locked ? Icons.lock_outline : Icons.picture_as_pdf_outlined, size: 16, color: Colors.black54),
+                    if (note.locked || note.isPdf) Icon(note.locked ? Symbols.lock_outline : Symbols.picture_as_pdf, size: 16, color: Colors.black54),
                   ]),
                 ),
               ]),
@@ -598,14 +599,14 @@ class _DashboardViewState extends State<DashboardView> {
               tooltip: tr(note.favorite ? 'Remove from favourites' : 'Add to favourites'),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-              icon: Icon(note.favorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 18, color: note.favorite ? scheme.primary : scheme.onSurfaceVariant),
+              icon: Icon(note.favorite ? Symbols.star_rounded : Symbols.star_outline_rounded, size: 18, color: note.favorite ? scheme.primary : scheme.onSurfaceVariant),
               onPressed: () => _toggleFavorite(note),
             ),
             PopupMenuButton<void>(
               tooltip: tr('More'),
               padding: EdgeInsets.zero,
               iconSize: 18,
-              icon: Icon(Icons.more_vert, size: 18, color: scheme.onSurfaceVariant),
+              icon: Icon(Symbols.more_vert, size: 18, color: scheme.onSurfaceVariant),
               itemBuilder: (_) => [
                 PopupMenuItem(onTap: () => _toggleFavorite(note), child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
                 if (widget.noteFiles != null && !note.locked)

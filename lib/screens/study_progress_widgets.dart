@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
@@ -63,7 +64,7 @@ class PlanProgressBlock extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final color = switch (progress.pace) { PlanPace.behind => scheme.tertiary, _ => scheme.primary };
-    final icon = switch (progress.pace) { PlanPace.onTrack => Icons.check_circle_outline, PlanPace.ahead => Icons.trending_up, PlanPace.behind => Icons.flag_outlined };
+    final icon = switch (progress.pace) { PlanPace.onTrack => Symbols.check_circle_outline, PlanPace.ahead => Symbols.trending_up, PlanPace.behind => Symbols.flag };
     return Column(key: const ValueKey('plan-progress'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
         Text.verbatim('${(progress.readiness * 100).round()} %', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
@@ -227,13 +228,13 @@ class _ProgressDiagramState extends State<ProgressDiagram> {
           ),
           const SizedBox(height: 6),
           Row(children: [
-            Icon(Icons.horizontal_rule, size: 16, color: scheme.outline),
+            Icon(Symbols.horizontal_rule, size: 16, color: scheme.outline),
             const SizedBox(width: 4),
             Expanded(child: Text.verbatim(tr('Planned: {n} % ready', {'n': (p.planned * 100).round()}), key: const ValueKey('plan-diagram-percent'), style: label)),
           ]),
           if (p.actual != null)
             Row(children: [
-              Icon(Icons.circle, size: 10, color: scheme.primary),
+              Icon(Symbols.circle, size: 10, color: scheme.primary),
               const SizedBox(width: 6),
               Expanded(child: Text.verbatim(tr('Done: {m} % ready', {'m': (p.actual! * 100).round()}), style: label)),
               if (delta != null && delta != 0)
@@ -420,12 +421,12 @@ class WeekStrip extends StatelessWidget {
             final (IconData?, Color) mark = of.isEmpty
                 ? (null, scheme.outlineVariant)
                 : done == of.length
-                    ? (Icons.check_circle, scheme.primary)
+                    ? (Symbols.check_circle, scheme.primary)
                     : done > 0
-                        ? (Icons.timelapse, scheme.primary)
+                        ? (Symbols.timelapse, scheme.primary)
                         : d.isBefore(today)
-                            ? (Icons.circle_outlined, scheme.tertiary)
-                            : (Icons.radio_button_unchecked, scheme.outline);
+                            ? (Symbols.circle, scheme.tertiary)
+                            : (Symbols.radio_button_unchecked, scheme.outline);
             return Column(mainAxisSize: MainAxisSize.min, children: [
               Text.verbatim(l.narrowWeekdays[d.weekday % 7], style: theme.textTheme.labelSmall),
               const SizedBox(height: 4),

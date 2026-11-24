@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/bounded_image.dart';
 import '../web/picked_file.dart';
 import '../citations/citation_service.dart';
@@ -233,7 +234,7 @@ class _FolderViewState extends State<FolderView> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.sort, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            Icon(Symbols.sort, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(width: 4),
             Text.verbatim(_sortLabel(_sort), style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ]),
@@ -603,23 +604,23 @@ class _FolderViewState extends State<FolderView> {
           : AppBar(
               title: const Text('Folders'),
               actions: [
-                if (narrow) IconButton(icon: const Icon(Icons.account_tree_outlined), tooltip: tr('Folders'), onPressed: () => _scaffoldKey.currentState?.openDrawer()),
+                if (narrow) IconButton(icon: const Icon(Symbols.account_tree), tooltip: tr('Folders'), onPressed: () => _scaffoldKey.currentState?.openDrawer()),
                 if (widget.sync != null) SyncNowButton(sync: widget.sync!, shares: widget.collab?.nativeShares),
                 IconButton(
                   key: const ValueKey('select-notes'),
                   tooltip: tr('Select notes'),
-                  icon: const Icon(Icons.checklist_rtl),
+                  icon: const Icon(Symbols.checklist_rtl),
                   onPressed: () => setState(() => _selecting = true),
                 ),
                 if (widget.templates != null)
                   IconButton(
                     key: const ValueKey('new-from-template'),
                     tooltip: tr('New note from a template'),
-                    icon: const Icon(Icons.dashboard_customize_outlined),
+                    icon: const Icon(Symbols.dashboard_customize),
                     onPressed: _fromTemplate,
                   ),
                 IconButton(
-                  icon: const Icon(Icons.create_new_folder_outlined),
+                  icon: const Icon(Symbols.create_new_folder),
                   tooltip: tr(_inRealFolder ? 'New subfolder' : 'New folder'),
                   onPressed: () => _newFolder(parentId: _inRealFolder ? _scope : null),
                 ),
@@ -639,7 +640,7 @@ class _FolderViewState extends State<FolderView> {
           ? null
           : FloatingActionButton.extended(
               onPressed: _newNote,
-              icon: const Icon(Icons.add),
+              icon: const Icon(Symbols.add),
               label: Text(_inRealFolder ? 'New note here' : 'New note'),
             ),
     ),
@@ -648,13 +649,13 @@ class _FolderViewState extends State<FolderView> {
 
   Widget _buildTree() {
     final rows = <Widget>[
-      _pseudoRow(_all, 'All notes', Icons.notes_rounded, _notes.length),
-      _pseudoRow(_favorites, 'Favourites', Icons.star_outline_rounded, _notes.where((n) => n.favorite).length),
-      _pseudoRow(_unfiled, 'No folder', Icons.inbox_outlined, _notes.where((n) => n.folderId == null).length),
+      _pseudoRow(_all, 'All notes', Symbols.notes_rounded, _notes.length),
+      _pseudoRow(_favorites, 'Favourites', Symbols.star_outline_rounded, _notes.where((n) => n.favorite).length),
+      _pseudoRow(_unfiled, 'No folder', Symbols.inbox, _notes.where((n) => n.folderId == null).length),
       if (widget.collab != null)
-        _pseudoRow(_shared, 'Shared with me', Icons.folder_shared_outlined, _notes.where((n) => _sharedWithMe.contains(n.id)).length,
+        _pseudoRow(_shared, 'Shared with me', Symbols.folder_shared, _notes.where((n) => _sharedWithMe.contains(n.id)).length,
             waiting: widget.collab?.nativeShares?.pending.length ?? 0),
-      _pseudoRow(_trash, 'Trash', Icons.delete_outline, _trashCount),
+      _pseudoRow(_trash, 'Trash', Symbols.delete_outline, _trashCount),
       const Divider(height: 16),
     ];
     void add(String? parent, int depth) {
@@ -691,7 +692,7 @@ class _FolderViewState extends State<FolderView> {
             key: const ValueKey('manage-tags'),
             tooltip: tr('Manage tags'),
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.sell_outlined, size: 18),
+            icon: const Icon(Symbols.sell, size: 18),
             onPressed: () => manageTags(context, widget.tags!, onChanged: _reload).then((_) => _reload()),
           ),
         ]),
@@ -707,11 +708,11 @@ class _FolderViewState extends State<FolderView> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
           selected: _scope == '$_tagPrefix${n.tag}',
           leading: n.children.isEmpty
-              ? const Icon(Icons.tag, size: 18)
+              ? const Icon(Symbols.tag, size: 18)
               : InkWell(
                   key: ValueKey('tag-toggle-${n.tag}'),
                   onTap: () => setState(() => open ? _expanded.remove('$_tagPrefix${n.tag}') : _expanded.add('$_tagPrefix${n.tag}')),
-                  child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18),
+                  child: Icon(open ? Symbols.expand_more : Symbols.chevron_right, size: 18),
                 ),
           title: Text.verbatim(tagLeaf(n.tag), overflow: TextOverflow.ellipsis),
           trailing: Text('${n.notes}', style: const TextStyle(fontSize: 12)),
@@ -769,10 +770,10 @@ class _FolderViewState extends State<FolderView> {
                 ? InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: () => setState(() => expanded ? _expanded.remove(f.id) : _expanded.add(f.id)),
-                    child: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 22),
+                    child: Icon(expanded ? Symbols.expand_more : Symbols.chevron_right, size: 22),
                   )
                 : const SizedBox(width: 22),
-            Icon(expanded ? Icons.folder_open : Icons.folder_outlined, size: 20),
+            Icon(expanded ? Symbols.folder_open : Symbols.folder, size: 20),
           ],
         ),
       ),
@@ -788,7 +789,7 @@ class _FolderViewState extends State<FolderView> {
           Text.verbatim('${f.noteCount}', style: const TextStyle(fontSize: 12)),
           PopupMenuButton<VoidCallback>(
             tooltip: tr('Folder actions'),
-            icon: const Icon(Icons.more_vert, size: 18),
+            icon: const Icon(Symbols.more_vert, size: 18),
             onSelected: (action) => action(),
             itemBuilder: (_) => [
               PopupMenuItem(
@@ -817,7 +818,7 @@ class _FolderViewState extends State<FolderView> {
         _closeDrawer();
       },
     );
-    return _dropTarget(f.id, _draggable(_DraggedFolder(f.id), f.name, Icons.folder_outlined, row));
+    return _dropTarget(f.id, _draggable(_DraggedFolder(f.id), f.name, Symbols.folder, row));
   }
 
   void _openFolder(FolderEntry f) => setState(() {
@@ -865,7 +866,7 @@ class _FolderViewState extends State<FolderView> {
             key: ValueKey('folder-tile-${f.id}'),
             contentPadding: EdgeInsets.zero,
             minVerticalPadding: 14,
-            leading: Icon(Icons.folder_rounded, color: Theme.of(context).colorScheme.primary),
+            leading: Icon(Symbols.folder_rounded, color: Theme.of(context).colorScheme.primary),
             title: Text.verbatim(f.name, overflow: TextOverflow.ellipsis),
             trailing: Text.verbatim('${f.noteCount}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             onTap: () => _openFolder(f),
@@ -893,10 +894,10 @@ class _FolderViewState extends State<FolderView> {
             );
         return SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            item(Icons.create_new_folder_outlined, tr('New subfolder'), () => _newFolder(parentId: f.id)),
-            item(Icons.edit_outlined, tr('Rename'), () => _renameFolder(f)),
-            item(Icons.drive_file_move_outlined, tr('Move to...'), () => _moveFolder(f)),
-            item(Icons.delete_outline, tr('Delete'), () => _deleteFolder(f)),
+            item(Symbols.create_new_folder, tr('New subfolder'), () => _newFolder(parentId: f.id)),
+            item(Symbols.edit, tr('Rename'), () => _renameFolder(f)),
+            item(Symbols.drive_file_move, tr('Move to...'), () => _moveFolder(f)),
+            item(Symbols.delete_outline, tr('Delete'), () => _deleteFolder(f)),
           ]),
         );
       },
@@ -935,7 +936,7 @@ class _FolderViewState extends State<FolderView> {
                 _dropTarget(
                   f.id,
                   ActionChip(
-                    avatar: const Icon(Icons.folder_outlined, size: 18),
+                    avatar: const Icon(Symbols.folder, size: 18),
                     label: Text.verbatim('${f.name} (${f.noteCount})'),
                     onPressed: () => _openFolder(f),
                   ),
@@ -973,7 +974,7 @@ class _FolderViewState extends State<FolderView> {
           Expanded(child: Text.verbatim(title, style: titleStyle)),
           OutlinedButton.icon(
             onPressed: () => _pickThemeImage(folder),
-            icon: const Icon(Icons.image_outlined, size: 18),
+            icon: const Icon(Symbols.image, size: 18),
             label: const Text('Theme image'),
           ),
         ],
@@ -1020,13 +1021,13 @@ class _FolderViewState extends State<FolderView> {
                 children: [
                   IconButton.filledTonal(
                     tooltip: tr('Change theme image'),
-                    icon: const Icon(Icons.image_outlined, size: 18),
+                    icon: const Icon(Symbols.image, size: 18),
                     onPressed: () => _pickThemeImage(folder),
                   ),
                   const SizedBox(width: 4),
                   IconButton.filledTonal(
                     tooltip: tr('Remove theme image'),
-                    icon: const Icon(Icons.hide_image_outlined, size: 18),
+                    icon: const Icon(Symbols.hide_image, size: 18),
                     onPressed: () => _removeThemeImage(folder),
                   ),
                 ],
@@ -1064,7 +1065,7 @@ class _FolderViewState extends State<FolderView> {
                   alignment: Alignment.center,
                   children: [
                     if (n.themeImage == null)
-                      Icon(n.locked ? Icons.lock_outline : (n.isPdf ? Icons.picture_as_pdf : Icons.edit_note_rounded))
+                      Icon(n.locked ? Symbols.lock_outline : (n.isPdf ? Symbols.picture_as_pdf : Symbols.edit_note_rounded))
                     else
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
@@ -1074,7 +1075,7 @@ class _FolderViewState extends State<FolderView> {
                           width: 44,
                           height: 44,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Icon(n.isPdf ? Icons.picture_as_pdf : Icons.edit_note_rounded),
+                          errorBuilder: (_, _, _) => Icon(n.isPdf ? Symbols.picture_as_pdf : Symbols.edit_note_rounded),
                         ),
                       ),
                     if (widget.previews != null)
@@ -1101,7 +1102,7 @@ class _FolderViewState extends State<FolderView> {
                   if (!_narrow) IconButton(
                     key: ValueKey('star-${n.id}'),
                     tooltip: tr(n.favorite ? 'Remove from favourites' : 'Add to favourites'),
-                    icon: Icon(n.favorite ? Icons.star_rounded : Icons.star_outline_rounded, color: n.favorite ? scheme.onSurface : null),
+                    icon: Icon(n.favorite ? Symbols.star_rounded : Symbols.star_outline_rounded, color: n.favorite ? scheme.onSurface : null),
                     onPressed: () => _toggleFavorite(n),
                   ),
                   SharedBadge(key: ValueKey('shared-badge-${n.id}'), kind: kind, from: widget.collab?.shared.fromWhom(n.id)),
@@ -1143,7 +1144,7 @@ class _FolderViewState extends State<FolderView> {
     return _draggable(
       _DraggedNote(n.id),
       together > 1 ? trCount(together, '1 note', '{n} notes') : n.shownTitle,
-      n.locked ? Icons.lock_outline : (n.isPdf ? Icons.picture_as_pdf : Icons.edit_note_rounded),
+      n.locked ? Symbols.lock_outline : (n.isPdf ? Symbols.picture_as_pdf : Symbols.edit_note_rounded),
       card,
     );
   }

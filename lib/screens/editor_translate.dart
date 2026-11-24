@@ -6,7 +6,7 @@ extension _EditorTranslate on _FixedPageNoteEditorState {
         key: const ValueKey('translate-note'),
         tooltip: tr('Translate this note'),
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.translate, size: 20),
+        icon: const Icon(Symbols.translate, size: 20),
         onPressed: _translateNote,
       );
 

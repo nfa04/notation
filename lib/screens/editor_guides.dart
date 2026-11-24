@@ -75,7 +75,7 @@ extension _EditorGuides on _FixedPageNoteEditorState {
 
     for (var i = 0; i < _vanishing.length; i++) {
       final at = Offset(_vanishing[i].dx * size.width, _vanishing[i].dy * size.height);
-      out.add(handle(ValueKey('vanishing-$i'), at, Icons.adjust, (d) {
+      out.add(handle(ValueKey('vanishing-$i'), at, Symbols.adjust, (d) {
         final to = at + d;
         final moved = [..._vanishing];
         moved[i] = Offset((to.dx / size.width).clamp(0.0, 1.0), (to.dy / size.height).clamp(0.0, 1.0));
@@ -84,11 +84,11 @@ extension _EditorGuides on _FixedPageNoteEditorState {
     }
     final aid = _aid;
     if (aid != null && aid.page == pageIndex) {
-      out.add(handle(const ValueKey('aid-pivot'), aid.origin, Icons.open_with, (d) {
+      out.add(handle(const ValueKey('aid-pivot'), aid.origin, Symbols.open_with, (d) {
         final to = aid.origin + d;
         _aid = aid.copyWith(origin: Offset(to.dx.clamp(0.0, size.width), to.dy.clamp(0.0, size.height)));
       }));
-      out.add(handle(const ValueKey('aid-turn'), aid.handle, Icons.rotate_right, (d) {
+      out.add(handle(const ValueKey('aid-turn'), aid.handle, Symbols.rotate_right, (d) {
         final to = aid.handle + d - aid.origin;
         _aid = aid.copyWith(angle: math.atan2(to.dy, to.dx), length: to.distance);
       }));
@@ -160,7 +160,7 @@ extension _EditorGuides on _FixedPageNoteEditorState {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(shape: BoxShape.circle, color: on ? scheme.secondaryContainer : null),
-        child: Icon(Icons.straighten, size: 20, color: on ? scheme.onSecondaryContainer : null),
+        child: Icon(Symbols.straighten, size: 20, color: on ? scheme.onSecondaryContainer : null),
       ),
     );
   }

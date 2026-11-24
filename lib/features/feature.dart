@@ -1,7 +1,8 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show IconData, Icons;
+import 'package:flutter/material.dart' show IconData;
 
 /// The groups the tools are listed in.
 enum FeatureGroup {
@@ -20,63 +21,63 @@ enum FeatureGroup {
 /// A tool of the app that can be switched on or off. What is not listed here is always there: the pen, the eraser,
 /// text boxes, the written document, folders, the dashboard and the settings.
 enum Feature {
-  highlighter(FeatureGroup.writing, 'Highlighter', 'A see-through marker for the drawing bar.', Icons.border_color_outlined),
-  roller(FeatureGroup.writing, 'Roller pen', 'A paint roller for the drawing bar: a wide band with streaks.', Icons.format_paint_outlined),
-  shapes(FeatureGroup.writing, 'Shapes', 'Lines, arrows, rectangles and ellipses drawn with the pen.', Icons.crop_square),
-  lasso(FeatureGroup.writing, 'Lasso', 'Select, move, copy and delete drawings, text boxes and pictures by drawing around them.', Icons.gesture),
-  straighten(FeatureGroup.writing, 'Straight lines and shapes', 'Lines drawn nearly straight are straightened, and drawings very close to a rectangle, ellipse, triangle or diamond become that shape.', Icons.show_chart),
-  images(FeatureGroup.writing, 'Pictures', 'Put pictures on a page.', Icons.add_photo_alternate_outlined),
-  themeImages(FeatureGroup.writing, 'Theme images', 'A picture at the top of a note, a folder or a day of the calendar.', Icons.wallpaper_outlined),
-  spelling(FeatureGroup.writing, 'Spell checking', 'Underlines misspelled words in text boxes, the written document and (once read) handwriting, with suggestions. Needs a dictionary from the settings.', Icons.spellcheck),
-  tables(FeatureGroup.writing, 'Tables', 'Tables in text boxes and in the written document.', Icons.table_chart_outlined),
-  diagrams(FeatureGroup.writing, 'Mind maps and diagrams', 'Turn an outline into a mind map, lines like "Start -> Check -> Done" into a flowchart, or (advanced) a state diagram, a tree or a graph, on the page.', Icons.account_tree_outlined),
+  highlighter(FeatureGroup.writing, 'Highlighter', 'A see-through marker for the drawing bar.', Symbols.border_color),
+  roller(FeatureGroup.writing, 'Roller pen', 'A paint roller for the drawing bar: a wide band with streaks.', Symbols.format_paint),
+  shapes(FeatureGroup.writing, 'Shapes', 'Lines, arrows, rectangles and ellipses drawn with the pen.', Symbols.crop_square),
+  lasso(FeatureGroup.writing, 'Lasso', 'Select, move, copy and delete drawings, text boxes and pictures by drawing around them.', Symbols.gesture),
+  straighten(FeatureGroup.writing, 'Straight lines and shapes', 'Lines drawn nearly straight are straightened, and drawings very close to a rectangle, ellipse, triangle or diamond become that shape.', Symbols.show_chart),
+  images(FeatureGroup.writing, 'Pictures', 'Put pictures on a page.', Symbols.add_photo_alternate),
+  themeImages(FeatureGroup.writing, 'Theme images', 'A picture at the top of a note, a folder or a day of the calendar.', Symbols.wallpaper),
+  spelling(FeatureGroup.writing, 'Spell checking', 'Underlines misspelled words in text boxes, the written document and (once read) handwriting, with suggestions. Needs a dictionary from the settings.', Symbols.spellcheck),
+  tables(FeatureGroup.writing, 'Tables', 'Tables in text boxes and in the written document.', Symbols.table_chart),
+  diagrams(FeatureGroup.writing, 'Mind maps and diagrams', 'Turn an outline into a mind map, lines like "Start -> Check -> Done" into a flowchart, or (advanced) a state diagram, a tree or a graph, on the page.', Symbols.account_tree),
 
-  brushes(FeatureGroup.creative, 'More brushes', 'Pencil, fountain pen, calligraphy nib, marker, charcoal, airbrush and watercolour for the drawing bar.', Icons.brush_outlined),
-  guides(FeatureGroup.creative, 'Guides and rulers', 'Overlays for composition (thirds, golden ratio, grid) and perspective, and a ruler or set square that the lines you draw along it follow.', Icons.straighten),
-  flipbook(FeatureGroup.creative, 'Flipbook', 'Play the pages of a note one after the other like the frames of an animation, round and round, at a speed you choose; while drawing, the pages before and after can show through faintly (onion skin).', Icons.movie_filter_outlined),
-  ideas(FeatureGroup.creative, 'Ideas from the assistant', 'Ask the assistant for a colour palette for a mood or subject, or for ideas to start from: a drawing, a character, a story, a song, a design. Needs the assistant.', Icons.lightbulb_outline),
-  pathText(FeatureGroup.creative, 'Text on lines and shapes', 'Write words along a line, a curve or round a shape, or inside a shape. The text belongs to the drawing and goes where it goes.', Icons.text_rotation_angleup),
-  alignLines(FeatureGroup.creative, 'Alignment lines', 'Lines that show where a text box, picture or shape you are moving lines up with the others on the page (or the middle and edges of the page), and let it fall into place. Hold Alt to move freely.', Icons.align_horizontal_center),
-  exportImages(FeatureGroup.creative, 'Export as pictures', 'Save the pages of a note as pictures (PNG) in a size for the web, a screen, print, a post, a slide or a story, with the background left out if you like.', Icons.image_outlined),
-  stamps(FeatureGroup.creative, 'Stamp library', 'Keep drawings (a symbol, a logo, a flourish) as stamps and put them on any page again.', Icons.approval_outlined),
-  arrange(FeatureGroup.creative, 'Align, distribute and group', 'Line up several selected drawings, text boxes and pictures along an edge or their middle, space them evenly, or group them so that they are selected, moved and copied together.', Icons.align_horizontal_left),
-  pictureEdit(FeatureGroup.creative, 'Picture editing', 'Crop, turn, adjust the colours of, filter, and take the background out of a picture on a page.', Icons.tune),
-  layers(FeatureGroup.creative, 'Layers', 'Draw on layers that can be hidden, locked, reordered and made see-through, and move drawings between them.', Icons.layers_outlined),
-  symmetry(FeatureGroup.creative, 'Symmetry drawing', 'Draw with a mirror or around a centre: what you draw is repeated on the other side or in turns (mandalas, patterns).', Icons.flip),
-  colorPicker(FeatureGroup.creative, 'Eyedropper', 'Pick a color from anything on the page (a drawing, a picture, a PDF) for the pen: tap the button or press I, then touch the color.', Icons.colorize_outlined),
-  freeTransform(FeatureGroup.creative, 'Free transform', 'Bend selected drawings: distort them by the corners, give them perspective, skew them, turn them by any angle or warp them with a net. The whole change is one step to take back.', Icons.transform),
-  fillBucket(FeatureGroup.creative, 'Fill bucket', 'Fill a closed area of a drawing with the pen color by touching it: the area is found from the lines round it, and small gaps in them can be closed. The fill is a shape under the lines, so it can be recolored or moved later.', Icons.format_color_fill),
-  stabiliser(FeatureGroup.creative, 'Line stabiliser', 'Smooths a shaky hand: the line follows the pen with a little delay, for clean lettering and line art.', Icons.timeline),
+  brushes(FeatureGroup.creative, 'More brushes', 'Pencil, fountain pen, calligraphy nib, marker, charcoal, airbrush and watercolour for the drawing bar.', Symbols.brush),
+  guides(FeatureGroup.creative, 'Guides and rulers', 'Overlays for composition (thirds, golden ratio, grid) and perspective, and a ruler or set square that the lines you draw along it follow.', Symbols.straighten),
+  flipbook(FeatureGroup.creative, 'Flipbook', 'Play the pages of a note one after the other like the frames of an animation, round and round, at a speed you choose; while drawing, the pages before and after can show through faintly (onion skin).', Symbols.movie_filter),
+  ideas(FeatureGroup.creative, 'Ideas from the assistant', 'Ask the assistant for a colour palette for a mood or subject, or for ideas to start from: a drawing, a character, a story, a song, a design. Needs the assistant.', Symbols.lightbulb_outline),
+  pathText(FeatureGroup.creative, 'Text on lines and shapes', 'Write words along a line, a curve or round a shape, or inside a shape. The text belongs to the drawing and goes where it goes.', Symbols.text_rotation_angleup),
+  alignLines(FeatureGroup.creative, 'Alignment lines', 'Lines that show where a text box, picture or shape you are moving lines up with the others on the page (or the middle and edges of the page), and let it fall into place. Hold Alt to move freely.', Symbols.align_horizontal_center),
+  exportImages(FeatureGroup.creative, 'Export as pictures', 'Save the pages of a note as pictures (PNG) in a size for the web, a screen, print, a post, a slide or a story, with the background left out if you like.', Symbols.image),
+  stamps(FeatureGroup.creative, 'Stamp library', 'Keep drawings (a symbol, a logo, a flourish) as stamps and put them on any page again.', Symbols.approval),
+  arrange(FeatureGroup.creative, 'Align, distribute and group', 'Line up several selected drawings, text boxes and pictures along an edge or their middle, space them evenly, or group them so that they are selected, moved and copied together.', Symbols.align_horizontal_left),
+  pictureEdit(FeatureGroup.creative, 'Picture editing', 'Crop, turn, adjust the colours of, filter, and take the background out of a picture on a page.', Symbols.tune),
+  layers(FeatureGroup.creative, 'Layers', 'Draw on layers that can be hidden, locked, reordered and made see-through, and move drawings between them.', Symbols.layers),
+  symmetry(FeatureGroup.creative, 'Symmetry drawing', 'Draw with a mirror or around a centre: what you draw is repeated on the other side or in turns (mandalas, patterns).', Symbols.flip),
+  colorPicker(FeatureGroup.creative, 'Eyedropper', 'Pick a color from anything on the page (a drawing, a picture, a PDF) for the pen: tap the button or press I, then touch the color.', Symbols.colorize),
+  freeTransform(FeatureGroup.creative, 'Free transform', 'Bend selected drawings: distort them by the corners, give them perspective, skew them, turn them by any angle or warp them with a net. The whole change is one step to take back.', Symbols.transform),
+  fillBucket(FeatureGroup.creative, 'Fill bucket', 'Fill a closed area of a drawing with the pen color by touching it: the area is found from the lines round it, and small gaps in them can be closed. The fill is a shape under the lines, so it can be recolored or moved later.', Symbols.format_color_fill),
+  stabiliser(FeatureGroup.creative, 'Line stabiliser', 'Smooths a shaky hand: the line follows the pen with a little delay, for clean lettering and line art.', Symbols.timeline),
 
-  solve(FeatureGroup.maths, 'Calculate and solve', 'Calculate, solve, differentiate and integrate in text.', Icons.functions),
-  plots(FeatureGroup.maths, 'Plots', 'Graphs of functions, and empty plots to draw into.', Icons.auto_graph),
-  checkMaths(FeatureGroup.maths, 'Check my maths', 'Marks the maths you write as right or wrong, line by line, a moment after you wrote it, and gives the result of a line that ends with =. Needs the formula model from the settings.', Icons.rule),
-  mathInk(FeatureGroup.maths, 'Handwritten formulas', 'Turn a handwritten formula into LaTeX (needs the model from the settings).', Icons.draw_outlined),
+  solve(FeatureGroup.maths, 'Calculate and solve', 'Calculate, solve, differentiate and integrate in text.', Symbols.functions),
+  plots(FeatureGroup.maths, 'Plots', 'Graphs of functions, and empty plots to draw into.', Symbols.auto_graph),
+  checkMaths(FeatureGroup.maths, 'Check my maths', 'Marks the maths you write as right or wrong, line by line, a moment after you wrote it, and gives the result of a line that ends with =. Needs the formula model from the settings.', Symbols.rule),
+  mathInk(FeatureGroup.maths, 'Handwritten formulas', 'Turn a handwritten formula into LaTeX (needs the model from the settings).', Symbols.draw),
 
-  pdf(FeatureGroup.reading, 'PDF', 'Import a PDF to write on, and export a note as a PDF.', Icons.picture_as_pdf_outlined),
-  citations(FeatureGroup.reading, 'Citations', 'Keep the papers and books you read, quote them in a note with [@key] and have the sources listed in the style you need (APA, MLA, Chicago, Harvard, IEEE).', Icons.format_quote),
-  lookup(FeatureGroup.reading, 'Look things up', 'Search the web, Wikipedia and translate from selected text, with the page beside the note.', Icons.travel_explore),
+  pdf(FeatureGroup.reading, 'PDF', 'Import a PDF to write on, and export a note as a PDF.', Symbols.picture_as_pdf),
+  citations(FeatureGroup.reading, 'Citations', 'Keep the papers and books you read, quote them in a note with [@key] and have the sources listed in the style you need (APA, MLA, Chicago, Harvard, IEEE).', Symbols.format_quote),
+  lookup(FeatureGroup.reading, 'Look things up', 'Search the web, Wikipedia and translate from selected text, with the page beside the note.', Symbols.travel_explore),
 
-  favorites(FeatureGroup.note, 'Favourites', 'A star on a note, to find it again quickly.', Icons.star_outline_rounded),
-  lock(FeatureGroup.note, 'Lock', 'Lock a note, so that it asks for the code before it opens.', Icons.lock_outline),
-  reminders(FeatureGroup.note, 'Reminders', 'Be reminded about a note at a time you choose.', Icons.add_alert_outlined),
-  echoes(FeatureGroup.note, 'Notes that say the same', 'While you write, a small note names the other notes that have facts about the same things (from the facts of the graph view), to open them.', Icons.hub_outlined),
-  outline(FeatureGroup.note, 'Outline and bookmarks', 'The outline of a note, bookmarks on its pages and the links to other notes.', Icons.format_list_bulleted),
-  present(FeatureGroup.note, 'Presenting', 'Show the pages of a note full screen, one after the other, like slides.', Icons.slideshow_outlined),
-  audio(FeatureGroup.note, 'Sounds', 'Keep sounds with a note and play them, and have a note read into a sound file.', Icons.headphones_outlined),
-  translate(FeatureGroup.note, 'Translate a note', 'Translate the whole note into another language with the assistant.', Icons.translate),
-  dictate(FeatureGroup.note, 'Dictation', 'Write down what is said (needs the speech model from the settings).', Icons.mic_none),
-  readAloud(FeatureGroup.note, 'Read aloud', 'Have the note read to you (needs a voice from the settings).', Icons.volume_up_outlined),
+  favorites(FeatureGroup.note, 'Favourites', 'A star on a note, to find it again quickly.', Symbols.star_outline_rounded),
+  lock(FeatureGroup.note, 'Lock', 'Lock a note, so that it asks for the code before it opens.', Symbols.lock_outline),
+  reminders(FeatureGroup.note, 'Reminders', 'Be reminded about a note at a time you choose.', Symbols.add_alert),
+  echoes(FeatureGroup.note, 'Notes that say the same', 'While you write, a small note names the other notes that have facts about the same things (from the facts of the graph view), to open them.', Symbols.hub),
+  outline(FeatureGroup.note, 'Outline and bookmarks', 'The outline of a note, bookmarks on its pages and the links to other notes.', Symbols.format_list_bulleted),
+  present(FeatureGroup.note, 'Presenting', 'Show the pages of a note full screen, one after the other, like slides.', Symbols.slideshow),
+  audio(FeatureGroup.note, 'Sounds', 'Keep sounds with a note and play them, and have a note read into a sound file.', Symbols.headphones),
+  translate(FeatureGroup.note, 'Translate a note', 'Translate the whole note into another language with the assistant.', Symbols.translate),
+  dictate(FeatureGroup.note, 'Dictation', 'Write down what is said (needs the speech model from the settings).', Symbols.mic_none),
+  readAloud(FeatureGroup.note, 'Read aloud', 'Have the note read to you (needs a voice from the settings).', Symbols.volume_up),
 
-  handwriting(FeatureGroup.ai, 'Handwriting to text', 'Turn handwriting into text (needs the model from the settings).', Icons.text_snippet_outlined),
-  assistant(FeatureGroup.ai, 'Assistant', 'Ask questions about a document and have it summarised.', Icons.auto_awesome),
-  flashcards(FeatureGroup.ai, 'Flashcards', 'Make flashcards from a document with the assistant, and learn them. Needs the assistant.', Icons.style_outlined),
+  handwriting(FeatureGroup.ai, 'Handwriting to text', 'Turn handwriting into text (needs the model from the settings).', Symbols.text_snippet),
+  assistant(FeatureGroup.ai, 'Assistant', 'Ask questions about a document and have it summarised.', Symbols.auto_awesome),
+  flashcards(FeatureGroup.ai, 'Flashcards', 'Make flashcards from a document with the assistant, and learn them. Needs the assistant.', Symbols.style),
 
-  calendar(FeatureGroup.organising, 'Calendar and tasks', 'The calendar, the week view, tasks and syncing them.', Icons.calendar_month_outlined),
-  automations(FeatureGroup.organising, 'Automations', 'Rules that sort, title and file notes by themselves.', Icons.bolt_outlined),
-  history(FeatureGroup.organising, 'History', 'Earlier versions of a note, to compare and go back to.', Icons.history),
-  live(FeatureGroup.organising, 'Working together', 'Live sessions and shared copies of notes with other people.', Icons.group_outlined),
-  noteFiles(FeatureGroup.organising, 'Note files', 'Save a note as a file (.uninote) and open one.', Icons.save_alt_rounded);
+  calendar(FeatureGroup.organising, 'Calendar and tasks', 'The calendar, the week view, tasks and syncing them.', Symbols.calendar_month),
+  automations(FeatureGroup.organising, 'Automations', 'Rules that sort, title and file notes by themselves.', Symbols.bolt),
+  history(FeatureGroup.organising, 'History', 'Earlier versions of a note, to compare and go back to.', Symbols.history),
+  live(FeatureGroup.organising, 'Working together', 'Live sessions and shared copies of notes with other people.', Symbols.group),
+  noteFiles(FeatureGroup.organising, 'Note files', 'Save a note as a file (.uninote) and open one.', Symbols.save_alt_rounded);
 
   final FeatureGroup group;
   final String title;
@@ -91,15 +92,15 @@ enum Feature {
 
 /// What a person uses the app for, which decides what is switched on to begin with.
 enum UseArea {
-  everyday('Everyday notes and meetings', 'Lists, meeting notes, to-dos and things to remember.', Icons.edit_note),
-  maths('Mathematics and physics', 'Formulas, proofs, problem sheets and graphs.', Icons.functions),
-  sciences('Chemistry, biology and medicine', 'Diagrams, tables, lab notes and a lot to learn by heart.', Icons.biotech_outlined),
-  computing('Computer science and engineering', 'Diagrams, tables, specifications and code.', Icons.terminal),
-  humanities('Philosophy, history and literature', 'Reading texts closely, quoting and arguing in writing.', Icons.menu_book_outlined),
-  languages('Languages', 'Vocabulary, grammar and texts in more than one language.', Icons.translate),
-  society('Law, business, economics and social sciences', 'Cases, tables, readings and deadlines.', Icons.balance_outlined),
-  arts('Art and design', 'Sketches, pictures and layouts.', Icons.palette_outlined),
-  together('Working with others', 'Sharing notes and writing them together.', Icons.groups_outlined);
+  everyday('Everyday notes and meetings', 'Lists, meeting notes, to-dos and things to remember.', Symbols.edit_note),
+  maths('Mathematics and physics', 'Formulas, proofs, problem sheets and graphs.', Symbols.functions),
+  sciences('Chemistry, biology and medicine', 'Diagrams, tables, lab notes and a lot to learn by heart.', Symbols.biotech),
+  computing('Computer science and engineering', 'Diagrams, tables, specifications and code.', Symbols.terminal),
+  humanities('Philosophy, history and literature', 'Reading texts closely, quoting and arguing in writing.', Symbols.menu_book),
+  languages('Languages', 'Vocabulary, grammar and texts in more than one language.', Symbols.translate),
+  society('Law, business, economics and social sciences', 'Cases, tables, readings and deadlines.', Symbols.balance),
+  arts('Art and design', 'Sketches, pictures and layouts.', Symbols.palette),
+  together('Working with others', 'Sharing notes and writing them together.', Symbols.groups);
 
   final String title;
   final String description;

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
@@ -46,7 +47,7 @@ class _FlashcardViewState extends State<FlashcardView> {
   Widget _setup(BuildContext context, AssistantChat chat) {
     final scheme = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Icon(Icons.style_outlined, size: 40, color: scheme.primary),
+      Icon(Symbols.style, size: 40, color: scheme.primary),
       const SizedBox(height: 12),
       Text('Flashcards from this document', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 8),
@@ -73,7 +74,7 @@ class _FlashcardViewState extends State<FlashcardView> {
         alignment: Alignment.centerLeft,
         child: FilledButton.icon(
           key: const ValueKey('flashcards-make'),
-          icon: const Icon(Icons.auto_awesome, size: 18),
+          icon: const Icon(Symbols.auto_awesome, size: 18),
           label: const Text('Make flashcards'),
           onPressed: widget.ready ? () => chat.makeFlashcards(_count) : null,
         ),
@@ -133,14 +134,14 @@ class DeckView extends StatelessWidget {
             key: const ValueKey('flashcards-shuffle'),
             tooltip: tr('Shuffle and start over'),
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.shuffle, size: 20),
+            icon: const Icon(Symbols.shuffle, size: 20),
             onPressed: () => deck.startOver(shuffle: true),
           ),
           IconButton(
             key: const ValueKey('flashcards-new'),
             tooltip: tr('Make new flashcards'),
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.refresh, size: 20),
+            icon: const Icon(Symbols.refresh, size: 20),
             onPressed: onNew,
           ),
         ]),
@@ -211,7 +212,7 @@ class DeckView extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final missed = deck.missed.length;
     return ListView(padding: const EdgeInsets.all(16), children: [
-      Icon(missed == 0 ? Icons.emoji_events_outlined : Icons.check_circle_outline, size: 40, color: scheme.primary),
+      Icon(missed == 0 ? Symbols.emoji_events : Symbols.check_circle_outline, size: 40, color: scheme.primary),
       const SizedBox(height: 12),
       Text.verbatim(tr('{known} of {total} known', {'known': deck.knownCount, 'total': deck.roundLength}),
           key: const ValueKey('flashcards-result'), style: Theme.of(context).textTheme.titleMedium),
@@ -223,7 +224,7 @@ class DeckView extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 8),
           child: FilledButton.icon(
             key: const ValueKey('flashcards-missed'),
-            icon: const Icon(Icons.replay, size: 18),
+            icon: const Icon(Symbols.replay, size: 18),
             label: Text.verbatim(trCount(missed, 'Practise the missed card', 'Practise the {n} missed cards')),
             onPressed: deck.studyMissed,
           ),
@@ -231,27 +232,27 @@ class DeckView extends StatelessWidget {
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
           key: const ValueKey('flashcards-restart'),
-          icon: const Icon(Icons.shuffle, size: 18),
+          icon: const Icon(Symbols.shuffle, size: 18),
           label: const Text('Shuffle and start over'),
           onPressed: () => deck.startOver(shuffle: true),
         ),
         if (onAddToNote != null)
           OutlinedButton.icon(
             key: const ValueKey('flashcards-add'),
-            icon: const Icon(Icons.table_chart_outlined, size: 18),
+            icon: const Icon(Symbols.table_chart, size: 18),
             label: const Text('Add the cards to the note'),
             onPressed: () => onAddToNote!(cardsAsTable(deck.cards)),
           ),
         if (onKeep != null) _KeepButton(cards: deck.cards, onKeep: onKeep!),
         OutlinedButton.icon(
           key: const ValueKey('flashcards-copy'),
-          icon: const Icon(Icons.copy, size: 18),
+          icon: const Icon(Symbols.content_copy, size: 18),
           label: const Text('Copy'),
           onPressed: () => Clipboard.setData(ClipboardData(text: cardsAsText(deck.cards))),
         ),
         TextButton.icon(
           key: const ValueKey('flashcards-new'),
-          icon: const Icon(Icons.refresh, size: 18),
+          icon: const Icon(Symbols.refresh, size: 18),
           label: const Text('Make new flashcards'),
           onPressed: onNew,
         ),
@@ -299,12 +300,12 @@ class _KeepButtonState extends State<_KeepButton> {
           key: const ValueKey('flashcards-keep-icon'),
           tooltip: tr('Keep for review'),
           visualDensity: VisualDensity.compact,
-          icon: Icon(_kept ? Icons.event_available : Icons.event_repeat, size: 20),
+          icon: Icon(_kept ? Symbols.event_available : Symbols.event_repeat, size: 20),
           onPressed: _kept ? null : _keep,
         )
       : OutlinedButton.icon(
           key: const ValueKey('flashcards-keep'),
-          icon: Icon(_kept ? Icons.event_available : Icons.event_repeat, size: 18),
+          icon: Icon(_kept ? Symbols.event_available : Symbols.event_repeat, size: 18),
           label: const Text('Keep for review'),
           onPressed: _kept ? null : _keep,
         );

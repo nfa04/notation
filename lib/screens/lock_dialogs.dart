@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -81,7 +82,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
   Widget build(BuildContext context) {
     final encrypted = widget.mode == LockMode.encrypted;
     return PlatformAlertDialog(
-      title: Row(children: [const Icon(Icons.lock_outline), const SizedBox(width: 12), Text(encrypted ? 'Encrypted note' : 'Locked note')]),
+      title: Row(children: [const Icon(Symbols.lock_outline), const SizedBox(width: 12), Text(encrypted ? 'Encrypted note' : 'Locked note')]),
       content: SizedBox(
         width: 360,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -98,7 +99,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
               border: const OutlineInputBorder(),
               suffixIcon: IconButton(
                 tooltip: tr(_hidden ? 'Show' : 'Hide'),
-                icon: Icon(_hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                icon: Icon(_hidden ? Symbols.visibility : Symbols.visibility_off),
                 onPressed: () => setState(() => _hidden = !_hidden),
               ),
             ),
@@ -110,7 +111,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 key: const ValueKey('unlock-device'),
-                icon: const Icon(Icons.fingerprint),
+                icon: const Icon(Symbols.fingerprint),
                 label: const Text('Use fingerprint or face'),
                 onPressed: _withDevice,
               ),
@@ -218,8 +219,8 @@ class _LockSetupDialogState extends State<_LockSetupDialog> {
                   _problem = null;
                 }),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  _option(LockMode.passcode, Icons.visibility_off_outlined, 'Passcode', 'Keeps the note out of sight: its title is hidden and it asks for the passcode to open. The content is stored as usual, so this does not protect against someone who reads the files of the app.'),
-                  _option(LockMode.encrypted, Icons.lock_outline, 'Encrypted', 'Encrypts the whole note, its title too, with a passphrase. Nothing of it is stored in plain, except while it is open. If you forget the passphrase, the note is lost for good.'),
+                  _option(LockMode.passcode, Symbols.visibility_off, 'Passcode', 'Keeps the note out of sight: its title is hidden and it asks for the passcode to open. The content is stored as usual, so this does not protect against someone who reads the files of the app.'),
+                  _option(LockMode.encrypted, Symbols.lock_outline, 'Encrypted', 'Encrypts the whole note, its title too, with a passphrase. Nothing of it is stored in plain, except while it is open. If you forget the passphrase, the note is lost for good.'),
                 ]),
               ),
             if (widget.upgrade)
@@ -234,7 +235,7 @@ class _LockSetupDialogState extends State<_LockSetupDialog> {
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   tooltip: tr(_hidden ? 'Show' : 'Hide'),
-                  icon: Icon(_hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  icon: Icon(_hidden ? Symbols.visibility : Symbols.visibility_off),
                   onPressed: () => setState(() => _hidden = !_hidden),
                 ),
               ),

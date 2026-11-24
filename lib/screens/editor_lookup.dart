@@ -123,7 +123,7 @@ extension _EditorLookup on _FixedPageNoteEditorState {
                       ListTile(
                         key: ValueKey('mention-${n.id}'),
                         dense: true,
-                        leading: Icon(n.isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined, size: 20),
+                        leading: Icon(n.isPdf ? Symbols.picture_as_pdf : Symbols.description, size: 20),
                         title: Text.verbatim(n.title.isEmpty ? tr('Untitled') : n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                         onTap: () {
                           controller.value = withNoteLink(controller.value, mention, n.id, n.title);

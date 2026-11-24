@@ -41,8 +41,16 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
   final title = TextStyle(fontFamily: paperFont, color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w300, letterSpacing: 0.1);
   return base.copyWith(
     // Inter is bundled (SIL Open Font License), so the light weights look the same on every platform
-    textTheme: base.textTheme.apply(fontFamily: paperFont),
-    primaryTextTheme: base.primaryTextTheme.apply(fontFamily: paperFont),
+    textTheme: _scale(base.textTheme.apply(fontFamily: paperFont)),
+    primaryTextTheme: _scale(base.primaryTextTheme.apply(fontFamily: paperFont)),
+    // thin line icons (Material Symbols is variable), to sit next to the light type
+    iconTheme: base.iconTheme.copyWith(weight: 300, opticalSize: 24, fill: 0, grade: 0),
+    primaryIconTheme: base.primaryIconTheme.copyWith(weight: 300, opticalSize: 24, fill: 0, grade: 0),
+    // no ink splash: a pale grey on hover and press instead
+    splashFactory: NoSplash.splashFactory,
+    splashColor: Colors.transparent,
+    highlightColor: scheme.onSurface.withValues(alpha: 0.06),
+    hoverColor: scheme.onSurface.withValues(alpha: 0.04),
     extensions: [...base.extensions.values, const PaperLookMarker()],
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
@@ -123,5 +131,33 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
     ),
     tabBarTheme: base.tabBarTheme.copyWith(dividerColor: scheme.outlineVariant, indicatorColor: scheme.onSurface, labelColor: scheme.onSurface, unselectedLabelColor: scheme.onSurfaceVariant),
     listTileTheme: base.listTileTheme.copyWith(selectedColor: scheme.onSurface, selectedTileColor: scheme.onSurface.withValues(alpha: 0.07), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+  );
+}
+
+/// The few sizes of the paper look: a light large size for titles, regular body text, small medium-weight labels; figures are tabular
+/// so that times and counts line up.
+TextTheme _scale(TextTheme t) {
+  TextStyle? tab(TextStyle? s, {double? size, FontWeight? weight, double? spacing}) => s?.copyWith(
+        fontSize: size ?? s.fontSize,
+        fontWeight: weight ?? s.fontWeight,
+        letterSpacing: spacing ?? s.letterSpacing,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
+  return t.copyWith(
+    displayLarge: tab(t.displayLarge, weight: FontWeight.w300),
+    displayMedium: tab(t.displayMedium, weight: FontWeight.w300),
+    displaySmall: tab(t.displaySmall, weight: FontWeight.w300),
+    headlineLarge: tab(t.headlineLarge, weight: FontWeight.w300),
+    headlineMedium: tab(t.headlineMedium, weight: FontWeight.w300),
+    headlineSmall: tab(t.headlineSmall, weight: FontWeight.w300),
+    titleLarge: tab(t.titleLarge, weight: FontWeight.w300),
+    titleMedium: tab(t.titleMedium, weight: FontWeight.w400),
+    titleSmall: tab(t.titleSmall, weight: FontWeight.w400),
+    bodyLarge: tab(t.bodyLarge, weight: FontWeight.w400),
+    bodyMedium: tab(t.bodyMedium, weight: FontWeight.w400),
+    bodySmall: tab(t.bodySmall, weight: FontWeight.w400),
+    labelLarge: tab(t.labelLarge, weight: FontWeight.w500),
+    labelMedium: tab(t.labelMedium, weight: FontWeight.w500, spacing: 0.3),
+    labelSmall: tab(t.labelSmall, weight: FontWeight.w500, spacing: 0.4),
   );
 }

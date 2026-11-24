@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import 'dart:io' show Directory;
 import 'package:path/path.dart' as p;
@@ -172,7 +173,7 @@ class _StartFailed extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.error_outline, size: 40),
+                      const Icon(Symbols.error_outline, size: 40),
                       const SizedBox(height: 16),
                       Text('Notation could not start', style: Theme.of(context).textTheme.headlineSmall),
                       const SizedBox(height: 8),
@@ -633,7 +634,7 @@ IntroSmart? _introSmart(AppServices services) {
         id: 'handwriting',
         title: 'Handwriting to text',
         description: 'Turns what you write by hand into text, to search and copy.',
-        icon: Icons.text_snippet_outlined,
+        icon: Symbols.text_snippet,
         service: services.handwriting!,
         wantedFor: const {Feature.handwriting},
       ),
@@ -642,7 +643,7 @@ IntroSmart? _introSmart(AppServices services) {
         id: 'maths',
         title: 'Formulas and maths check',
         description: 'Reads handwritten formulas and marks your working line by line.',
-        icon: Icons.rule,
+        icon: Symbols.rule,
         service: services.math!,
         wantedFor: const {Feature.mathInk, Feature.checkMaths},
       ),
@@ -651,7 +652,7 @@ IntroSmart? _introSmart(AppServices services) {
         id: 'assistant',
         title: 'Assistant',
         description: 'Answers questions about a note and summarises it. A big download, so it is only on if you tick it.',
-        icon: Icons.auto_awesome,
+        icon: Symbols.auto_awesome,
         service: services.llm!,
       ),
   ]);

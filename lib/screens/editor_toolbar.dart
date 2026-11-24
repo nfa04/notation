@@ -180,7 +180,7 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.dashboard_customize_outlined, size: 20),
+          const Icon(Symbols.dashboard_customize, size: 20),
           const SizedBox(width: 4),
           ConstrainedBox(constraints: const BoxConstraints(maxWidth: 110), child: Text(active?.name ?? '', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
         ]),
@@ -269,7 +269,7 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
                           key: ValueKey('toolbar-${ids[i]}'),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
-                          leading: ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                          leading: ReorderableDragStartListener(index: i, child: const Icon(Symbols.drag_handle)),
                           title: Text(tr(_toolbarSections[ids[i]]!)),
                           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                             IconButton(
@@ -341,9 +341,9 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
                       ),
                   ]),
                 Wrap(spacing: 8, children: [
-                  TextButton.icon(key: const ValueKey('profile-new'), onPressed: newProfile, icon: const Icon(Icons.add, size: 18), label: Text(tr('New profile'))),
-                  if (active != null) TextButton.icon(key: const ValueKey('profile-rename'), onPressed: renameProfile, icon: const Icon(Icons.edit_outlined, size: 18), label: Text(tr('Rename'))),
-                  if (active != null) TextButton.icon(key: const ValueKey('profile-delete'), onPressed: deleteProfile, icon: const Icon(Icons.delete_outline, size: 18), label: Text(tr('Delete'))),
+                  TextButton.icon(key: const ValueKey('profile-new'), onPressed: newProfile, icon: const Icon(Symbols.add, size: 18), label: Text(tr('New profile'))),
+                  if (active != null) TextButton.icon(key: const ValueKey('profile-rename'), onPressed: renameProfile, icon: const Icon(Symbols.edit, size: 18), label: Text(tr('Rename'))),
+                  if (active != null) TextButton.icon(key: const ValueKey('profile-delete'), onPressed: deleteProfile, icon: const Icon(Symbols.delete_outline, size: 18), label: Text(tr('Delete'))),
                 ]),
               ]);
 
@@ -390,12 +390,12 @@ extension _EditorToolbar on _FixedPageNoteEditorState {
                   bar('Top bar', 'top', top, (l) => top = l, (id) {
                     top = [...top]..remove(id);
                     bottom = [...bottom, id];
-                  }, Icons.arrow_downward, 'Move to the bottom bar'),
+                  }, Symbols.arrow_downward, 'Move to the bottom bar'),
                   const Divider(),
                   bar('Bottom bar', 'bottom', bottom, (l) => bottom = l, (id) {
                     bottom = [...bottom]..remove(id);
                     top = [...top, id];
-                  }, Icons.arrow_upward, 'Move to the top bar'),
+                  }, Symbols.arrow_upward, 'Move to the top bar'),
                   if (active != null) ...[const Divider(), toolsSection()],
                 ]),
               ),

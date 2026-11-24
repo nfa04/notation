@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -173,10 +174,10 @@ void main() {
     });
 
     testWidgets('no title, no buttons, an icon: still an alert', (tester) async {
-      await tester.pumpWidget(app(ios(), const PlatformAlertDialog(icon: Icon(Icons.check), content: Text('Done'))));
+      await tester.pumpWidget(app(ios(), const PlatformAlertDialog(icon: Icon(Symbols.check), content: Text('Done'))));
       await open(tester);
       expect(tester.takeException(), isNull);
-      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.byIcon(Symbols.check), findsOneWidget);
       expect(find.text('Done'), findsOneWidget);
     });
 

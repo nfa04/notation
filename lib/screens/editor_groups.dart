@@ -109,7 +109,7 @@ extension _EditorGroups on _FixedPageNoteEditorState {
         if (_mayGroup)
           IconButton(
             key: const ValueKey('group-selection'),
-            icon: const Icon(Icons.workspaces_outlined),
+            icon: const Icon(Symbols.workspaces),
             tooltip: tr('Group: keep these together'),
             visualDensity: VisualDensity.compact,
             onPressed: _groupSelection,
@@ -117,7 +117,7 @@ extension _EditorGroups on _FixedPageNoteEditorState {
         if (_mayUngroup)
           IconButton(
             key: const ValueKey('ungroup-selection'),
-            icon: const Icon(Icons.workspaces_filled),
+            icon: const Icon(Symbols.workspaces),
             tooltip: tr('Ungroup'),
             visualDensity: VisualDensity.compact,
             onPressed: _ungroupSelection,

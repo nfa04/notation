@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
@@ -171,11 +172,11 @@ class _TruthTableDialogState extends State<_TruthTableDialog> {
     if (line.formulas.length == 1) {
       switch (table.kind()) {
         case LogicKind.tautology:
-          chips.add(chip('truth-table-kind', tr('Always true (a tautology)'), Colors.green, icon: Icons.check_circle_outline));
+          chips.add(chip('truth-table-kind', tr('Always true (a tautology)'), Colors.green, icon: Symbols.check_circle_outline));
         case LogicKind.contradiction:
-          chips.add(chip('truth-table-kind', tr('Never true (a contradiction)'), Colors.red, icon: Icons.block));
+          chips.add(chip('truth-table-kind', tr('Never true (a contradiction)'), Colors.red, icon: Symbols.block));
         case LogicKind.contingent:
-          chips.add(chip('truth-table-kind', tr('Sometimes true'), scheme.primary, icon: Icons.tune));
+          chips.add(chip('truth-table-kind', tr('Sometimes true'), scheme.primary, icon: Symbols.tune));
       }
       chips.add(Text.verbatim(' ${table.trueRows()} / $n', style: TextStyle(color: scheme.onSurfaceVariant)));
     } else {
@@ -183,12 +184,12 @@ class _TruthTableDialogState extends State<_TruthTableDialog> {
         if (line.relations[k] == LogicRelation.equivalent) {
           final differ = table.differing(k, k + 1);
           chips.add(differ.isEmpty
-              ? chip('truth-table-same', tr('The same in every row'), Colors.green, icon: Icons.check_circle_outline)
-              : chip('truth-table-differ', tr('Not the same: they differ in {n} of {total} rows', {'n': differ.length, 'total': n}), Colors.red, icon: Icons.cancel_outlined));
+              ? chip('truth-table-same', tr('The same in every row'), Colors.green, icon: Symbols.check_circle_outline)
+              : chip('truth-table-differ', tr('Not the same: they differ in {n} of {total} rows', {'n': differ.length, 'total': n}), Colors.red, icon: Symbols.cancel));
         } else {
           chips.add(table.implies(k, k + 1)
-              ? chip('truth-table-follows', tr('The second follows from the first'), Colors.green, icon: Icons.check_circle_outline)
-              : chip('truth-table-follows-not', tr('The second does not follow from the first'), Colors.red, icon: Icons.cancel_outlined));
+              ? chip('truth-table-follows', tr('The second follows from the first'), Colors.green, icon: Symbols.check_circle_outline)
+              : chip('truth-table-follows-not', tr('The second does not follow from the first'), Colors.red, icon: Symbols.cancel));
         }
       }
     }

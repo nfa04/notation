@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -161,13 +162,13 @@ class _SpeechRecorderState extends State<_SpeechRecorder> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
             child: Row(children: [
-              const Icon(Icons.mic_none, size: 18),
+              const Icon(Symbols.mic_none, size: 18),
               const SizedBox(width: 8),
               Expanded(child: Text.verbatim(widget.title ?? tr('Record and write down'), style: Theme.of(context).textTheme.titleSmall)),
               IconButton(
                 key: const ValueKey('speech-cancel'),
                 tooltip: tr('Cancel'),
-                icon: const Icon(Icons.close),
+                icon: const Icon(Symbols.close),
                 onPressed: () async {
                   _cancelled = true;
                   _tick?.cancel();
@@ -187,7 +188,7 @@ class _SpeechRecorderState extends State<_SpeechRecorder> {
                     key: ValueKey(recording ? 'speech-stop' : 'speech-record'),
                     style: recording ? FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError) : null,
                     onPressed: recording ? _stop : _start,
-                    icon: Icon(recording ? Icons.stop : Icons.fiber_manual_record),
+                    icon: Icon(recording ? Symbols.stop : Symbols.fiber_manual_record),
                     label: Text(recording ? 'Stop' : 'Record'),
                   ),
                 if (_finishing) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)),
@@ -255,7 +256,7 @@ class _SpeechRecorderState extends State<_SpeechRecorder> {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.record_voice_over_outlined, size: 40, color: scheme.onSurfaceVariant),
+        Icon(Symbols.record_voice_over, size: 40, color: scheme.onSurfaceVariant),
         const SizedBox(height: 12),
         Text.verbatim(
           tr('Writing down speech needs a model on this device (about {size} MB). It works without the internet, and nothing you say leaves the device.', {'size': speech.sizeMb}),

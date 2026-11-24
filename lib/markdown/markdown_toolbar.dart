@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 import '../l10n/language.dart';
 
@@ -51,21 +52,21 @@ class MarkdownToolbar extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  button(Icons.looks_one_outlined, 'Heading 1', () => _line(LineStyle.heading1)),
-                  button(Icons.looks_two_outlined, 'Heading 2', () => _line(LineStyle.heading2)),
-                  button(Icons.looks_3_outlined, 'Heading 3', () => _line(LineStyle.heading3)),
+                  button(Symbols.looks_one, 'Heading 1', () => _line(LineStyle.heading1)),
+                  button(Symbols.looks_two, 'Heading 2', () => _line(LineStyle.heading2)),
+                  button(Symbols.looks_3, 'Heading 3', () => _line(LineStyle.heading3)),
                   divider,
-                  button(Icons.format_bold, 'Bold', () => _inline('**')),
-                  button(Icons.format_italic, 'Italic', () => _inline('*')),
-                  button(Icons.format_strikethrough, 'Strikethrough', () => _inline('~~')),
-                  button(Icons.code, 'Code', () => _inline('`')),
+                  button(Symbols.format_bold, 'Bold', () => _inline('**')),
+                  button(Symbols.format_italic, 'Italic', () => _inline('*')),
+                  button(Symbols.format_strikethrough, 'Strikethrough', () => _inline('~~')),
+                  button(Symbols.code, 'Code', () => _inline('`')),
                   divider,
-                  button(Icons.format_list_bulleted, 'Bulleted list', () => _line(LineStyle.bullet)),
-                  button(Icons.format_list_numbered, 'Numbered list', () => _line(LineStyle.numbered)),
+                  button(Symbols.format_list_bulleted, 'Bulleted list', () => _line(LineStyle.bullet)),
+                  button(Symbols.format_list_numbered, 'Numbered list', () => _line(LineStyle.numbered)),
                   if (onTable != null)
                     IconButton(
                       key: const ValueKey('table-in-text'),
-                      icon: const Icon(Icons.table_chart_outlined, size: 20),
+                      icon: const Icon(Symbols.table_chart, size: 20),
                       tooltip: tr('Insert a table'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onTable,
@@ -73,7 +74,7 @@ class MarkdownToolbar extends StatelessWidget {
                   if (onCite != null)
                     IconButton(
                       key: const ValueKey('cite-in-text'),
-                      icon: const Icon(Icons.format_quote, size: 20),
+                      icon: const Icon(Symbols.format_quote, size: 20),
                       tooltip: tr('Cite a source'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onCite,
@@ -81,7 +82,7 @@ class MarkdownToolbar extends StatelessWidget {
                   if (onBibliography != null)
                     IconButton(
                       key: const ValueKey('bibliography-in-text'),
-                      icon: const Icon(Icons.menu_book_outlined, size: 20),
+                      icon: const Icon(Symbols.menu_book, size: 20),
                       tooltip: tr('Insert the list of sources'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onBibliography,
@@ -90,7 +91,7 @@ class MarkdownToolbar extends StatelessWidget {
                     divider,
                     IconButton(
                       key: const ValueKey('solve-in-text'),
-                      icon: const Icon(Icons.functions, size: 20),
+                      icon: const Icon(Symbols.functions, size: 20),
                       tooltip: tr('Solve, differentiate or integrate'),
                       visualDensity: VisualDensity.compact,
                       onPressed: onSolve,

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/style/platform_look.dart';
@@ -19,8 +20,8 @@ void main() {
     testWidgets('are the accent, faded when off, on a rounded square rather than a disc', (tester) async {
       final theme = iosLook(base());
       await tester.pumpWidget(MaterialApp(theme: theme, home: Scaffold(body: Row(children: [
-        IconButton(key: const ValueKey('on'), icon: const Icon(Icons.edit), onPressed: () {}),
-        const IconButton(key: ValueKey('off'), icon: Icon(Icons.edit), onPressed: null),
+        IconButton(key: const ValueKey('on'), icon: const Icon(Symbols.edit), onPressed: () {}),
+        const IconButton(key: ValueKey('off'), icon: Icon(Symbols.edit), onPressed: null),
       ]))));
       Color? colourOf(String key) => IconTheme.of(tester.element(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Icon)))).color;
       expect(colourOf('on'), theme.colorScheme.primary);

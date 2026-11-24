@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -146,7 +147,7 @@ class _AudioPanelState extends State<AudioPanel> {
         padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
         child: Row(children: [
           Expanded(child: Text('Sound', style: Theme.of(context).textTheme.titleMedium)),
-          if (widget.onClose != null) IconButton(tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: widget.onClose),
+          if (widget.onClose != null) IconButton(tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: widget.onClose),
         ]),
       ),
       if (_problem != null) Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 0), child: Text.verbatim(_problem!, key: const ValueKey('audio-problem'), style: TextStyle(color: scheme.error))),
@@ -191,7 +192,7 @@ class _AudioPanelState extends State<AudioPanel> {
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         FilledButton.tonalIcon(
                           key: const ValueKey('audio-make-reading'),
-                          icon: const Icon(Icons.record_voice_over_outlined, size: 18),
+                          icon: const Icon(Symbols.record_voice_over, size: 18),
                           label: const Text('Read the note into a sound file'),
                           onPressed: can ? _makeReading : null,
                         ),
@@ -221,7 +222,7 @@ class _AudioPanelState extends State<AudioPanel> {
         leading: IconButton.filledTonal(
           key: ValueKey('audio-play-${a.id}'),
           tooltip: tr(current && player.playing ? 'Pause' : 'Play'),
-          icon: Icon(current && player.playing ? Icons.pause : Icons.play_arrow),
+          icon: Icon(current && player.playing ? Symbols.pause : Symbols.play_arrow),
           onPressed: () => _toggle(a),
         ),
         title: Text.verbatim(_title(a), maxLines: 1, overflow: TextOverflow.ellipsis),

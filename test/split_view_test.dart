@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:notes/widgets/notation_sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -210,7 +211,7 @@ void main() {
 
     await tester.tap(find.text('Alpha graph').first);
     await settle();
-    await tester.tap(find.byIcon(Icons.hub_outlined).first); // the menu place of the graph
+    await tester.tap(find.byIcon(Symbols.hub).first); // the menu place of the graph
     await settle(10);
     // one graph in the tab: the last one made; the view has no tabs of graphs of its own
     expect(find.byKey(ValueKey('tab-graph:$g2')), findsOneWidget);

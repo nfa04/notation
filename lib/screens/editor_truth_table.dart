@@ -30,7 +30,7 @@ extension _EditorTruthTable on _FixedPageNoteEditorState {
       padding: const EdgeInsets.only(top: 8),
       child: OutlinedButton.icon(
         key: const ValueKey('math-mark-truth-table'),
-        icon: const Icon(Icons.grid_on, size: 18),
+        icon: const Icon(Symbols.grid_on, size: 18),
         label: Text(tr('Truth table')),
         onPressed: () async {
           final cells = await showTruthTable(context, initial: latex);

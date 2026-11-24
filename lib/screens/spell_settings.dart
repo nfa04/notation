@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:url_launcher/url_launcher.dart';
@@ -86,7 +87,7 @@ class _SpellSettingsState extends State<SpellSettings> {
                 onSubmitted: (_) => _addWord(),
               ),
             ),
-            IconButton(key: const ValueKey('spell-add-word'), onPressed: _addWord, icon: const Icon(Icons.add), tooltip: tr('Add a word')),
+            IconButton(key: const ValueKey('spell-add-word'), onPressed: _addWord, icon: const Icon(Symbols.add), tooltip: tr('Add a word')),
           ]),
         ]);
       },
@@ -110,7 +111,7 @@ class _SpellSettingsState extends State<SpellSettings> {
         value: service.isOn(l),
         onChanged: downloading ? null : (v) => service.setOn(l, v),
         secondary: pack.installed
-            ? IconButton(key: ValueKey('spell-delete-${l.id}'), icon: const Icon(Icons.delete_outline), tooltip: tr('Delete the dictionary'), onPressed: () => service.delete(l))
+            ? IconButton(key: ValueKey('spell-delete-${l.id}'), icon: const Icon(Symbols.delete_outline), tooltip: tr('Delete the dictionary'), onPressed: () => service.delete(l))
             : null,
       ),
       if (downloading) LinearProgressIndicator(value: pack.progress == 0 ? null : pack.progress),

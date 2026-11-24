@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 
 import '../ai/ai_service.dart';
@@ -217,7 +218,7 @@ class _IdeasDialogState extends State<IdeasDialog> {
                   trailing: IconButton(
                     key: ValueKey('ideas-add-$i'),
                     tooltip: tr('Add to the note'),
-                    icon: const Icon(Icons.add_circle_outline),
+                    icon: const Icon(Symbols.add_circle_outline),
                     onPressed: () => Navigator.pop(context, IdeasResult(text: idea)),
                   ),
                 ),

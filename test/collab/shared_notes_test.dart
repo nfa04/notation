@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -88,7 +89,7 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await tester.pump();
 
-      expect(find.byIcon(Icons.group), findsNWidgets(3), reason: 'mine, theirs, both ways: not the plain one');
+      expect(find.byIcon(Symbols.group), findsNWidgets(3), reason: 'mine, theirs, both ways: not the plain one');
       Tooltip tip(String id) => tester.widget<Tooltip>(find.descendant(of: find.byKey(ValueKey('shared-badge-$id')), matching: find.byType(Tooltip)));
       expect(tip(mine).message, 'Shared with others');
       expect(tip(theirs).message, 'Shared with you by Anna');
@@ -107,7 +108,7 @@ void main() {
       expect(find.text('From Anna'), findsOneWidget, reason: 'all notes are shown to begin with');
       expect(find.text('Plain'), findsOneWidget);
       // all notes: the marks
-      expect(find.byIcon(Icons.group), findsNWidgets(3));
+      expect(find.byIcon(Symbols.group), findsNWidgets(3));
 
       await tester.tap(find.text('Shared with me'));
       await tester.pump();
@@ -115,7 +116,7 @@ void main() {
       expect(find.text('Both ways'), findsOneWidget);
       expect(find.text('Plain'), findsNothing);
       expect(find.text('Mine, shared'), findsNothing, reason: 'shared by the person, not with them');
-      expect(find.byIcon(Icons.group), findsNWidgets(2));
+      expect(find.byIcon(Symbols.group), findsNWidgets(2));
     });
 
     testWidgets('without sharing set up there is no such folder and no marks', (tester) async {
@@ -125,7 +126,7 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await tester.pump();
       expect(find.text('Shared with me'), findsNothing);
-      expect(find.byIcon(Icons.group), findsNothing);
+      expect(find.byIcon(Symbols.group), findsNothing);
     });
   });
 }

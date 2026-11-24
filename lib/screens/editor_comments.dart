@@ -71,7 +71,7 @@ extension _EditorComments on _FixedPageNoteEditorState {
             child: InkWell(
               key: ValueKey('comment-delete-${box.id}'),
               onTap: () => _deleteComment(box),
-              child: const Icon(Icons.close_rounded, size: 14, color: Color(0x803B3200)),
+              child: const Icon(Symbols.close_rounded, size: 14, color: Color(0x803B3200)),
             ),
           ),
         ]),

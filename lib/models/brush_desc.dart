@@ -1,9 +1,9 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show listEquals;
-import 'package:flutter/material.dart';
 
 import 'brush.dart';
 
@@ -328,7 +328,7 @@ class BrushDesc {
     final id = this.id;
     switch (kind) {
       case BrushKind.ink:
-        return ParamBrush(id, name, _inkParams(), icon: Icons.brush_outlined);
+        return ParamBrush(id, name, _inkParams(), icon: Symbols.brush);
       case BrushKind.roller:
         return RollerBrush(
           id: id,
@@ -351,7 +351,7 @@ class BrushDesc {
         return CharcoalBrush(
           id,
           name,
-          Icons.gradient,
+          Symbols.gradient,
           ParamBrush(id, name, BrushParams(width: _p('width'), pressure: _p('pressure'), smoothing: 0.2, jitter: _p('jitter'), opacity: math.max(_p('body'), 0.01), taper: _p('taper'))),
           dryness: _p('dryness'),
           dust: _p('dust'),
@@ -466,7 +466,7 @@ class BrushDesc {
             (width: (1.1 - softness).clamp(0.2, 0.95), opacity: 0.55 * strength, blur: 0.28 * softness * _p('blur')),
             (width: (0.5 - softness * 0.4667).clamp(0.08, 0.5), opacity: 0.5 * strength, blur: 0.1667 * softness * _p('blur')),
           ];
-    return SoftBrush(id, name, Icons.blur_on,
+    return SoftBrush(id, name, Symbols.blur_on,
         widthScale: _p('width'), rings: rings, wobble: _p('wobble'), speckle: _p('speckle'), blurs: blurs, speckleSize: _p('speckleSize'), speckleSpread: _p('speckleSpread'));
   }
 

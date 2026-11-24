@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/paper.dart';
 import 'dart:async';
 import 'dart:io';
@@ -128,19 +129,19 @@ class _SyncSettingsState extends State<SyncSettings> {
           const SizedBox(height: 12),
           if (!s.isSetUp)
             Wrap(spacing: 8, runSpacing: 8, children: [
-              FilledButton.icon(key: const ValueKey('sync-add'), onPressed: () => showAddDeviceDialog(context, s), icon: const Icon(Icons.add_link, size: 18), label: const Text('Add a device')),
-              OutlinedButton.icon(key: const ValueKey('sync-join'), onPressed: () => showJoinDialog(context, s), icon: const Icon(Icons.link, size: 18), label: const Text('Use a link from another device'),
+              FilledButton.icon(key: const ValueKey('sync-add'), onPressed: () => showAddDeviceDialog(context, s), icon: const Icon(Symbols.add_link, size: 18), label: const Text('Add a device')),
+              OutlinedButton.icon(key: const ValueKey('sync-join'), onPressed: () => showJoinDialog(context, s), icon: const Icon(Symbols.link, size: 18), label: const Text('Use a link from another device'),
                   ),
                   if (s.cloud != null)
                     OutlinedButton.icon(
                       key: const ValueKey('sync-signin'),
                       onPressed: () => showCloudSignInDialog(context, s.cloud!),
-                      icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                      icon: const Icon(Symbols.cloud_download, size: 18),
                       label: const Text('Sign in with your cloud folder')),
               if (kIsWeb)
-                OutlinedButton.icon(key: const ValueKey('sync-connect'), onPressed: () => showConnectDialog(context, s), icon: const Icon(Icons.qr_code_2, size: 18), label: const Text('Connect temporarily')),
+                OutlinedButton.icon(key: const ValueKey('sync-connect'), onPressed: () => showConnectDialog(context, s), icon: const Icon(Symbols.qr_code_2, size: 18), label: const Text('Connect temporarily')),
               if (canScanQr)
-                OutlinedButton.icon(key: const ValueKey('sync-scan-web'), onPressed: () => scanAndAnswerConnect(context, s), icon: const Icon(Icons.qr_code_scanner, size: 18), label: const Text('Scan the code of the web version')),
+                OutlinedButton.icon(key: const ValueKey('sync-scan-web'), onPressed: () => scanAndAnswerConnect(context, s), icon: const Icon(Symbols.qr_code_scanner, size: 18), label: const Text('Scan the code of the web version')),
             ]),
             if (kIsWeb) ...[
               const SizedBox(height: 8),
@@ -183,12 +184,12 @@ class _SyncSettingsState extends State<SyncSettings> {
               FilledButton.icon(
                 key: const ValueKey('sync-now'),
                 onPressed: s.lookingForDevices ? null : s.syncNow,
-                icon: const Icon(Icons.sync, size: 18),
+                icon: const Icon(Symbols.sync, size: 18),
                 label: Text(s.lookingForDevices ? 'Looking for your other devices...' : 'Sync now'),
               ),
-              OutlinedButton.icon(key: const ValueKey('sync-add'), onPressed: () => showAddDeviceDialog(context, s), icon: const Icon(Icons.add_link, size: 18), label: const Text('Add a device')),
+              OutlinedButton.icon(key: const ValueKey('sync-add'), onPressed: () => showAddDeviceDialog(context, s), icon: const Icon(Symbols.add_link, size: 18), label: const Text('Add a device')),
               if (canScanQr)
-                OutlinedButton.icon(key: const ValueKey('sync-scan-web'), onPressed: () => scanAndAnswerConnect(context, s), icon: const Icon(Icons.qr_code_scanner, size: 18), label: const Text('Scan the code of the web version')),
+                OutlinedButton.icon(key: const ValueKey('sync-scan-web'), onPressed: () => scanAndAnswerConnect(context, s), icon: const Icon(Symbols.qr_code_scanner, size: 18), label: const Text('Scan the code of the web version')),
             ]),
             const SizedBox(height: 8),
             SwitchListTile.adaptive(
@@ -315,7 +316,7 @@ class SyncPeers extends StatelessWidget {
                   key: ValueKey('sync-peer-${p.id}'),
                   contentPadding: EdgeInsets.zero,
                   dense: true,
-                  leading: Icon(Icons.circle, size: 14, color: p.syncing ? scheme.primary : (p.online ? Colors.green : scheme.outline)),
+                  leading: Icon(Symbols.circle, size: 14, color: p.syncing ? scheme.primary : (p.online ? Colors.green : scheme.outline)),
                   title: Text.verbatim(p.name),
                   subtitle: Text.verbatim([
                     if (p.temporary) tr('temporary'),
@@ -328,7 +329,7 @@ class SyncPeers extends StatelessWidget {
                   trailing: IconButton(
                     key: ValueKey('sync-remove-${p.id}'),
                     tooltip: tr('Take this device out of the profile'),
-                    icon: const Icon(Icons.link_off, size: 20),
+                    icon: const Icon(Symbols.link_off, size: 20),
                     onPressed: () => s.removeDevice(p.id),
                   ),
                 ),
@@ -391,13 +392,13 @@ class _AddDeviceDialog extends StatelessWidget {
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows))
                       FilledButton.icon(
-                        icon: const Icon(Icons.ios_share, size: 16),
+                        icon: const Icon(Symbols.ios_share, size: 16),
                         label: const Text('Share the link'),
                         onPressed: () => SharePlus.instance.share(ShareParams(text: link!.toLink(), subject: tr('Notation: add a device'))),
                       ),
                     OutlinedButton.icon(
                       key: const ValueKey('sync-copy'),
-                      icon: const Icon(Icons.copy, size: 16),
+                      icon: const Icon(Symbols.content_copy, size: 16),
                       label: const Text('Copy the link'),
                       onPressed: () => Clipboard.setData(ClipboardData(text: link!.toLink())),
                     ),
@@ -533,7 +534,7 @@ class _JoinDialogState extends State<_JoinDialog> {
                 const Text('On a device that is already in the profile, go to Settings → Sync profile → "Add a device". Scan the code it shows or paste the link:'),
                 const SizedBox(height: 10),
                 if (canScanQr) ...[
-                  FilledButton.icon(key: const ValueKey('sync-join-scan'), onPressed: _scan, icon: const Icon(Icons.qr_code_scanner, size: 18), label: const Text('Scan the code')),
+                  FilledButton.icon(key: const ValueKey('sync-join-scan'), onPressed: _scan, icon: const Icon(Symbols.qr_code_scanner, size: 18), label: const Text('Scan the code')),
                   const SizedBox(height: 10),
                 ],
                 TextField(
@@ -663,7 +664,7 @@ class _CloudSyncCardState extends State<_CloudSyncCard> {
               FilledButton.icon(
                 key: const ValueKey('cloud-now'),
                 onPressed: c.running ? null : c.syncNow,
-                icon: const Icon(Icons.cloud_sync_outlined, size: 18),
+                icon: const Icon(Symbols.cloud_sync, size: 18),
                 label: Text(c.running ? 'Syncing...' : 'Sync through the folder now'),
               ),
               const SizedBox(width: 12),

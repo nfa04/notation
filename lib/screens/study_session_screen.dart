@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -215,12 +216,12 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
       Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 8, children: [
         if (r == null)
           FilledButton.icon(
-              key: const ValueKey('session-start'), onPressed: () => _planner.begin(widget.planId, widget.sessionKey), icon: const Icon(Icons.play_arrow), label: Text('Start the session'))
+              key: const ValueKey('session-start'), onPressed: () => _planner.begin(widget.planId, widget.sessionKey), icon: const Icon(Symbols.play_arrow), label: Text('Start the session'))
         else if (r.paused)
-          FilledButton.tonalIcon(key: const ValueKey('session-resume'), onPressed: () => _planner.pause(false), icon: const Icon(Icons.play_arrow), label: Text('Go on'))
+          FilledButton.tonalIcon(key: const ValueKey('session-resume'), onPressed: () => _planner.pause(false), icon: const Icon(Symbols.play_arrow), label: Text('Go on'))
         else
-          OutlinedButton.icon(key: const ValueKey('session-pause'), onPressed: () => _planner.pause(true), icon: const Icon(Icons.pause), label: Text('Pause')),
-        FilledButton.icon(key: const ValueKey('session-finish'), onPressed: () => _toReport(s), icon: const Icon(Icons.flag_outlined), label: Text('Finish')),
+          OutlinedButton.icon(key: const ValueKey('session-pause'), onPressed: () => _planner.pause(true), icon: const Icon(Symbols.pause), label: Text('Pause')),
+        FilledButton.icon(key: const ValueKey('session-finish'), onPressed: () => _toReport(s), icon: const Icon(Symbols.flag), label: Text('Finish')),
       ]),
       if (other) ...[
         const SizedBox(height: 8),
@@ -239,20 +240,20 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
       action = IconButton(
           key: ValueKey('session-summary-$i'),
           tooltip: tr('Read the summary'),
-          icon: const Icon(Icons.summarize_outlined),
+          icon: const Icon(Symbols.summarize),
           onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudySummaryPage(title: unit.title, points: summary.points))));
     }
     Widget? open;
     if (unit != null && widget.onOpenNoteAt != null && (item.kind == WorkKind.learn || item.kind == WorkKind.review)) {
       open = IconButton(
-          key: ValueKey('session-open-$i'), tooltip: tr('Open the note'), icon: const Icon(Icons.open_in_new), onPressed: () => _openNote(unit.noteId, pageOf(item, unit)));
+          key: ValueKey('session-open-$i'), tooltip: tr('Open the note'), icon: const Icon(Symbols.open_in_new), onPressed: () => _openNote(unit.noteId, pageOf(item, unit)));
     }
     if (item.kind == WorkKind.cards && widget.cards != null) {
-      action = IconButton(key: ValueKey('session-cards-$i'), tooltip: tr('Review the cards'), icon: const Icon(Icons.style_outlined), onPressed: () => _reviewCards(plan));
+      action = IconButton(key: ValueKey('session-cards-$i'), tooltip: tr('Review the cards'), icon: const Icon(Symbols.style), onPressed: () => _reviewCards(plan));
     } else if (item.kind == WorkKind.mistakes && unit != null) {
-      action = IconButton(key: ValueKey('session-mistakes-$i'), tooltip: tr('Show the lines'), icon: const Icon(Icons.edit_note), onPressed: () => _mistakes(unit));
+      action = IconButton(key: ValueKey('session-mistakes-$i'), tooltip: tr('Show the lines'), icon: const Icon(Symbols.edit_note), onPressed: () => _mistakes(unit));
     } else if (item.kind == WorkKind.quiz && unit != null && _planner.facts != null) {
-      action = IconButton(key: ValueKey('session-quiz-$i'), tooltip: tr('Start the quiz'), icon: const Icon(Icons.quiz_outlined), onPressed: () => _quiz(unit, plan.material[unit.id]));
+      action = IconButton(key: ValueKey('session-quiz-$i'), tooltip: tr('Start the quiz'), icon: const Icon(Symbols.quiz), onPressed: () => _quiz(unit, plan.material[unit.id]));
     }
     return Row(children: [
       Expanded(
@@ -356,7 +357,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
       for (final (i, item) in s.session.items.indexed)
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(r.done.contains(i) ? Icons.check_circle : Icons.radio_button_unchecked),
+          leading: Icon(r.done.contains(i) ? Symbols.check_circle : Symbols.radio_button_unchecked),
           title: Text.verbatim(itemText(item, item.unitId == null ? null : _planner.find(widget.planId, widget.sessionKey)?.plan.unit(item.unitId!))),
         ),
     ];
@@ -412,7 +413,7 @@ class _StudySessionCardState extends State<StudySessionCard> {
               key: const ValueKey('study-session-card'),
               margin: EdgeInsets.zero,
               child: ListTile(
-                leading: const Icon(Icons.school_outlined),
+                leading: const Icon(Symbols.school),
                 title: Text.verbatim(session.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text.verbatim(mine
                     ? (running.paused ? tr('Paused after {n} min', {'n': running.elapsed(now).inMinutes}) : tr('Studying for {n} min', {'n': running.elapsed(now).inMinutes}))
@@ -479,7 +480,7 @@ class _MistakesPageState extends State<_MistakesPage> {
                             TextButton.icon(
                               key: ValueKey('mistake-open-$i'),
                               onPressed: () => Navigator.pop(context, m.card.page),
-                              icon: const Icon(Icons.open_in_new, size: 18),
+                              icon: const Icon(Symbols.open_in_new, size: 18),
                               label: Text.verbatim(tr('Open page {n}', {'n': m.card.page! + 1})),
                             ),
                         ]),

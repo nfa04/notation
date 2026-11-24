@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -211,13 +212,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
 
-      expect(find.byIcon(Icons.auto_fix_normal), findsNothing); // (the icon of the eraser when it is on)
+      expect(find.byIcon(Symbols.auto_fix_normal), findsNothing); // (the icon of the eraser when it is on)
       await press(tester, LogicalKeyboardKey.keyE);
       await tester.pump();
-      expect(find.byIcon(Icons.auto_fix_normal), findsOneWidget);
+      expect(find.byIcon(Symbols.auto_fix_normal), findsOneWidget);
       await press(tester, LogicalKeyboardKey.keyE); // again: the pen
       await tester.pump();
-      expect(find.byIcon(Icons.auto_fix_normal), findsNothing);
+      expect(find.byIcon(Symbols.auto_fix_normal), findsNothing);
 
       // the dot on the width button is in the color of the pen
       Color pen() => ((tester.widget<Container>(find.descendant(of: find.byTooltip('Stroke Size'), matching: find.byType(Container)).first)).decoration! as BoxDecoration).color!;
@@ -245,7 +246,7 @@ void main() {
       await press(tester, LogicalKeyboardKey.keyX, held: [ctrl, shift]); // the eraser, which goes to draw mode by itself
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('undo-button')), findsOneWidget);
-      expect(find.byIcon(Icons.auto_fix_normal), findsOneWidget);
+      expect(find.byIcon(Symbols.auto_fix_normal), findsOneWidget);
     });
 
     testWidgets('the keys of the line width step through the widths of the menu', (tester) async {

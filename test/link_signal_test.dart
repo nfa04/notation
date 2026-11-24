@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/collab/link_stats.dart';
@@ -11,9 +12,9 @@ void main() {
     expect(find.byType(Icon), findsNothing);
 
     for (final (band, icon) in [
-      (LinkBand.good, Icons.signal_cellular_alt),
-      (LinkBand.fair, Icons.signal_cellular_alt_2_bar),
-      (LinkBand.poor, Icons.signal_cellular_alt_1_bar),
+      (LinkBand.good, Symbols.signal_cellular_alt),
+      (LinkBand.fair, Symbols.signal_cellular_alt_2_bar),
+      (LinkBand.poor, Symbols.signal_cellular_alt_1_bar),
     ]) {
       await show(tester, LinkSignal(band: band));
       expect(find.byKey(ValueKey('link-signal-${band.name}')), findsOneWidget);

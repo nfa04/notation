@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
@@ -128,7 +129,7 @@ void main() {
     final b = DrawingStroke(id: 'locked', color: Colors.black, width: 4, points: [for (var i = 0; i <= 10; i++) Offset(100.0 + i * 20, 300)], layer: 'sky');
     final c = DrawingStroke(id: 'hid', color: Colors.black, width: 4, points: [for (var i = 0; i <= 10; i++) Offset(100.0 + i * 20, 400)], layer: 'gone');
     await open(tester, layers: LayerStack(const [sky, NoteLayer('gone', 'Gone', visible: false)]).replaced(sky.copyWith(locked: true)), strokes: [a, b, c]);
-    final eraser = find.byIcon(Icons.auto_fix_normal_outlined);
+    final eraser = find.byIcon(Symbols.auto_fix_normal);
     await tester.ensureVisible(eraser.first);
     await tester.pumpAndSettle();
     await tester.tap(eraser.first);

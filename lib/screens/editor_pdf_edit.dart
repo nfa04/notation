@@ -606,7 +606,7 @@ extension _PdfEdit on _FixedPageNoteEditorState {
             width: 20,
             height: 20,
             decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: color, width: 2)),
-            child: Icon(Icons.rotate_right, size: 14, color: color),
+            child: Icon(Symbols.rotate_right, size: 14, color: color),
           ),
         ),
       ),
@@ -646,7 +646,7 @@ extension _PdfEdit on _FixedPageNoteEditorState {
             IconButton(
               tooltip: tr('Edit text'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.edit_outlined, size: 18),
+              icon: const Icon(Symbols.edit, size: 18),
               onPressed: () => _editPdfText(page, object),
             ),
             PopupMenuButton<Object>(
@@ -689,24 +689,24 @@ extension _PdfEdit on _FixedPageNoteEditorState {
               builder: (context, snapshot) {
                 final info = snapshot.data;
                 return Row(mainAxisSize: MainAxisSize.min, children: [
-                  _pdfFormatButton(Icons.format_bold, tr('Bold'), info?.bold ?? false, info == null ? null : () => format(bold: !info.bold), color),
-                  _pdfFormatButton(Icons.format_italic, tr('Italic'), info?.italic ?? false, info == null ? null : () => format(italic: !info.italic), color),
+                  _pdfFormatButton(Symbols.format_bold, tr('Bold'), info?.bold ?? false, info == null ? null : () => format(bold: !info.bold), color),
+                  _pdfFormatButton(Symbols.format_italic, tr('Italic'), info?.italic ?? false, info == null ? null : () => format(italic: !info.italic), color),
                 ]);
               },
             ),
-            _pdfFormatButton(Icons.format_underlined, tr('Underline'), object.underlined, () => format(underline: !object.underlined), color),
-            _pdfFormatButton(Icons.format_strikethrough, tr('Strikethrough'), object.struckThrough, () => format(strike: !object.struckThrough), color),
+            _pdfFormatButton(Symbols.format_underlined, tr('Underline'), object.underlined, () => format(underline: !object.underlined), color),
+            _pdfFormatButton(Symbols.format_strikethrough, tr('Strikethrough'), object.struckThrough, () => format(strike: !object.struckThrough), color),
             IconButton(
               tooltip: tr('Smaller'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.remove, size: 18),
+              icon: const Icon(Symbols.remove, size: 18),
               onPressed: () => resizeText(size.roundToDouble() - (size == size.roundToDouble() ? 1 : 0)),
             ),
             Text.verbatim(size.round().toString(), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             IconButton(
               tooltip: tr('Bigger'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.add, size: 18),
+              icon: const Icon(Symbols.add, size: 18),
               onPressed: () => resizeText(size.roundToDouble() + 1),
             ),
           ],
@@ -714,13 +714,13 @@ extension _PdfEdit on _FixedPageNoteEditorState {
             IconButton(
               tooltip: tr('Rotate'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.rotate_90_degrees_cw_outlined, size: 18),
+              icon: const Icon(Symbols.rotate_90_degrees_cw, size: 18),
               onPressed: () => _applyPdfEdit(page, (e) => e.rotateObject(page, object, 90)),
             ),
           IconButton(
             tooltip: tr('Delete'),
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.delete_outline, size: 18),
+            icon: const Icon(Symbols.delete_outline, size: 18),
             onPressed: () => _applyPdfEdit(page, (e) => e.removeObject(page, object), keepSelected: false),
           ),
         ]),

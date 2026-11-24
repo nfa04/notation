@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
@@ -72,7 +73,7 @@ class _ShortcutSettingsState extends State<ShortcutSettings> {
               child: TextField(
                 key: const ValueKey('shortcut-search'),
                 controller: _search,
-                decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Find an action or a key'), isDense: true, border: const OutlineInputBorder()),
+                decoration: InputDecoration(prefixIcon: const Icon(Symbols.search), hintText: tr('Find an action or a key'), isDense: true, border: const OutlineInputBorder()),
               ),
             ),
             const SizedBox(width: 12),
@@ -121,7 +122,7 @@ class _ShortcutSettingsState extends State<ShortcutSettings> {
               key: ValueKey('shortcut-add-${a.id}'),
               tooltip: tr('Add a shortcut'),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.add, size: 18),
+              icon: const Icon(Symbols.add, size: 18),
               onPressed: () => _record(a),
             ),
             if (_service.changed(a.id))
@@ -129,7 +130,7 @@ class _ShortcutSettingsState extends State<ShortcutSettings> {
                 key: ValueKey('shortcut-reset-${a.id}'),
                 tooltip: tr('Back to the usual shortcut'),
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.restart_alt, size: 18),
+                icon: const Icon(Symbols.restart_alt, size: 18),
                 onPressed: () => _service.reset(a.id),
               ),
           ]),

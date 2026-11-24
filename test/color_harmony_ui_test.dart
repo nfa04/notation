@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/data/app_database.dart';
@@ -27,7 +28,7 @@ void main() {
 
     await tester.tap(find.byWidgetPredicate((w) => w is CircleAvatar && w.backgroundColor == const Color(0xFFFF0000)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.tap(find.byIcon(Symbols.add_circle_outline));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('harmony-triadic')));
     await tester.pumpAndSettle();

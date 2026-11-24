@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -244,7 +245,7 @@ class _StylesDialogState extends State<_StylesDialog> {
                     PopupMenuButton<int>(
                       key: ValueKey('style-color-$key'),
                       tooltip: tr('Text colour'),
-                      icon: Icon(Icons.format_color_text, color: _styles[key]?.color == null ? null : Color(_styles[key]!.color!)),
+                      icon: Icon(Symbols.format_color_text, color: _styles[key]?.color == null ? null : Color(_styles[key]!.color!)),
                       onSelected: (c) {
                         final s = _styles[key] ?? const NamedStyle();
                         _set(key, NamedStyle(font: s.font, size: s.size, color: c == 0 ? null : c));

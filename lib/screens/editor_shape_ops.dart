@@ -61,7 +61,7 @@ extension _EditorShapeOps on _FixedPageNoteEditorState {
   Widget _combineButton() => PopupMenuButton<ShapeOp>(
         key: const ValueKey('combine-shapes'),
         tooltip: tr('Put the shapes together'),
-        icon: const Icon(Icons.join_full_outlined),
+        icon: const Icon(Symbols.join_full),
         padding: EdgeInsets.zero,
         iconSize: 24,
         onSelected: _combineSelected,

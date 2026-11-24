@@ -54,12 +54,12 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
       ];
 
   (IconData, Color) _verdictIcon(LineCheck c, bool doubtful) => switch (c.verdict) {
-        _ when doubtful => (Icons.help_outline, Colors.orange),
-        Verdict.right => (Icons.check_circle, Colors.green),
-        Verdict.rounded => (Icons.check_circle_outline, Colors.green),
-        Verdict.wrong => (Icons.cancel, Colors.red),
-        Verdict.lost || Verdict.widened => (Icons.warning_amber_rounded, Colors.orange),
-        null => (Icons.calculate_outlined, Colors.blueGrey),
+        _ when doubtful => (Symbols.help_outline, Colors.orange),
+        Verdict.right => (Symbols.check_circle, Colors.green),
+        Verdict.rounded => (Symbols.check_circle_outline, Colors.green),
+        Verdict.wrong => (Symbols.cancel, Colors.red),
+        Verdict.lost || Verdict.widened => (Symbols.warning_amber_rounded, Colors.orange),
+        null => (Symbols.calculate, Colors.blueGrey),
       };
 
   Widget _markBadge(MathMark m) {
@@ -216,7 +216,7 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
           key: ValueKey('math-check-look-again-$i'),
-          icon: const Icon(Icons.visibility_outlined),
+          icon: const Icon(Symbols.visibility),
           label: Text(tr('Read it again')),
           onPressed: () async {
             asking.add(i);
@@ -265,7 +265,7 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
       const SizedBox(height: 8),
       OutlinedButton.icon(
         key: ValueKey('math-check-keep-card-$i'),
-        icon: const Icon(Icons.style_outlined),
+        icon: const Icon(Symbols.style),
         label: Text(tr('Keep this mistake as a flashcard')),
         onPressed: () async {
           final added = await widget.cards!.addAll(widget.noteId, [card]);
@@ -340,7 +340,7 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
                     if (latex[i] == null) Text(tr('A line could not be read'), style: theme.textTheme.bodyMedium),
                     if (doubtful) ...[
                       Row(children: [
-                        const Icon(Icons.help_outline, color: Colors.orange, size: 24),
+                        const Icon(Symbols.help_outline, color: Colors.orange, size: 24),
                         const SizedBox(width: 8),
                         Expanded(child: Text(tr('Did you write one of these?'), style: theme.textTheme.titleMedium)),
                       ]),
@@ -375,7 +375,7 @@ extension _EditorMathCheck on _FixedPageNoteEditorState {
                     Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                       OutlinedButton.icon(
                         key: ValueKey('math-check-fix-$i'),
-                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        icon: const Icon(Symbols.edit, size: 18),
                         label: Text(tr('Fix reading')),
                         onPressed: () => setCard(() => fixing = !fixing),
                       ),

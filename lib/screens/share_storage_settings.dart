@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/paper.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:url_launcher/url_launcher.dart';
@@ -54,7 +55,7 @@ Widget storageAccountSection(ShareStorage s) =>
         );
 
 Widget _title(BuildContext context, String name, bool ready) => Row(children: [
-      Icon(ready ? Icons.check_circle_outline : Icons.circle_outlined, size: 18, color: ready ? Colors.green[700] : Colors.grey),
+      Icon(ready ? Symbols.check_circle_outline : Symbols.circle, size: 18, color: ready ? Colors.green[700] : Colors.grey),
       const SizedBox(width: 8),
       Text.verbatim(name, style: const TextStyle(fontWeight: FontWeight.w600)),
     ]);
@@ -353,7 +354,7 @@ class _OAuthSectionState extends State<_OAuthSection> {
             Wrap(spacing: 8, children: [
               FilledButton.icon(
                 key: ValueKey('${storage.redirectName}-signin'),
-                icon: _opening ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)) : const Icon(Icons.login, size: 18),
+                icon: _opening ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator.adaptive(strokeWidth: 2,)) : const Icon(Symbols.login, size: 18),
                 label: Text.verbatim(tr('Sign in to {service}', {'service': storage.label})),
                 onPressed: _opening ? null : _signIn,
               ),

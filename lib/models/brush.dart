@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -184,7 +185,7 @@ class PenBrush extends Brush {
   String get label => 'Pen';
 
   @override
-  IconData get icon => Icons.edit_outlined;
+  IconData get icon => Symbols.edit;
 
   @override
   bool get usesPressure => true;
@@ -264,7 +265,7 @@ class RollerBrush extends Brush {
   const RollerBrush({this.id = rollerBrushId, this.label = 'Roller', this.params = const RollerParams()});
 
   @override
-  IconData get icon => Icons.format_paint_outlined;
+  IconData get icon => Symbols.format_paint;
 
   @override
   double get widthScale => params.width;
@@ -517,7 +518,7 @@ class ParamBrush extends Brush {
   @override
   final IconData icon;
 
-  const ParamBrush(this.id, this.label, this.params, {this.icon = Icons.brush_outlined});
+  const ParamBrush(this.id, this.label, this.params, {this.icon = Symbols.brush});
 
   @override
   double get widthScale => params.width;
@@ -1233,7 +1234,7 @@ class StampBrush extends Brush {
   final double widthScale;
   final StampParams params;
 
-  const StampBrush(this.id, this.label, {this.icon = Icons.bubble_chart_outlined, this.widthScale = 4, this.params = const StampParams()});
+  const StampBrush(this.id, this.label, {this.icon = Symbols.bubble_chart, this.widthScale = 4, this.params = const StampParams()});
 
   @override
   bool get writing => false;
@@ -1406,7 +1407,7 @@ class MixBrush extends Brush {
   /// Whether the second is drawn under the first (else over it).
   final bool underneath;
 
-  const MixBrush(this.id, this.label, this.a, this.b, {this.icon = Icons.layers_outlined, this.sizeB = 1, this.underneath = false});
+  const MixBrush(this.id, this.label, this.a, this.b, {this.icon = Symbols.layers, this.sizeB = 1, this.underneath = false});
 
   @override
   double get widthScale => a.widthScale;
@@ -1452,24 +1453,24 @@ class Brushes {
   static const roller = RollerBrush();
 
   /// Graphite on paper: a little grain at the edges, thicker where the pencil presses, never quite black.
-  static const pencil = ParamBrush('pencil', 'Pencil', BrushParams(pressure: 0.5, smoothing: 0.3, jitter: 0.55, opacity: 0.82, taper: 0.15), icon: Icons.create_outlined);
+  static const pencil = ParamBrush('pencil', 'Pencil', BrushParams(pressure: 0.5, smoothing: 0.3, jitter: 0.55, opacity: 0.82, taper: 0.15), icon: Symbols.create);
 
   /// A fountain pen: smooth, thick where it presses, running out to a point at both ends.
-  static const fountain = ParamBrush('fountain', 'Fountain pen', BrushParams(width: 1.2, pressure: 0.9, smoothing: 0.9, taper: 0.7), icon: Icons.history_edu_outlined);
+  static const fountain = ParamBrush('fountain', 'Fountain pen', BrushParams(width: 1.2, pressure: 0.9, smoothing: 0.9, taper: 0.7), icon: Symbols.history_edu);
 
   /// A broad nib held at an angle: thick across it, thin along it.
-  static const calligraphy = ParamBrush('calligraphy', 'Calligraphy', BrushParams(width: 2.5, smoothing: 0.7, nibAngle: 40, nibFlatness: 0.16), icon: Icons.draw_outlined);
+  static const calligraphy = ParamBrush('calligraphy', 'Calligraphy', BrushParams(width: 2.5, smoothing: 0.7, nibAngle: 40, nibFlatness: 0.16), icon: Symbols.draw);
 
   /// A felt marker: an even, thick line that is a little see-through.
-  static const marker = ParamBrush('marker', 'Marker', BrushParams(width: 3, smoothing: 0.6, opacity: 0.85), icon: Icons.brush);
+  static const marker = ParamBrush('marker', 'Marker', BrushParams(width: 3, smoothing: 0.6, opacity: 0.85), icon: Symbols.brush);
 
   /// Charcoal: rough, dark where it presses and crumbling at the ends.
-  static const charcoal = CharcoalBrush('charcoal', 'Charcoal', Icons.gradient,
+  static const charcoal = CharcoalBrush('charcoal', 'Charcoal', Symbols.gradient,
       ParamBrush('charcoal', 'Charcoal', BrushParams(width: 3, pressure: 0.7, smoothing: 0.2, jitter: 0.12, opacity: 0.1, taper: 0.35)));
 
   /// A spray: twenty thin layers whose opacity follows a bell curve, so the line fades smoothly from a dense core to nothing at the
   /// edges, with no visible bands.
-  static const airbrush = SoftBrush('airbrush', 'Airbrush', Icons.blur_on, widthScale: 6, speckle: 5, blurs: [(width: 0.5, opacity: 0.55, blur: 0.17), (width: 0.22, opacity: 0.5, blur: 0.1)], rings: [
+  static const airbrush = SoftBrush('airbrush', 'Airbrush', Symbols.blur_on, widthScale: 6, speckle: 5, blurs: [(width: 0.5, opacity: 0.55, blur: 0.17), (width: 0.22, opacity: 0.5, blur: 0.1)], rings: [
     (width: 1.00, opacity: 0.029), (width: 0.95, opacity: 0.012), (width: 0.90, opacity: 0.015), (width: 0.85, opacity: 0.020),
     (width: 0.80, opacity: 0.026), (width: 0.75, opacity: 0.033), (width: 0.70, opacity: 0.040), (width: 0.65, opacity: 0.050),
     (width: 0.60, opacity: 0.060), (width: 0.55, opacity: 0.071), (width: 0.50, opacity: 0.084), (width: 0.45, opacity: 0.097),
@@ -1478,7 +1479,7 @@ class Brushes {
   ]);
 
   /// A wash of watercolour: pale and wide, with edges that spread unevenly.
-  static const watercolour = SoftBrush('watercolour', 'Watercolour', Icons.water_drop_outlined,
+  static const watercolour = SoftBrush('watercolour', 'Watercolour', Symbols.water_drop,
       widthScale: 4, wobble: 0.45, rings: [(width: 1, opacity: 0.16), (width: 0.82, opacity: 0.12), (width: 0.55, opacity: 0.1)]);
 
   /// The brushes the tool "More brushes" adds (the pen and the roller are always there).

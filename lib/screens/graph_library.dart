@@ -126,7 +126,7 @@ class _GraphLibraryState extends State<GraphLibrary> {
                         child: ExpansionTile(
                           shape: const Border(),
                           collapsedShape: const Border(),
-                          leading: Icon(g.mode == 'notes' ? Icons.description_outlined : Icons.lightbulb_outline),
+                          leading: Icon(g.mode == 'notes' ? Symbols.description : Symbols.lightbulb_outline),
                           title: Text.verbatim(g.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: g.id == widget.frontId ? const TextStyle(fontWeight: FontWeight.w500) : null),
                           subtitle: Text.verbatim(
                             '${g.mode == 'notes' ? tr('Notes') : tr('Facts')} - ${_scope(g)} - ${_GraphViewState._ago(g.builtAt)}'
@@ -170,11 +170,11 @@ class _GraphLibraryState extends State<GraphLibrary> {
                                     IconButton(
                                       key: ValueKey('graph-version-compare-${v.id}'),
                                       tooltip: tr('Compare with the graph as it is now'),
-                                      icon: const Icon(Icons.compare_arrows),
+                                      icon: const Icon(Symbols.compare_arrows),
                                       onPressed: () => Navigator.pop(context, GraphLibraryResult(GraphLibraryAction.compareVersion, g.id, v.id)),
                                     ),
-                                    IconButton(key: ValueKey('graph-version-restore-${v.id}'), tooltip: tr('Bring this picture back'), icon: const Icon(Icons.restore), onPressed: () => _restore(v, g)),
-                                    IconButton(key: ValueKey('graph-version-delete-${v.id}'), tooltip: tr('Delete'), icon: const Icon(Icons.delete_outline), onPressed: () => _deleteVersion(v)),
+                                    IconButton(key: ValueKey('graph-version-restore-${v.id}'), tooltip: tr('Bring this picture back'), icon: const Icon(Symbols.restore), onPressed: () => _restore(v, g)),
+                                    IconButton(key: ValueKey('graph-version-delete-${v.id}'), tooltip: tr('Delete'), icon: const Icon(Symbols.delete_outline), onPressed: () => _deleteVersion(v)),
                                   ],
                                 ),
                               ),

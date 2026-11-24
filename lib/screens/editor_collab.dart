@@ -265,7 +265,7 @@ extension _EditorCollab on _FixedPageNoteEditorState {
         Badge(
           isLabelVisible: live && count > 1,
           label: Text('$count'),
-          child: Icon(live ? Icons.group : Icons.group_add_outlined, size: 20, color: live ? Theme.of(context).colorScheme.primary : null),
+          child: Icon(live ? Symbols.group : Symbols.group_add, size: 20, color: live ? Theme.of(context).colorScheme.primary : null),
         ),
         // (a link that is not good: seen without opening the panel; nothing while all is well)
         if (live) Positioned(left: -2, bottom: -1, child: LinkDot(band: _live!.linkBand)),

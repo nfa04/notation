@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/tag_repository.dart';
@@ -77,7 +78,7 @@ class _NoteTagsDialogState extends State<_NoteTagsDialog> {
             decoration: InputDecoration(
               labelText: tr('Add a tag'),
               helperText: tr('Use / to nest, like school/maths'),
-              suffixIcon: IconButton(key: const ValueKey('tag-add'), tooltip: tr('Add'), icon: const Icon(Icons.add), onPressed: _addTyped),
+              suffixIcon: IconButton(key: const ValueKey('tag-add'), tooltip: tr('Add'), icon: const Icon(Symbols.add), onPressed: _addTyped),
             ),
             onSubmitted: (_) => _addTyped(),
           ),
@@ -184,8 +185,8 @@ class _ManageTagsDialogState extends State<_ManageTagsDialog> {
             subtitle: n.depth == 0 ? null : Text.verbatim(n.tag, style: const TextStyle(fontSize: 11)),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               Text.verbatim('${n.notes}', style: const TextStyle(fontSize: 12)),
-              IconButton(key: ValueKey('rename-tag-${n.tag}'), tooltip: tr('Rename'), icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => _rename(n)),
-              IconButton(key: ValueKey('delete-tag-${n.tag}'), tooltip: tr('Delete'), icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _delete(n)),
+              IconButton(key: ValueKey('rename-tag-${n.tag}'), tooltip: tr('Rename'), icon: const Icon(Symbols.edit, size: 18), onPressed: () => _rename(n)),
+              IconButton(key: ValueKey('delete-tag-${n.tag}'), tooltip: tr('Delete'), icon: const Icon(Symbols.delete_outline, size: 18), onPressed: () => _delete(n)),
             ]),
           ),
           ..._rows(n.children),

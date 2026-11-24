@@ -34,7 +34,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           key: const ValueKey('open-beside'),
           tooltip: tr('Open another note beside this one'),
           visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.vertical_split_outlined, size: 20),
+          icon: const Icon(Symbols.vertical_split, size: 20),
           onPressed: _chooseNoteBeside,
         ),
       // takes back (or does again) the last change of any kind, not only drawings
@@ -45,14 +45,14 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             key: const ValueKey('undo-any'),
             tooltip: tr('Undo'),
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.undo_rounded, size: 20),
+            icon: const Icon(Symbols.undo_rounded, size: 20),
             onPressed: _undoStack.canUndo ? _undoDrawing : null,
           ),
           IconButton(
             key: const ValueKey('redo-any'),
             tooltip: tr('Redo'),
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.redo_rounded, size: 20),
+            icon: const Icon(Symbols.redo_rounded, size: 20),
             onPressed: _undoStack.canRedo ? _redoDrawing : null,
           ),
         ]),
@@ -71,7 +71,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           key: const ValueKey('remind-note'),
           tooltip: tr('Remind me about this note'),
           visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.add_alert_outlined, size: 20),
+          icon: const Icon(Symbols.add_alert, size: 20),
           onPressed: _remindAboutNote,
         ),
       if (widget.locks != null && _on(Feature.lock)) _lockButton(),
@@ -80,7 +80,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         key: const ValueKey('favorite-note'),
         tooltip: tr(_favorite ? 'Remove from favourites' : 'Add to favourites'),
         visualDensity: VisualDensity.compact,
-        icon: Icon(_favorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 20, color: _favorite ? Theme.of(context).colorScheme.primary : null),
+        icon: Icon(_favorite ? Symbols.star_rounded : Symbols.star_outline_rounded, size: 20, color: _favorite ? Theme.of(context).colorScheme.primary : null),
         onPressed: _toggleFavorite,
       ),
       ],
@@ -91,13 +91,13 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           ButtonSegment(
             value: CanvasInteractionMode.selectText,
             // (a pointer: this is where things are picked up and moved, not "select all")
-            icon: const Icon(Icons.near_me_outlined, size: 16),
+            icon: const Icon(Symbols.near_me, size: 16),
             label: const Text('Select'),
             tooltip: tr('Select and move what is on the page, and type in text boxes'),
           ),
           ButtonSegment(
             value: CanvasInteractionMode.draw,
-            icon: const Icon(Icons.edit, size: 16),
+            icon: const Icon(Symbols.edit, size: 16),
             label: const Text('Draw'),
             tooltip: tr('Write and draw with the pen'),
           ),
@@ -105,7 +105,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           ButtonSegment(
             value: CanvasInteractionMode.document,
             enabled: _isBlank && !_infinite || _pdfEditable,
-            icon: Icon(_isBlank ? Icons.article_outlined : Icons.edit_document, size: 16),
+            icon: Icon(_isBlank ? Symbols.article : Symbols.edit_document, size: 16),
             label: _isBlank ? const Text('Document') : const Text('Edit PDF'),
             tooltip: _infinite
                 ? tr('An infinite canvas has no typed text of its own: add a text box instead')
@@ -122,7 +122,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       if (_mode == CanvasInteractionMode.document && !_isBlank) ...[
         IconButton(
           tooltip: tr('Undo the last change to the PDF'),
-          icon: const Icon(Icons.undo_rounded, size: 20),
+          icon: const Icon(Symbols.undo_rounded, size: 20),
           onPressed: _pdfEditUndo.isEmpty || _pdfEditBusy ? null : _undoPdfEdit,
         ),
         Text(tr('Tap text or a picture to change it'), style: const TextStyle(fontSize: 12)),
@@ -135,35 +135,35 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         tooltip: tr(_desktop
             ? 'Add a text box (or triple-click the page)'
             : 'Add a text box (or double-tap the page)'),
-        icon: const Icon(Icons.text_fields_rounded, size: 20),
+        icon: const Icon(Symbols.text_fields_rounded, size: 20),
         onPressed: _addTextBoxHere,
       ),
       if (_on(Feature.tables))
       IconButton(
         key: const ValueKey('add-table'),
         tooltip: tr(_mode == CanvasInteractionMode.document ? 'Insert a table' : 'Add a table'),
-        icon: const Icon(Icons.table_chart_outlined, size: 20),
+        icon: const Icon(Symbols.table_chart, size: 20),
         onPressed: _insertTable,
       ),
       if (_on(Feature.tables))
       IconButton(
         key: const ValueKey('add-truth-table'),
         tooltip: tr('Make the truth table of a formula'),
-        icon: const Icon(Icons.grid_on, size: 20),
+        icon: const Icon(Symbols.grid_on, size: 20),
         onPressed: _insertTruthTable,
       ),
       if (_on(Feature.diagrams))
       IconButton(
         key: const ValueKey('add-diagram'),
         tooltip: tr('Make a mind map or a flowchart from a text'),
-        icon: const Icon(Icons.account_tree_outlined, size: 20),
+        icon: const Icon(Symbols.account_tree, size: 20),
         onPressed: _insertDiagram,
       ),
       if (_on(Feature.images))
       PopupMenuButton<String>(
         key: const ValueKey('scan-menu'),
         tooltip: tr('Scan a page or read text from a picture'),
-        icon: const Icon(Icons.document_scanner_outlined, size: 20),
+        icon: const Icon(Symbols.document_scanner, size: 20),
         onSelected: _scanAction,
         itemBuilder: (_) => [
           if (_hasCamera) PopupMenuItem(value: 'camera', child: Text('Scan a page with the camera')),
@@ -175,7 +175,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       IconButton(
         tooltip: tr('Add a picture'),
         icon: const Icon(
-          Icons.add_photo_alternate_outlined,
+          Symbols.add_photo_alternate,
           size: 20
         ),
         onPressed: _addImage,
@@ -184,14 +184,14 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       IconButton(
         key: const ValueKey('add-collage'),
         tooltip: tr('Add several pictures as a mood board'),
-        icon: const Icon(Icons.dashboard_outlined, size: 20),
+        icon: const Icon(Symbols.dashboard, size: 20),
         onPressed: _addCollage,
       ),
       if (_on(Feature.stamps))
       IconButton(
         key: const ValueKey('stamps'),
         tooltip: tr('Stamps: drawings kept to put on a page again'),
-        icon: Icon(Icons.approval_outlined, size: 20, color: _stampsOpen ? Theme.of(context).colorScheme.primary : null),
+        icon: Icon(Symbols.approval, size: 20, color: _stampsOpen ? Theme.of(context).colorScheme.primary : null),
         onPressed: _openStamps,
       ),
 
@@ -216,13 +216,13 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.grid_on_rounded, size: 16),
+                const Icon(Symbols.grid_on_rounded, size: 16),
                 const SizedBox(width: 4),
                 Text(
                   tr(_background.label),
                   style: const TextStyle(fontSize: 12),
                 ),
-                const Icon(Icons.arrow_drop_down, size: 16),
+                const Icon(Symbols.arrow_drop_down, size: 16),
               ],
             ),
           ),
@@ -252,13 +252,13 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.crop_portrait_rounded, size: 16),
+                const Icon(Symbols.crop_portrait_rounded, size: 16),
                 const SizedBox(width: 4),
                 Text(
                   _pageFormat.label,
                   style: const TextStyle(fontSize: 12),
                 ),
-                const Icon(Icons.arrow_drop_down, size: 16),
+                const Icon(Symbols.arrow_drop_down, size: 16),
               ],
             ),
           ),
@@ -270,8 +270,8 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           visualDensity: VisualDensity.compact,
           icon: Icon(
             _landscape
-                ? Icons.crop_landscape_rounded
-                : Icons.crop_portrait_rounded,
+                ? Symbols.crop_landscape_rounded
+                : Symbols.crop_portrait_rounded,
             size: 18,
           ),
           onPressed: () => setState(() => _landscape = !_landscape),
@@ -284,7 +284,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         tooltip: tr(_bannerImage == null
             ? 'Set a theme image for this note'
             : 'Change the theme image'),
-        icon: const Icon(Icons.wallpaper_outlined, size: 20),
+        icon: const Icon(Symbols.wallpaper, size: 20),
         onPressed: _pickThemeImage,
       ),
       ],
@@ -293,7 +293,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         IconButton(
           key: const ValueKey('dictate'),
           tooltip: tr('Dictate: write down what is said'),
-          icon: const Icon(Icons.mic_none, size: 20),
+          icon: const Icon(Symbols.mic_none, size: 20),
           onPressed: _dictate,
         ),
       if (widget.readAloud != null && _on(Feature.readAloud))
@@ -304,7 +304,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
             tooltip: tr(widget.readAloud!.preparing ? 'Getting the voice ready... (press to stop)' : widget.readAloud!.speaking ? 'Stop reading' : 'Read the note aloud'),
             icon: widget.readAloud!.preparing
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator.adaptive(key: ValueKey('read-aloud-preparing'), strokeWidth: 2))
-                : Icon(widget.readAloud!.speaking ? Icons.stop_circle_outlined : Icons.volume_up_outlined, size: 20),
+                : Icon(widget.readAloud!.speaking ? Symbols.stop_circle : Symbols.volume_up, size: 20),
             onPressed: _readAloud,
           ),
         ),
@@ -312,20 +312,20 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         IconButton(
           key: const ValueKey('ideas-button'),
           tooltip: tr('Ideas from the assistant: colours, drawing prompts, characters, stories'),
-          icon: const Icon(Icons.lightbulb_outline, size: 20),
+          icon: const Icon(Symbols.lightbulb_outline, size: 20),
           onPressed: _openIdeas,
         ),
       if (widget.ai != null && _on(Feature.assistant)) ...[
         IconButton(
           key: const ValueKey('assistant-button'),
           tooltip: tr('Ask about this document'),
-          icon: Icon(Icons.auto_awesome, size: 20, color: _assistantOpen ? Theme.of(context).colorScheme.primary : null),
+          icon: Icon(Symbols.auto_awesome, size: 20, color: _assistantOpen ? Theme.of(context).colorScheme.primary : null),
           onPressed: _toggleAssistant,
         ),
         IconButton(
           key: const ValueKey('generated-button'),
           tooltip: tr('What the AI made of this note'),
-          icon: Icon(Icons.auto_fix_high_outlined, size: 20, color: _generatedOpen ? Theme.of(context).colorScheme.primary : null),
+          icon: Icon(Symbols.auto_fix_high, size: 20, color: _generatedOpen ? Theme.of(context).colorScheme.primary : null),
           onPressed: _toggleGenerated,
         ),
       ],
@@ -335,7 +335,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         IconButton(
           key: const ValueKey('history-button'),
           tooltip: tr('History of this note'),
-          icon: Icon(Icons.history, size: 20, color: _historyOpen ? Theme.of(context).colorScheme.primary : null),
+          icon: Icon(Symbols.history, size: 20, color: _historyOpen ? Theme.of(context).colorScheme.primary : null),
           onPressed: _openHistory,
         ),
       if (widget.collab != null && _on(Feature.live)) _liveButton(),
@@ -349,7 +349,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         const SizedBox(width: 8),
       ] else if (_importedPdfName != null) ...[
         Chip(
-          avatar: const Icon(Icons.picture_as_pdf, size: 16),
+          avatar: const Icon(Symbols.picture_as_pdf, size: 16),
           label: Text(
             tr('{name} ({n} Pages)', {'name': _importedPdfName, 'n': _totalPages}),
             style: const TextStyle(fontSize: 12),
@@ -368,7 +368,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
                 height: 14,
                 child: CircularProgressIndicator.adaptive(strokeWidth: 2),
               )
-            : const Icon(Icons.file_open_outlined, size: 20),
+            : const Icon(Symbols.file_open, size: 20),
         onPressed: _isLoadingPdf ? null : _pickAndLoadPdfFile,
       ),
       const SizedBox(width: 8),
@@ -377,7 +377,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         IconButton(
           key: const ValueKey('add-pdfs-button'),
           tooltip: tr('Add PDFs: their pages come after the last page'),
-          icon: const Icon(Icons.note_add_outlined, size: 20),
+          icon: const Icon(Symbols.note_add, size: 20),
           onPressed: _isLoadingPdf || _pdfEditBusy ? null : _addPdfs,
         ),
         const SizedBox(width: 8),
@@ -386,7 +386,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         IconButton(
           key: const ValueKey('save-note-file'),
           tooltip: tr('Save this note as a file (.uninote), to keep or to open on another device'),
-          icon: const Icon(Icons.save_alt_rounded, size: 20),
+          icon: const Icon(Symbols.save_alt_rounded, size: 20),
           onPressed: () => saveNoteAsFile(context, widget.noteFiles!, widget.noteId, _titleController.text, beforeExport: _saveNow),
         ),
         const SizedBox(width: 4),
@@ -395,27 +395,27 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         IconButton(
           key: const ValueKey('export-images-button'),
           tooltip: tr('Export as pictures'),
-          icon: const Icon(Icons.image_outlined, size: 20),
+          icon: const Icon(Symbols.image, size: 20),
           onPressed: _isLoadingPdf ? null : _exportImages,
         ),
       if (_on(Feature.exportImages))
         IconButton(
           key: const ValueKey('export-svg-button'),
           tooltip: tr('Export as SVG (shapes for a vector program)'),
-          icon: const Icon(Icons.polyline_outlined, size: 20),
+          icon: const Icon(Symbols.polyline, size: 20),
           onPressed: _isLoadingPdf ? null : _exportSvg,
         ),
       if (_on(Feature.exportImages))
         IconButton(
           key: const ValueKey('export-ora-button'),
           tooltip: tr('Export with layers (OpenRaster, for Krita or GIMP)'),
-          icon: const Icon(Icons.layers_outlined, size: 20),
+          icon: const Icon(Symbols.layers, size: 20),
           onPressed: _isLoadingPdf ? null : _exportOra,
         ),
       IconButton(
         key: const ValueKey('export-markdown-button'),
         tooltip: tr('Export the whole note as Markdown'),
-        icon: const Icon(Icons.article_outlined, size: 20),
+        icon: const Icon(Symbols.article, size: 20),
         onPressed: _isLoadingPdf ? null : _exportNoteMarkdown,
       ),
       if (_hasDocument) _documentExportMenu(),
@@ -424,7 +424,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       IconButton(
         key: const ValueKey('export-pdf-button'),
         tooltip: tr('Export PDF'),
-        icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+        icon: const Icon(Symbols.picture_as_pdf, size: 20),
         onPressed: !_isLoadingPdf ? _exportPdf : null,
       ),
       ],
@@ -448,7 +448,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         key: const ValueKey('customize-toolbar'),
         tooltip: tr('Arrange the toolbars'),
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.tune_rounded, size: 20),
+        icon: const Icon(Symbols.tune_rounded, size: 20),
         onPressed: _customizeToolbar,
       );
 

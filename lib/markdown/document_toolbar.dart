@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show listEquals;
@@ -300,7 +301,7 @@ class DocumentToolbar extends StatelessWidget {
           itemBuilder: (_) => items,
           child: Padding(
             padding: line ? const EdgeInsets.fromLTRB(6, 6, 0, 6) : const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-            child: Row(mainAxisSize: line ? MainAxisSize.max : MainAxisSize.min, children: [line ? Expanded(child: label) : label, Icon(Icons.arrow_drop_down, size: line ? 16 : 18)]),
+            child: Row(mainAxisSize: line ? MainAxisSize.max : MainAxisSize.min, children: [line ? Expanded(child: label) : label, Icon(Symbols.arrow_drop_down, size: line ? 16 : 18)]),
           ),
         );
     Widget swatches(List<Color> colors, AttributeType type, String noneLabel, IconData icon, String tooltip, Key key, {bool marked = false, ValueChanged<Color?>? onSelected}) =>
@@ -354,7 +355,7 @@ class DocumentToolbar extends StatelessWidget {
         ],
         onSelected: (style) => _edit((v) => setLineStyle(v, style)),
       );
-    final stylesButton = button(Icons.style_outlined, 'Styles of this document', () async {
+    final stylesButton = button(Symbols.style, 'Styles of this document', () async {
         final now = documentStyles(parseMarkdown(controller.text));
         final styles = await showStylesDialog(context, now);
         if (styles == null) return;
@@ -394,42 +395,42 @@ class DocumentToolbar extends StatelessWidget {
 
     final tools = <Widget>[
       if (!vertical) ...[styleMenu, stylesButton, fontMenu, sizeMenu, divider],
-      button(Icons.format_bold, 'Bold', () => _edit((v) => toggleInline(v, '**')), active: run?.bold ?? false),
-      button(Icons.format_italic, 'Italic', () => _edit((v) => toggleInline(v, '*')), active: run?.italic ?? false),
-      button(Icons.format_underlined, 'Underline', () => controller.toggleAttribute(AttributeType.underline),
+      button(Symbols.format_bold, 'Bold', () => _edit((v) => toggleInline(v, '**')), active: run?.bold ?? false),
+      button(Symbols.format_italic, 'Italic', () => _edit((v) => toggleInline(v, '*')), active: run?.italic ?? false),
+      button(Symbols.format_underlined, 'Underline', () => controller.toggleAttribute(AttributeType.underline),
           active: has(AttributeType.underline), key: const ValueKey('doc-underline')),
-      button(Icons.format_strikethrough, 'Strikethrough', () => _edit((v) => toggleInline(v, '~~')), active: run?.strike ?? false),
-      button(Icons.superscript, 'Superscript', () => _script(blocks, raised: true),
+      button(Symbols.format_strikethrough, 'Strikethrough', () => _edit((v) => toggleInline(v, '~~')), active: run?.strike ?? false),
+      button(Symbols.superscript, 'Superscript', () => _script(blocks, raised: true),
           active: has(AttributeType.superscript) || (run?.superscript ?? false), key: const ValueKey('doc-superscript')),
-      button(Icons.subscript, 'Subscript', () => _script(blocks, raised: false),
+      button(Symbols.subscript, 'Subscript', () => _script(blocks, raised: false),
           active: has(AttributeType.subscript) || (run?.subscript ?? false), key: const ValueKey('doc-subscript')),
-      swatches(textColors, AttributeType.color, 'Automatic', Icons.format_color_text, 'Text colour', const ValueKey('doc-color')),
-      swatches(highlightColors, AttributeType.highlight, 'No highlight', Icons.border_color, 'Highlight', const ValueKey('doc-highlight'),
+      swatches(textColors, AttributeType.color, 'Automatic', Symbols.format_color_text, 'Text colour', const ValueKey('doc-color')),
+      swatches(highlightColors, AttributeType.highlight, 'No highlight', Symbols.border_color, 'Highlight', const ValueKey('doc-highlight'),
           marked: run?.highlight ?? false, onSelected: (c) => _highlight(blocks, c)),
-      button(Icons.code, 'Code', () => _edit((v) => toggleInline(v, '`')), active: run?.code ?? false),
+      button(Symbols.code, 'Code', () => _edit((v) => toggleInline(v, '`')), active: run?.code ?? false),
       if (controller is LiveMarkdownController)
-        button(Icons.format_paint_outlined, 'Copy formatting, then select text and press again to apply it',
+        button(Symbols.format_paint, 'Copy formatting, then select text and press again to apply it',
             () => _paint(run), active: (controller as LiveMarkdownController).copiedLook != null, key: const ValueKey('doc-painter')),
-      button(Icons.format_clear, 'Clear formatting', () {
+      button(Symbols.format_clear, 'Clear formatting', () {
         _edit(clearInlineMarkdown);
         controller.clearAttributes();
       }, key: const ValueKey('doc-clear')),
       divider,
       for (final (align, icon, label) in const [
-        ('left', Icons.format_align_left, 'Align left'),
-        ('center', Icons.format_align_center, 'Centre'),
-        ('right', Icons.format_align_right, 'Align right'),
-        ('justify', Icons.format_align_justify, 'Justify'),
+        ('left', Symbols.format_align_left, 'Align left'),
+        ('center', Symbols.format_align_center, 'Centre'),
+        ('right', Symbols.format_align_right, 'Align right'),
+        ('justify', Symbols.format_align_justify, 'Justify'),
       ])
         button(icon, label, () => _edit((v) => changeParagraphFormat(v, (f) => f.copyWith(align: align))),
             active: format.align == align, key: ValueKey('doc-align-$align')),
-      button(Icons.format_indent_decrease, 'Decrease indent', format.indent == 0 && lineStyle == null ? null : () => _indent(false),
+      button(Symbols.format_indent_decrease, 'Decrease indent', format.indent == 0 && lineStyle == null ? null : () => _indent(false),
           key: const ValueKey('doc-outdent')),
-      button(Icons.format_indent_increase, 'Increase indent', () => _indent(true), key: const ValueKey('doc-indent')),
+      button(Symbols.format_indent_increase, 'Increase indent', () => _indent(true), key: const ValueKey('doc-indent')),
       menu<double>(
         key: const ValueKey('doc-spacing'),
         tooltip: 'Line spacing',
-        label: const Icon(Icons.format_line_spacing, size: 20),
+        label: const Icon(Symbols.format_line_spacing, size: 20),
         items: [
           for (final s in const [1.0, 1.15, 1.5, 2.0])
             CheckedPopupMenuItem(key: ValueKey('doc-spacing-$s'), value: s, checked: format.spacing == s, child: Text.verbatim('$s')),
@@ -437,69 +438,69 @@ class DocumentToolbar extends StatelessWidget {
         onSelected: (s) => _edit((v) => changeParagraphFormat(v, (f) => f.copyWith(spacing: s))),
       ),
       divider,
-      button(Icons.format_list_bulleted, 'Bulleted list', () => _edit((v) => toggleLineStyle(v, LineStyle.bullet)), active: lineStyle == LineStyle.bullet),
-      button(Icons.format_list_numbered, 'Numbered list', () => _edit((v) => toggleLineStyle(v, LineStyle.numbered)), active: lineStyle == LineStyle.numbered),
-      button(Icons.checklist, 'Checklist', () => _edit((v) => toggleLineStyle(v, LineStyle.task)),
+      button(Symbols.format_list_bulleted, 'Bulleted list', () => _edit((v) => toggleLineStyle(v, LineStyle.bullet)), active: lineStyle == LineStyle.bullet),
+      button(Symbols.format_list_numbered, 'Numbered list', () => _edit((v) => toggleLineStyle(v, LineStyle.numbered)), active: lineStyle == LineStyle.numbered),
+      button(Symbols.checklist, 'Checklist', () => _edit((v) => toggleLineStyle(v, LineStyle.task)),
           active: lineStyle == LineStyle.task, key: const ValueKey('doc-checklist')),
-      button(Icons.horizontal_rule, 'Horizontal line', () => _edit(insertRule), key: const ValueKey('doc-rule')),
+      button(Symbols.horizontal_rule, 'Horizontal line', () => _edit(insertRule), key: const ValueKey('doc-rule')),
       PopupMenuButton<String>(
         key: const ValueKey('doc-insert'),
         tooltip: tr('Insert'),
-        icon: const Icon(Icons.add_box_outlined, size: 20),
+        icon: const Icon(Symbols.add_box, size: 20),
         onSelected: (what) => _insert(context, what),
         itemBuilder: (_) => [
           if (onPicture != null)
-            PopupMenuItem(key: const ValueKey('doc-insert-picture'), value: 'picture', child: _item(Icons.image_outlined, 'Picture...')),
-          PopupMenuItem(key: const ValueKey('doc-insert-footnote'), value: 'footnote', child: _item(Icons.notes, 'Footnote')),
-          PopupMenuItem(key: const ValueKey('doc-insert-toc'), value: 'toc', child: _item(Icons.toc, 'Table of contents')),
-          PopupMenuItem(key: const ValueKey('doc-insert-caption'), value: 'caption', child: _item(Icons.short_text, 'Caption')),
-          PopupMenuItem(key: const ValueKey('doc-insert-ref'), value: 'ref', child: _item(Icons.link, 'Cross-reference...')),
-          PopupMenuItem(key: const ValueKey('doc-insert-pagebreak'), value: 'pagebreak', child: _item(Icons.insert_page_break_outlined, 'Page break')),
-          PopupMenuItem(key: const ValueKey('doc-insert-symbol'), value: 'symbol', child: _item(Icons.emoji_symbols, 'Special character...')),
-          PopupMenuItem(key: const ValueKey('doc-insert-edges'), value: 'edges', child: _item(Icons.vertical_split_outlined, 'Header and footer...')),
-          PopupMenuItem(key: const ValueKey('doc-insert-columns'), value: 'columns', child: _item(Icons.view_column_outlined, 'Columns...')),
-          PopupMenuItem(key: const ValueKey('doc-insert-template'), value: 'template', child: _item(Icons.dashboard_customize_outlined, 'Template...')),
+            PopupMenuItem(key: const ValueKey('doc-insert-picture'), value: 'picture', child: _item(Symbols.image, 'Picture...')),
+          PopupMenuItem(key: const ValueKey('doc-insert-footnote'), value: 'footnote', child: _item(Symbols.notes, 'Footnote')),
+          PopupMenuItem(key: const ValueKey('doc-insert-toc'), value: 'toc', child: _item(Symbols.toc, 'Table of contents')),
+          PopupMenuItem(key: const ValueKey('doc-insert-caption'), value: 'caption', child: _item(Symbols.short_text, 'Caption')),
+          PopupMenuItem(key: const ValueKey('doc-insert-ref'), value: 'ref', child: _item(Symbols.link, 'Cross-reference...')),
+          PopupMenuItem(key: const ValueKey('doc-insert-pagebreak'), value: 'pagebreak', child: _item(Symbols.insert_page_break, 'Page break')),
+          PopupMenuItem(key: const ValueKey('doc-insert-symbol'), value: 'symbol', child: _item(Symbols.emoji_symbols, 'Special character...')),
+          PopupMenuItem(key: const ValueKey('doc-insert-edges'), value: 'edges', child: _item(Symbols.vertical_split, 'Header and footer...')),
+          PopupMenuItem(key: const ValueKey('doc-insert-columns'), value: 'columns', child: _item(Symbols.view_column, 'Columns...')),
+          PopupMenuItem(key: const ValueKey('doc-insert-template'), value: 'template', child: _item(Symbols.dashboard_customize, 'Template...')),
           if (onImportWord != null)
-            PopupMenuItem(key: const ValueKey('doc-insert-word'), value: 'word', child: _item(Icons.description_outlined, 'Open a file (Word, web page, Markdown, text, PDF)...')),
+            PopupMenuItem(key: const ValueKey('doc-insert-word'), value: 'word', child: _item(Symbols.description, 'Open a file (Word, web page, Markdown, text, PDF)...')),
         ],
       ),
-      if (onTable != null) button(Icons.table_chart_outlined, 'Insert a table', onTable, key: const ValueKey('table-in-text')),
+      if (onTable != null) button(Symbols.table_chart, 'Insert a table', onTable, key: const ValueKey('table-in-text')),
       if (tableAt(text, sel.start) != null)
         PopupMenuButton<TableAction>(
           key: const ValueKey('doc-table'),
           tooltip: tr('Change the table'),
-          icon: Icon(Icons.table_view, size: 20, color: scheme.primary),
+          icon: Icon(Symbols.table_view, size: 20, color: scheme.primary),
           onSelected: (a) {
             final changed = editTable(controller.value, a);
             if (changed != null) _set(changed);
           },
           itemBuilder: (_) => [
             for (final (action, icon, label) in const [
-              (TableAction.rowAbove, Icons.arrow_upward, 'Add a row above'),
-              (TableAction.rowBelow, Icons.arrow_downward, 'Add a row below'),
-              (TableAction.deleteRow, Icons.playlist_remove, 'Delete this row'),
-              (TableAction.columnLeft, Icons.arrow_back, 'Add a column to the left'),
-              (TableAction.columnRight, Icons.arrow_forward, 'Add a column to the right'),
-              (TableAction.deleteColumn, Icons.remove_road_outlined, 'Delete this column'),
-              (TableAction.alignLeft, Icons.format_align_left, 'Align the column left'),
-              (TableAction.alignCenter, Icons.format_align_center, 'Centre the column'),
-              (TableAction.alignRight, Icons.format_align_right, 'Align the column right'),
-              (TableAction.sortAscending, Icons.arrow_upward, 'Sort by this column, lowest first'),
-              (TableAction.sortDescending, Icons.arrow_downward, 'Sort by this column, highest first'),
-              (TableAction.totals, Icons.functions, 'Add a row of totals'),
+              (TableAction.rowAbove, Symbols.arrow_upward, 'Add a row above'),
+              (TableAction.rowBelow, Symbols.arrow_downward, 'Add a row below'),
+              (TableAction.deleteRow, Symbols.playlist_remove, 'Delete this row'),
+              (TableAction.columnLeft, Symbols.arrow_back, 'Add a column to the left'),
+              (TableAction.columnRight, Symbols.arrow_forward, 'Add a column to the right'),
+              (TableAction.deleteColumn, Symbols.remove_road, 'Delete this column'),
+              (TableAction.alignLeft, Symbols.format_align_left, 'Align the column left'),
+              (TableAction.alignCenter, Symbols.format_align_center, 'Centre the column'),
+              (TableAction.alignRight, Symbols.format_align_right, 'Align the column right'),
+              (TableAction.sortAscending, Symbols.arrow_upward, 'Sort by this column, lowest first'),
+              (TableAction.sortDescending, Symbols.arrow_downward, 'Sort by this column, highest first'),
+              (TableAction.totals, Symbols.functions, 'Add a row of totals'),
             ])
               PopupMenuItem(key: ValueKey('doc-table-${action.name}'), value: action, child: _item(icon, label)),
           ],
         ),
-      if (onCite != null) button(Icons.format_quote, 'Cite a source', onCite, key: const ValueKey('cite-in-text')),
-      if (onBibliography != null) button(Icons.menu_book_outlined, 'Insert the list of sources', onBibliography, key: const ValueKey('bibliography-in-text')),
+      if (onCite != null) button(Symbols.format_quote, 'Cite a source', onCite, key: const ValueKey('cite-in-text')),
+      if (onBibliography != null) button(Symbols.menu_book, 'Insert the list of sources', onBibliography, key: const ValueKey('bibliography-in-text')),
       if (onSolve != null) ...[
         divider,
-        button(Icons.functions, 'Solve, differentiate or integrate', onSolve, key: const ValueKey('solve-in-text')),
+        button(Symbols.functions, 'Solve, differentiate or integrate', onSolve, key: const ValueKey('solve-in-text')),
       ],
       divider,
       if (controller is LiveMarkdownController)
-        button(Icons.track_changes, 'Track changes', () {
+        button(Symbols.track_changes, 'Track changes', () {
           final c = controller as LiveMarkdownController;
           c.suggesting = !c.suggesting;
         }, active: (controller as LiveMarkdownController).suggesting, key: const ValueKey('doc-track')),
@@ -507,20 +508,20 @@ class DocumentToolbar extends StatelessWidget {
         key: const ValueKey('doc-changes'),
         tooltip: tr('Tracked changes'),
         enabled: hasTrackedChanges(text),
-        icon: Icon(Icons.rule, size: 20, color: hasTrackedChanges(text) ? null : scheme.onSurface.withValues(alpha: 0.38)),
+        icon: Icon(Symbols.rule, size: 20, color: hasTrackedChanges(text) ? null : scheme.onSurface.withValues(alpha: 0.38)),
         onSelected: (what) => _decide(accept: what.startsWith('accept'), all: what.endsWith('all')),
         itemBuilder: (_) => [
-          PopupMenuItem(key: const ValueKey('doc-accept-here'), value: 'accept', child: _item(Icons.check, 'Accept this change')),
-          PopupMenuItem(key: const ValueKey('doc-reject-here'), value: 'reject', child: _item(Icons.close, 'Reject this change')),
-          PopupMenuItem(key: const ValueKey('doc-accept-all'), value: 'accept-all', child: _item(Icons.done_all, 'Accept all changes')),
-          PopupMenuItem(key: const ValueKey('doc-reject-all'), value: 'reject-all', child: _item(Icons.remove_done, 'Reject all changes')),
+          PopupMenuItem(key: const ValueKey('doc-accept-here'), value: 'accept', child: _item(Symbols.check, 'Accept this change')),
+          PopupMenuItem(key: const ValueKey('doc-reject-here'), value: 'reject', child: _item(Symbols.close, 'Reject this change')),
+          PopupMenuItem(key: const ValueKey('doc-accept-all'), value: 'accept-all', child: _item(Symbols.done_all, 'Accept all changes')),
+          PopupMenuItem(key: const ValueKey('doc-reject-all'), value: 'reject-all', child: _item(Symbols.remove_done, 'Reject all changes')),
         ],
       ),
       if (controller is LiveMarkdownController)
         PopupMenuButton<String>(
           key: const ValueKey('doc-view'),
           tooltip: tr('View'),
-          icon: const Icon(Icons.visibility_outlined, size: 20),
+          icon: const Icon(Symbols.visibility, size: 20),
           onSelected: (what) {
             final c = controller as LiveMarkdownController;
             switch (what) {
@@ -541,7 +542,7 @@ class DocumentToolbar extends StatelessWidget {
             ];
           },
         ),
-      button(Icons.add_comment_outlined, 'Comment', () async {
+      button(Symbols.add_comment, 'Comment', () async {
         final said = await showCommentDialog(context);
         if (said != null && said.isNotEmpty) _edit((v) => addComment(v, said));
       }, key: const ValueKey('doc-comment')),
@@ -638,7 +639,7 @@ class DocumentToolbar extends StatelessWidget {
                 SimpleDialogOption(
                   key: ValueKey('columns-$n'),
                   onPressed: () => Navigator.pop(context, n),
-                  child: Row(children: [Icon(n == now ? Icons.radio_button_checked : Icons.radio_button_off, size: 18), const SizedBox(width: 12), Text(trCount(n, '1 column', '{n} columns'))]),
+                  child: Row(children: [Icon(n == now ? Symbols.radio_button_checked : Symbols.radio_button_unchecked, size: 18), const SizedBox(width: 12), Text(trCount(n, '1 column', '{n} columns'))]),
                 ),
             ],
           ),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -189,7 +190,7 @@ void main() {
     expect(find.byType(FixedPageNoteEditor), findsOneWidget); // (a passcode lock does not take the note away from under the person)
 
     // leaving puts it away; opening it again asks
-    await tester.tap(find.byIcon(Icons.home_outlined).first);
+    await tester.tap(find.byIcon(Symbols.home).first);
     await settle();
     await settle(); // (the tab of the note then reads its title again, and says what the list says)
     expect(locks.isOpen(id), isFalse);

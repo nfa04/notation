@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../ai/ai_service.dart';
 import '../extensions/extension_service.dart';
 import 'magic_extension_dialog.dart';
@@ -73,7 +74,7 @@ class AutomationsView extends StatelessWidget {
                             final folders = await repository.listFolders();
                             if (context.mounted) await showRuleWriter(context, service: service, folders: folders);
                           },
-                          icon: const Icon(Icons.edit_note),
+                          icon: const Icon(Symbols.edit_note),
                         )
                       : OutlinedButton.icon(
                     key: const ValueKey('describe-rule'),
@@ -81,7 +82,7 @@ class AutomationsView extends StatelessWidget {
                       final folders = await repository.listFolders();
                       if (context.mounted) await showRuleWriter(context, service: service, folders: folders);
                     },
-                    icon: const Icon(Icons.edit_note),
+                    icon: const Icon(Symbols.edit_note),
                     label: const Text('Describe a rule'),
                   ),
                 ),
@@ -96,7 +97,7 @@ class AutomationsView extends StatelessWidget {
                             final made = await showMagicExtension(context, ai: ai!, extensions: extensions!, automations: service);
                             if (made != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(made.message), duration: const Duration(seconds: 8)));
                           },
-                          icon: const Icon(Icons.auto_fix_high),
+                          icon: const Icon(Symbols.auto_fix_high),
                         )
                       : OutlinedButton.icon(
                     key: const ValueKey('magic-automation'),
@@ -104,7 +105,7 @@ class AutomationsView extends StatelessWidget {
                       final made = await showMagicExtension(context, ai: ai!, extensions: extensions!, automations: service);
                       if (made != null && context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(made.message), duration: const Duration(seconds: 8)));
                     },
-                    icon: const Icon(Icons.auto_fix_high),
+                    icon: const Icon(Symbols.auto_fix_high),
                     label: const Text('Create with AI'),
                   ),
                 ),
@@ -115,12 +116,12 @@ class AutomationsView extends StatelessWidget {
                         key: const ValueKey('new-automation'),
                         tooltip: 'New automation',
                         onPressed: () => _edit(context),
-                        icon: const Icon(Icons.add),
+                        icon: const Icon(Symbols.add),
                       )
                     : FilledButton.icon(
                   key: const ValueKey('new-automation'),
                   onPressed: () => _edit(context),
-                  icon: const Icon(Icons.add),
+                  icon: const Icon(Symbols.add),
                   label: const Text('New automation'),
                 ),
               ),
@@ -221,7 +222,7 @@ class AutomationsView extends StatelessWidget {
           key: ValueKey('automation-${a.id}'),
           child: ListTile(
             isThreeLine: true,
-            leading: Icon(Icons.bolt, color: a.enabled ? scheme.primary : scheme.outline),
+            leading: Icon(Symbols.bolt, color: a.enabled ? scheme.primary : scheme.outline),
             title: Text('${tr(a.event.label)}  →  ${tr(a.action.label)}'),
             subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               for (final d in details) Text(d),
@@ -234,14 +235,14 @@ class AutomationsView extends StatelessWidget {
               IconButton(
                 key: ValueKey('automation-log-${a.id}'),
                 tooltip: tr('What this rule did'),
-                icon: const Icon(Icons.history),
+                icon: const Icon(Symbols.history),
                 onPressed: () => showAutomationLog(context, service: service, rule: a),
               ),
               if (a.event == AutomationEvent.dateFound)
                 IconButton(
                   key: ValueKey('automation-rescan-${a.id}'),
                   tooltip: tr('Forget which dates were handled: the next time a PDF is opened they count as new'),
-                  icon: const Icon(Icons.refresh),
+                  icon: const Icon(Symbols.refresh),
                   onPressed: () async {
                     await service.forgetHandled(a.id);
                     if (context.mounted) {
@@ -259,7 +260,7 @@ class AutomationsView extends StatelessWidget {
               IconButton(
                 key: ValueKey('automation-delete-${a.id}'),
                 tooltip: tr('Delete'),
-                icon: const Icon(Icons.delete_outline),
+                icon: const Icon(Symbols.delete_outline),
                 onPressed: () => service.remove(a.id),
               ),
             ]),
@@ -521,7 +522,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
             ),
             IconButton(
               tooltip: tr('Choose...'),
-              icon: const Icon(Icons.folder_open),
+              icon: const Icon(Symbols.folder_open),
               onPressed: () async {
                 final dir = await FilePicker.getDirectoryPath(dialogTitle: 'Where should the files go?');
                 if (dir != null) {
@@ -717,7 +718,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
                   ),
                 ),
                 if (widget.browseCloud != null)
-                  IconButton(key: const ValueKey('automation-cloud-browse'), tooltip: tr('Choose...'), icon: const Icon(Icons.folder_open), onPressed: _browseCloud),
+                  IconButton(key: const ValueKey('automation-cloud-browse'), tooltip: tr('Choose...'), icon: const Icon(Symbols.folder_open), onPressed: _browseCloud),
               ])
             else if (_action == AutomationAction.exportPdf || _action == AutomationAction.saveNoteFile)
               Row(children: [
@@ -732,7 +733,7 @@ class _AutomationDialogState extends State<AutomationDialog> {
                     ),
                   ),
                 ),
-                IconButton(tooltip: tr('Choose...'), icon: const Icon(Icons.folder_open), onPressed: _browse),
+                IconButton(tooltip: tr('Choose...'), icon: const Icon(Symbols.folder_open), onPressed: _browse),
               ]),
             if (_action == AutomationAction.addTask) ...[
               TextField(
@@ -934,11 +935,11 @@ class _AutomationDialogState extends State<AutomationDialog> {
                   trailing: IconButton(
                     key: ValueKey('automation-step-remove-$i'),
                     tooltip: tr('Take this step out'),
-                    icon: const Icon(Icons.close, size: 18),
+                    icon: const Icon(Symbols.close, size: 18),
                     onPressed: () => setState(() => _then = [..._then]..removeAt(i)),
                   ),
                 ),
-              TextButton.icon(key: const ValueKey('automation-add-step'), onPressed: _addStep, icon: const Icon(Icons.add), label: Text(tr('Add a step'))),
+              TextButton.icon(key: const ValueKey('automation-add-step'), onPressed: _addStep, icon: const Icon(Symbols.add), label: Text(tr('Add a step'))),
               Text(
                 tr('The steps run in the background, one after the other. Each can use {result}, what the one before said, in its text; a step that cannot do its work ends the chain.'),
                 style: Theme.of(context).textTheme.bodySmall,
@@ -1025,7 +1026,7 @@ class _CloudFolderPickerState extends State<_CloudFolderPicker> {
             IconButton(
               key: const ValueKey('cloud-picker-up'),
               tooltip: tr('Up'),
-              icon: const Icon(Icons.arrow_upward),
+              icon: const Icon(Symbols.arrow_upward),
               onPressed: _path.isEmpty ? null : () => _go(_path.sublist(0, _path.length - 1)),
             ),
             Expanded(child: Text(here, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall)),
@@ -1042,7 +1043,7 @@ class _CloudFolderPickerState extends State<_CloudFolderPicker> {
                       ListTile(
                         key: ValueKey('cloud-folder-$n'),
                         dense: true,
-                        leading: const Icon(Icons.folder_outlined),
+                        leading: const Icon(Symbols.folder),
                         title: Text(n),
                         onTap: () => _go([..._path, n]),
                       ),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart' show HardwareKeyboard;
@@ -70,13 +71,13 @@ class WorkspaceTabStrip extends StatelessWidget {
               children: [for (final t in tabs) _tab(context, t)],
             ),
           ),
-          IconButton(key: const ValueKey('tab-new'), tooltip: tr('Open a note in a new tab'), visualDensity: VisualDensity.compact, icon: const Icon(Icons.add, size: 20), onPressed: onNewTab),
+          IconButton(key: const ValueKey('tab-new'), tooltip: tr('Open a note in a new tab'), visualDensity: VisualDensity.compact, icon: const Icon(Symbols.add, size: 20), onPressed: onNewTab),
           if (tabs.length > 1)
             IconButton(
               key: const ValueKey('tab-all'),
               tooltip: allShown ? tr('Show one tab at a time') : tr('Show all tabs side by side'),
               visualDensity: VisualDensity.compact,
-              icon: Icon(allShown ? Icons.crop_square : Icons.view_column_outlined, size: 20),
+              icon: Icon(allShown ? Symbols.crop_square : Symbols.view_column, size: 20),
               onPressed: onToggleAll,
             ),
         ]),
@@ -138,7 +139,7 @@ class WorkspaceTabStrip extends StatelessWidget {
             iconSize: 14,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            icon: const Icon(Icons.close),
+            icon: const Icon(Symbols.close),
             onPressed: () => onClose(t.key),
           ),
         ]),

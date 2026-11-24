@@ -76,7 +76,7 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
                   tooltip: tr('Hide'),
                   visualDensity: VisualDensity.compact,
                   iconSize: 16,
-                  icon: Icon(Icons.close, color: scheme.onSecondaryContainer),
+                  icon: Icon(Symbols.close, color: scheme.onSecondaryContainer),
                   onPressed: () => setState(() => _inkChipHidden = true),
                 ),
               ]),

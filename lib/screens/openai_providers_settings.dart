@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
@@ -38,7 +39,7 @@ class OpenAiProvidersSection extends StatelessWidget {
             Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
               OutlinedButton.icon(
                 key: const ValueKey('openai-add-service'),
-                icon: const Icon(Icons.add, size: 18),
+                icon: const Icon(Symbols.add, size: 18),
                 label: Text(tr('Add a service')),
                 onPressed: () => showDialog<void>(context: context, builder: (_) => _ServiceEditor(provider: provider)),
               ),
@@ -73,7 +74,7 @@ class _ServiceRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(children: [
-          Icon(active ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: active ? scheme.primary : null),
+          Icon(active ? Symbols.radio_button_checked : Symbols.radio_button_unchecked, size: 20, color: active ? scheme.primary : null),
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -88,8 +89,8 @@ class _ServiceRow extends StatelessWidget {
               Text.verbatim(detail, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.complete ? scheme.onSurfaceVariant : scheme.error)),
             ]),
           ),
-          if (hasKey) Icon(Icons.vpn_key_outlined, size: 16, color: scheme.onSurfaceVariant),
-          IconButton(key: ValueKey('openai-edit-${profile.id}'), tooltip: tr('Edit'), icon: const Icon(Icons.edit_outlined, size: 20), onPressed: onEdit),
+          if (hasKey) Icon(Symbols.vpn_key, size: 16, color: scheme.onSurfaceVariant),
+          IconButton(key: ValueKey('openai-edit-${profile.id}'), tooltip: tr('Edit'), icon: const Icon(Symbols.edit, size: 20), onPressed: onEdit),
         ]),
       ),
     );
@@ -255,7 +256,7 @@ class _ServiceEditorState extends State<_ServiceEditor> {
               border: const OutlineInputBorder(),
               suffixIcon: IconButton(
                 tooltip: tr(_hidden ? 'Show the key' : 'Hide the key'),
-                icon: Icon(_hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                icon: Icon(_hidden ? Symbols.visibility : Symbols.visibility_off),
                 onPressed: () => setState(() => _hidden = !_hidden),
               ),
             ),
@@ -274,7 +275,7 @@ class _ServiceEditorState extends State<_ServiceEditor> {
               suffixIcon: IconButton(
                 key: const ValueKey('openai-choose-model'),
                 tooltip: tr('Choose from the service\'s models'),
-                icon: const Icon(Icons.list),
+                icon: const Icon(Symbols.list),
                 onPressed: _url.text.trim().isEmpty ? null : _chooseModel,
               ),
             ),
@@ -369,7 +370,7 @@ class _ModelPickerState extends State<_ModelPicker> {
               TextField(
                 key: const ValueKey('openai-model-filter'),
                 autofocus: true,
-                decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: tr('Search {count} models', {'count': all.length})),
+                decoration: InputDecoration(prefixIcon: const Icon(Symbols.search), hintText: tr('Search {count} models', {'count': all.length})),
                 onChanged: (v) => setState(() => _filter = v),
               ),
               Expanded(
@@ -378,7 +379,7 @@ class _ModelPickerState extends State<_ModelPicker> {
                     ListTile(
                       dense: true,
                       title: Text.verbatim(m),
-                      trailing: m == widget.current ? const Icon(Icons.check, size: 18) : null,
+                      trailing: m == widget.current ? const Icon(Symbols.check, size: 18) : null,
                       onTap: () => Navigator.of(context).pop(m),
                     ),
                 ]),

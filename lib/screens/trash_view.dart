@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -89,7 +90,7 @@ class _TrashViewState extends State<TrashView> {
         title: const Text('Trash'),
         actions: [
           if (notes != null && notes.isNotEmpty)
-            TextButton.icon(key: const ValueKey('trash-empty'), onPressed: _empty, icon: const Icon(Icons.delete_forever), label: const Text('Empty the trash')),
+            TextButton.icon(key: const ValueKey('trash-empty'), onPressed: _empty, icon: const Icon(Symbols.delete_forever), label: const Text('Empty the trash')),
         ],
       ),
       body: notes == null
@@ -100,21 +101,21 @@ class _TrashViewState extends State<TrashView> {
                   for (final n in notes)
                     ListTile(
                       key: ValueKey('trashed-${n.id}'),
-                      leading: Icon(n.lockMode != 0 ? Icons.lock : (n.isPdf ? Icons.picture_as_pdf : Icons.description_outlined)),
+                      leading: Icon(n.lockMode != 0 ? Symbols.lock : (n.isPdf ? Symbols.picture_as_pdf : Symbols.description)),
                       title: Text.verbatim(n.shownTitle),
                       subtitle: Text.verbatim(_left(n.deletedAt)),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
                           key: ValueKey('restore-${n.id}'),
                           tooltip: tr('Restore'),
-                          icon: const Icon(Icons.restore),
+                          icon: const Icon(Symbols.restore),
                           onPressed: () async {
                             await widget.repository.restoreNote(n.id);
                             await _load();
                             widget.onChanged?.call();
                           },
                         ),
-                        IconButton(key: ValueKey('forever-${n.id}'), tooltip: tr('Delete for good'), icon: const Icon(Icons.delete_forever), onPressed: () => _forever(n)),
+                        IconButton(key: ValueKey('forever-${n.id}'), tooltip: tr('Delete for good'), icon: const Icon(Symbols.delete_forever), onPressed: () => _forever(n)),
                       ]),
                     ),
                 ]),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -99,7 +100,7 @@ class _CaptureDialogState extends State<_CaptureDialog> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (l is ClipLink) Padding(padding: const EdgeInsets.only(bottom: 8), child: SelectableText(l.url.toString(), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12))),
             if (file != null)
-              ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.attach_file), title: Text.verbatim(p.basename(file)))
+              ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Symbols.attach_file), title: Text.verbatim(p.basename(file)))
             else ...[
               TextField(key: const ValueKey('capture-title'), controller: _name, decoration: InputDecoration(labelText: tr('Title (optional)'))),
               const SizedBox(height: 8),
@@ -214,7 +215,7 @@ class _ClipPageDialogState extends State<_ClipPageDialog> {
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
                     key: const ValueKey('clip-copy'),
-                    icon: const Icon(Icons.copy, size: 16),
+                    icon: const Icon(Symbols.content_copy, size: 16),
                     label: const Text('Copy'),
                     onPressed: () => Clipboard.setData(const ClipboardData(text: webClipperBookmarklet)),
                   ),

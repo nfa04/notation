@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 import '../l10n/language.dart';
 
@@ -93,7 +94,7 @@ class ImageItemWidget extends StatelessWidget {
         width: item.size.width,
         height: item.size.height,
         color: Colors.black12,
-        child: const Center(child: Icon(Icons.broken_image_outlined)),
+        child: const Center(child: Icon(Symbols.broken_image)),
       ),
     );
     final picture = opacity < 1 ? Opacity(opacity: opacity, child: image) : image;
@@ -141,7 +142,7 @@ class ImageItemWidget extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: scheme.onPrimary, width: 2),
                 ),
-                child: Icon(Icons.open_in_full, size: 14, color: scheme.onPrimary),
+                child: Icon(Symbols.open_in_full, size: 14, color: scheme.onPrimary),
               ),
             ),
           ),
@@ -157,7 +158,7 @@ class ImageItemWidget extends StatelessWidget {
                 if (onEdit != null)
                   IconButton(
                     key: const ValueKey('image-edit'),
-                    icon: const Icon(Icons.tune),
+                    icon: const Icon(Symbols.tune),
                     tooltip: tr('Edit picture'),
                     visualDensity: VisualDensity.compact,
                     onPressed: onEdit,
@@ -165,7 +166,7 @@ class ImageItemWidget extends StatelessWidget {
                 if (onPalette != null)
                   IconButton(
                     key: const ValueKey('image-palette'),
-                    icon: const Icon(Icons.palette_outlined),
+                    icon: const Icon(Symbols.palette),
                     tooltip: tr('Take colours from this picture for the pen'),
                     visualDensity: VisualDensity.compact,
                     onPressed: onPalette,
@@ -173,7 +174,7 @@ class ImageItemWidget extends StatelessWidget {
                 if (onReference != null)
                   IconButton(
                     key: const ValueKey('image-reference'),
-                    icon: const Icon(Icons.layers_outlined),
+                    icon: const Icon(Symbols.layers),
                     tooltip: tr('Use as a reference to trace: faded and locked, under the drawing'),
                     visualDensity: VisualDensity.compact,
                     onPressed: onReference,
@@ -181,14 +182,14 @@ class ImageItemWidget extends StatelessWidget {
                 if (onDuplicate != null)
                   IconButton(
                     key: const ValueKey('image-duplicate'),
-                    icon: const Icon(Icons.copy_all_outlined),
+                    icon: const Icon(Symbols.copy_all),
                     tooltip: tr('Duplicate picture'),
                     visualDensity: VisualDensity.compact,
                     onPressed: onDuplicate,
                   ),
                 IconButton(
                   key: const ValueKey('image-delete'),
-                  icon: Icon(Icons.delete_outline, color: scheme.error),
+                  icon: Icon(Symbols.delete_outline, color: scheme.error),
                   tooltip: tr('Delete picture'),
                   visualDensity: VisualDensity.compact,
                   onPressed: onDelete,

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text;
@@ -145,7 +146,7 @@ class _SharePeoplePanelState extends State<SharePeoplePanel> {
             TextField(
               key: const ValueKey('share-person'),
               controller: _query,
-              decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: tr('Name or address of the person'), prefixIcon: const Icon(Icons.person_search_outlined)),
+              decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: tr('Name or address of the person'), prefixIcon: const Icon(Symbols.person_search)),
               onChanged: _typed,
               onSubmitted: (_) => _share(),
             ),
@@ -197,7 +198,7 @@ class _SharePeoplePanelState extends State<SharePeoplePanel> {
                   IconButton(
                     key: ValueKey('share-link-${r.person.id}'),
                     tooltip: tr('Copy the link to send to {name}', {'name': r.person.label}),
-                    icon: const Icon(Icons.link, size: 20),
+                    icon: const Icon(Symbols.link, size: 20),
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: r.link!));
                       if (context.mounted) {
@@ -208,7 +209,7 @@ class _SharePeoplePanelState extends State<SharePeoplePanel> {
                 IconButton(
                   key: ValueKey('share-remove-${r.person.id}'),
                   tooltip: tr('Remove {name}', {'name': r.person.label}),
-                  icon: const Icon(Icons.person_remove_outlined, size: 20),
+                  icon: const Icon(Symbols.person_remove, size: 20),
                   onPressed: () => _run(() => service.removePerson(given, r)),
                 ),
               ]),
@@ -325,13 +326,13 @@ class _NativeShareSettingsState extends State<NativeShareSettings> {
             OutlinedButton.icon(
               key: const ValueKey('shares-look'),
               onPressed: _looking ? null : _look,
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: const Icon(Symbols.refresh, size: 18),
               label: Text(_looking ? 'Looking...' : 'Look for shares'),
             ),
             OutlinedButton.icon(
               key: const ValueKey('shares-sync'),
               onPressed: service.running || service.shares.isEmpty ? null : () => service.syncNow(),
-              icon: const Icon(Icons.sync, size: 18),
+              icon: const Icon(Symbols.sync, size: 18),
               label: const Text('Sync now'),
             ),
           ]),
@@ -343,7 +344,7 @@ class _NativeShareSettingsState extends State<NativeShareSettings> {
                   child: TextField(
                     key: const ValueKey('shares-link'),
                     controller: _link,
-                    decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: tr('A link to a share (OneDrive)'), prefixIcon: const Icon(Icons.link)),
+                    decoration: InputDecoration(isDense: true, border: const OutlineInputBorder(), labelText: tr('A link to a share (OneDrive)'), prefixIcon: const Icon(Symbols.link)),
                     onSubmitted: (_) => _addLink(),
                   ),
                 ),
@@ -362,7 +363,7 @@ class _NativeShareSettingsState extends State<NativeShareSettings> {
                 key: ValueKey('pending-${p.share.id}'),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.inbox_outlined),
+                leading: const Icon(Symbols.inbox),
                 title: Text.verbatim(ShareNaming.shown(p.share.name)),
                 subtitle: Text.verbatim('${p.provider.label} · ${tr('from {who}', {'who': p.share.owner})}${p.share.roleKnown ? ' · ${p.share.role.label}' : ''}'),
                 trailing: FilledButton(key: ValueKey('pending-accept-${p.share.id}'), onPressed: () => _accept(p), child: const Text('Accept')),
@@ -390,7 +391,7 @@ class _NativeShareSettingsState extends State<NativeShareSettings> {
       key: ValueKey('share-${s.id}'),
       dense: true,
       contentPadding: EdgeInsets.zero,
-      leading: Icon(s.kind == ShareKind.folder ? Icons.folder_shared_outlined : Icons.note_outlined, color: s.state == ShareState.ended ? scheme.outline : null),
+      leading: Icon(s.kind == ShareKind.folder ? Symbols.folder_shared : Symbols.note, color: s.state == ShareState.ended ? scheme.outline : null),
       title: Text.verbatim(s.name),
       subtitle: Text.verbatim('$who${detail.isEmpty ? '' : '\n$detail'}', style: status.problem == null && s.state == ShareState.active ? null : TextStyle(color: scheme.error)),
       isThreeLine: detail.isNotEmpty,
@@ -464,7 +465,7 @@ class _ShareInvitationsState extends State<ShareInvitations> {
               padding: const EdgeInsets.all(12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Icon(Icons.mail_outline, color: scheme.onPrimaryContainer),
+                  Icon(Symbols.mail_outline, color: scheme.onPrimaryContainer),
                   const SizedBox(width: 8),
                   Text(waiting.length == 1 ? tr('Someone shared something with you') : tr('{n} things were shared with you', {'n': waiting.length}),
                       style: TextStyle(fontWeight: FontWeight.w600, color: scheme.onPrimaryContainer)),

@@ -7,7 +7,7 @@ extension _EditorLock on _FixedPageNoteEditorState {
     return PopupMenuButton<String>(
       key: const ValueKey('lock-note'),
       tooltip: tr(locked ? 'This note is locked' : 'Lock this note'),
-      icon: Icon(locked ? Icons.lock : Icons.lock_open_outlined, size: 20, color: locked ? Theme.of(context).colorScheme.primary : null),
+      icon: Icon(locked ? Symbols.lock : Symbols.lock_open, size: 20, color: locked ? Theme.of(context).colorScheme.primary : null),
       onSelected: _lockAction,
       itemBuilder: (_) => [
         if (!locked) PopupMenuItem(value: 'lock', child: Text('Lock this note...')),

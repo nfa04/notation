@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -104,12 +105,12 @@ void main() {
       await tester.tapAt(pageAt(tester, 150, 130)); // in the text box
       await tester.pumpAndSettle();
       expect(find.byType(BottomAppBar), findsNothing); // (the formatting bar is a Material bar)
-      final barBefore = find.byTooltip('Bold').evaluate().length + find.byIcon(Icons.format_bold_rounded).evaluate().length;
+      final barBefore = find.byTooltip('Bold').evaluate().length + find.byIcon(Symbols.format_bold_rounded).evaluate().length;
       expect(barBefore, greaterThan(0));
 
       await tester.tapAt(pageAt(tester, 600, 760));
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.format_bold_rounded), findsNothing);
+      expect(find.byIcon(Symbols.format_bold_rounded), findsNothing);
       await tester.pump(const Duration(seconds: 1));
     });
   });

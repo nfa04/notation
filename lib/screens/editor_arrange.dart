@@ -124,7 +124,7 @@ extension _EditorArrange on _FixedPageNoteEditorState {
     return PopupMenuButton<String>(
       key: const ValueKey('arrange-selection'),
       tooltip: tr('Align and distribute'),
-      icon: const Icon(Icons.align_horizontal_left),
+      icon: const Icon(Symbols.align_horizontal_left),
       padding: EdgeInsets.zero,
       iconSize: 24,
       onSelected: (name) {
@@ -135,15 +135,15 @@ extension _EditorArrange on _FixedPageNoteEditorState {
       itemBuilder: (context) {
         final units = _arrangeUnits().length;
         return [
-          item('left', Icons.align_horizontal_left, 'Align left', enabled: units >= 2),
-          item('centre', Icons.align_horizontal_center, 'Align centres', enabled: units >= 2),
-          item('right', Icons.align_horizontal_right, 'Align right', enabled: units >= 2),
-          item('top', Icons.align_vertical_top, 'Align tops', enabled: units >= 2),
-          item('middle', Icons.align_vertical_center, 'Align middles', enabled: units >= 2),
-          item('bottom', Icons.align_vertical_bottom, 'Align bottoms', enabled: units >= 2),
+          item('left', Symbols.align_horizontal_left, 'Align left', enabled: units >= 2),
+          item('centre', Symbols.align_horizontal_center, 'Align centres', enabled: units >= 2),
+          item('right', Symbols.align_horizontal_right, 'Align right', enabled: units >= 2),
+          item('top', Symbols.align_vertical_top, 'Align tops', enabled: units >= 2),
+          item('middle', Symbols.align_vertical_center, 'Align middles', enabled: units >= 2),
+          item('bottom', Symbols.align_vertical_bottom, 'Align bottoms', enabled: units >= 2),
           const PopupMenuDivider(),
-          item('spaceAcross', Icons.horizontal_distribute, 'Space evenly across', enabled: units >= 3),
-          item('spaceDown', Icons.vertical_distribute, 'Space evenly down', enabled: units >= 3),
+          item('spaceAcross', Symbols.horizontal_distribute, 'Space evenly across', enabled: units >= 3),
+          item('spaceDown', Symbols.vertical_distribute, 'Space evenly down', enabled: units >= 3),
         ];
       },
     );

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import 'extension_docs_dialog.dart';
@@ -128,7 +129,7 @@ class _MagicExtensionDialogState extends State<MagicExtensionDialog> {
   @override
   Widget build(BuildContext context) {
     return PlatformAlertDialog(
-      title: Row(children: [const Icon(Icons.auto_fix_high, size: 22), const SizedBox(width: 10), Text('Create with AI')]),
+      title: Row(children: [const Icon(Symbols.auto_fix_high, size: 22), const SizedBox(width: 10), Text('Create with AI')]),
       content: SizedBox(
         width: 680,
         child: SingleChildScrollView(
@@ -142,7 +143,7 @@ class _MagicExtensionDialogState extends State<MagicExtensionDialog> {
       actions: switch (_stage) {
         _Stage.asking => [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton.icon(key: const ValueKey('magic-create'), onPressed: _make, icon: const Icon(Icons.auto_awesome, size: 18), label: const Text('Create')),
+            FilledButton.icon(key: const ValueKey('magic-create'), onPressed: _make, icon: const Icon(Symbols.auto_awesome, size: 18), label: const Text('Create')),
           ],
         _Stage.working => [
             TextButton(
@@ -191,7 +192,7 @@ class _MagicExtensionDialogState extends State<MagicExtensionDialog> {
       ),
       Align(
         alignment: Alignment.centerLeft,
-        child: TextButton.icon(key: const ValueKey('magic-docs'), onPressed: () => showExtensionDocs(context), icon: const Icon(Icons.menu_book_outlined, size: 18), label: const Text('Read the documentation')),
+        child: TextButton.icon(key: const ValueKey('magic-docs'), onPressed: () => showExtensionDocs(context), icon: const Icon(Symbols.menu_book, size: 18), label: const Text('Read the documentation')),
       ),
       if (_failure != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text.verbatim(_failure!, key: const ValueKey('magic-failure'), style: TextStyle(color: scheme.error))),
     ]);

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../l10n/language.dart';
@@ -78,7 +79,7 @@ class _CalDavSettingsScreenState extends State<CalDavSettingsScreen> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             onPressed: _loadPhoneCalendars,
-            icon: const Icon(Icons.phone_android),
+            icon: const Icon(Symbols.phone_android),
             label: const Text('Choose phone calendars'),
           ),
         ),
@@ -232,13 +233,13 @@ class _CalDavSettingsScreenState extends State<CalDavSettingsScreen> {
           onPressed: _icsBusy ? null : _importFile,
           icon: _icsBusy
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2))
-              : const Icon(Icons.upload_file),
+              : const Icon(Symbols.upload_file),
           label: const Text('Import a file'),
         ),
         OutlinedButton.icon(
           key: const ValueKey('ics-add-link'),
           onPressed: _icsBusy ? null : _addLink,
-          icon: const Icon(Icons.link),
+          icon: const Icon(Symbols.link),
           label: const Text('Follow a link'),
         ),
       ]),
@@ -249,7 +250,7 @@ class _CalDavSettingsScreenState extends State<CalDavSettingsScreen> {
             ListTile(
               key: ValueKey('ics-${s.id}'),
               contentPadding: EdgeInsets.zero,
-              leading: Icon(s.url == null ? Icons.event_note : Icons.rss_feed),
+              leading: Icon(s.url == null ? Symbols.event_note : Symbols.rss_feed),
               title: Text.verbatim(s.name),
               subtitle: Text.verbatim('${trCount(s.eventCount, '1 event', '{n} events')} - '
                   '${s.url == null ? tr('from a file') : tr('from a link')}, '
@@ -259,7 +260,7 @@ class _CalDavSettingsScreenState extends State<CalDavSettingsScreen> {
                   IconButton(
                     key: ValueKey('ics-refresh-${s.id}'),
                     tooltip: tr('Read it again'),
-                    icon: const Icon(Icons.refresh),
+                    icon: const Icon(Symbols.refresh),
                     onPressed: _icsBusy
                         ? null
                         : () => _icsAction(() async {
@@ -267,11 +268,11 @@ class _CalDavSettingsScreenState extends State<CalDavSettingsScreen> {
                               return tr('Updated "{name}".', {'name': s.name});
                             }),
                   ),
-                IconButton(tooltip: tr('Rename'), icon: const Icon(Icons.edit_outlined), onPressed: () => _renameIcs(s)),
+                IconButton(tooltip: tr('Rename'), icon: const Icon(Symbols.edit), onPressed: () => _renameIcs(s)),
                 IconButton(
                   key: ValueKey('ics-remove-${s.id}'),
                   tooltip: tr('Remove'),
-                  icon: const Icon(Icons.delete_outline),
+                  icon: const Icon(Symbols.delete_outline),
                   onPressed: () => ics.remove(s.id),
                 ),
               ]),

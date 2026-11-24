@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../widgets/paper.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -57,7 +58,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
           ),
           IconButton(
             tooltip: tr('Copy'),
-            icon: const Icon(Icons.copy, size: 18),
+            icon: const Icon(Symbols.content_copy, size: 18),
             onPressed: () => Clipboard.setData(ClipboardData(text: widget.profile.id)),
           ),
         ]),
@@ -70,7 +71,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
           OutlinedButton.icon(
             key: const ValueKey('profile-intro'),
             onPressed: widget.onIntro,
-            icon: const Icon(Icons.waving_hand_outlined, size: 18),
+            icon: const Icon(Symbols.waving_hand, size: 18),
             label: const Text('Show the intro again'),
           ),
         ],
@@ -102,7 +103,7 @@ class ToolSettings extends StatelessWidget {
           FilledButton.tonalIcon(
             key: const ValueKey('tools-all'),
             onPressed: features.allOn ? null : features.showAll,
-            icon: const Icon(Icons.done_all, size: 18),
+            icon: const Icon(Symbols.done_all, size: 18),
             label: const Text('Show everything'),
           ),
           OutlinedButton(

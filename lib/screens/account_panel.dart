@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
@@ -42,7 +43,7 @@ class _AccountPanelState extends State<AccountPanel> {
                 CircleAvatar(
                   backgroundColor: scheme.primaryContainer,
                   foregroundColor: scheme.onPrimaryContainer,
-                  child: name.isEmpty ? const Icon(Icons.person_outline) : Text.verbatim(name.characters.first.toUpperCase()),
+                  child: name.isEmpty ? const Icon(Symbols.person_outline) : Text.verbatim(name.characters.first.toUpperCase()),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -51,7 +52,7 @@ class _AccountPanelState extends State<AccountPanel> {
                     if (sync != null && sync.isSetUp) Text.verbatim(_status(sync), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
                   ]),
                 ),
-                Icon(_open ? Icons.expand_less : Icons.expand_more),
+                Icon(_open ? Symbols.expand_less : Symbols.expand_more),
               ]),
             ),
           ),
@@ -62,7 +63,7 @@ class _AccountPanelState extends State<AccountPanel> {
                 if (profile != null)
                   Row(children: [
                     Expanded(child: Text.verbatim(tr('Your id: {id}', {'id': profile.id}), key: const ValueKey('profile-id'), style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
-                    IconButton(tooltip: tr('Copy'), icon: const Icon(Icons.copy, size: 18), onPressed: () => Clipboard.setData(ClipboardData(text: profile.id))),
+                    IconButton(tooltip: tr('Copy'), icon: const Icon(Symbols.content_copy, size: 18), onPressed: () => Clipboard.setData(ClipboardData(text: profile.id))),
                   ]),
                 if (sync != null && sync.isSetUp) SyncPeers(service: sync),
                     if (kIsWeb && sync != null)
@@ -71,7 +72,7 @@ class _AccountPanelState extends State<AccountPanel> {
                         child: TextButton.icon(
                           key: const ValueKey('account-sign-out'),
                           onPressed: () => confirmSignOut(context, sync),
-                          icon: const Icon(Icons.logout),
+                          icon: const Icon(Symbols.logout),
                           label: Text(tr('Sign out')),
                         ),
                       ),

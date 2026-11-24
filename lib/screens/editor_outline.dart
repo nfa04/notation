@@ -8,7 +8,7 @@ extension _EditorOutline on _FixedPageNoteEditorState {
           key: const ValueKey('outline-button'),
           tooltip: tr('Outline, bookmarks and links'),
           visualDensity: VisualDensity.compact,
-          icon: Icon(marks.isEmpty ? Icons.format_list_bulleted : Icons.bookmarks_outlined, size: 20, color: _outlineOpen ? Theme.of(context).colorScheme.primary : null),
+          icon: Icon(marks.isEmpty ? Symbols.format_list_bulleted : Symbols.bookmarks, size: 20, color: _outlineOpen ? Theme.of(context).colorScheme.primary : null),
           onPressed: _openOutline,
         ),
       );

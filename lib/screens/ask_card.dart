@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../automations/automation_service.dart';
@@ -66,7 +67,7 @@ class _AskCardState extends State<AskCard> {
                       dense: true,
                       title: Text.verbatim(notice),
                       trailing: IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Symbols.close),
                         tooltip: tr('Hide'),
                         onPressed: () => setState(() => widget.service.askNotice = null),
                       ),

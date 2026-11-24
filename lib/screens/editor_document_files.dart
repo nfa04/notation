@@ -191,7 +191,7 @@ extension _EditorDocumentFiles on _FixedPageNoteEditorState {
         key: const ValueKey('export-document'),
         tooltip: tr('Export the document'),
         enabled: !_isLoadingPdf,
-        icon: const Icon(Icons.description_outlined, size: 20),
+        icon: const Icon(Symbols.description, size: 20),
         onSelected: (kind) => unawaited(_exportDocument(kind)),
         itemBuilder: (_) => [
           PopupMenuItem(key: const ValueKey('export-document-preview'), value: 'preview', child: Text('Print preview...')),

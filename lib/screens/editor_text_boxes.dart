@@ -221,7 +221,7 @@ extension _EditorTextBoxes on _FixedPageNoteEditorState {
                         alignment: Alignment.bottomRight,
                         child: Padding(
                           padding: const EdgeInsets.all(3),
-                          child: Icon(Icons.south_east_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                          child: Icon(Symbols.south_east_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
                         ),
                       ),
                     ),
@@ -274,7 +274,7 @@ extension _EditorTextBoxes on _FixedPageNoteEditorState {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Icon(
-                      Icons.drag_indicator_rounded,
+                      Symbols.drag_indicator_rounded,
                       size: 16,
                       color: Colors.grey.shade600,
                     ),

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart' hide Text;
 
@@ -112,8 +113,8 @@ class _OutlinePanelState extends State<OutlinePanel> {
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
           child: Row(children: [
             Expanded(child: Text('Outline', style: Theme.of(context).textTheme.titleMedium)),
-            if (widget.reload != null) IconButton(key: const ValueKey('outline-refresh'), tooltip: tr('Read the headings again'), icon: const Icon(Icons.refresh), onPressed: _refresh),
-            if (widget.onClose != null) IconButton(tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: widget.onClose),
+            if (widget.reload != null) IconButton(key: const ValueKey('outline-refresh'), tooltip: tr('Read the headings again'), icon: const Icon(Symbols.refresh), onPressed: _refresh),
+            if (widget.onClose != null) IconButton(tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: widget.onClose),
           ]),
         ),
         TabBar(tabs: tabs),
@@ -181,7 +182,7 @@ class _OutlinePanelState extends State<OutlinePanel> {
               alignment: Alignment.centerLeft,
               child: FilledButton.tonalIcon(
                 key: const ValueKey('bookmark-this-page'),
-                icon: Icon(marked ? Icons.bookmark_remove_outlined : Icons.bookmark_add_outlined, size: 18),
+                icon: Icon(marked ? Symbols.bookmark_remove : Symbols.bookmark_add, size: 18),
                 label: Text.verbatim(tr(marked ? 'Remove the bookmark from page {n}' : 'Bookmark page {n}', {'n': widget.currentPage + 1})),
                 onPressed: () => widget.onToggleBookmark(widget.currentPage),
               ),
@@ -196,12 +197,12 @@ class _OutlinePanelState extends State<OutlinePanel> {
             ListTile(
               key: ValueKey('bookmark-${b.page}'),
               dense: true,
-              leading: const Icon(Icons.bookmark, size: 20),
+              leading: const Icon(Symbols.bookmark, size: 20),
               title: Text.verbatim(b.label.isEmpty ? tr('Page {n}', {'n': b.page + 1}) : b.label, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: b.label.isEmpty ? null : Text.verbatim(tr('Page {n}', {'n': b.page + 1})),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                IconButton(key: ValueKey('bookmark-name-${b.page}'), tooltip: tr('Name'), icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => _name(b)),
-                IconButton(key: ValueKey('bookmark-remove-${b.page}'), tooltip: tr('Remove'), icon: const Icon(Icons.close, size: 18), onPressed: () => widget.onToggleBookmark(b.page)),
+                IconButton(key: ValueKey('bookmark-name-${b.page}'), tooltip: tr('Name'), icon: const Icon(Symbols.edit, size: 18), onPressed: () => _name(b)),
+                IconButton(key: ValueKey('bookmark-remove-${b.page}'), tooltip: tr('Remove'), icon: const Icon(Symbols.close, size: 18), onPressed: () => widget.onToggleBookmark(b.page)),
               ]),
               onTap: () => _jump(b.page),
             ),
@@ -283,7 +284,7 @@ class _LinksTabState extends State<_LinksTab> {
         Widget row(Backlink b, String key) => ListTile(
               key: ValueKey(key),
               dense: true,
-              leading: Icon(b.linked ? Icons.link : Icons.text_snippet_outlined, size: 20),
+              leading: Icon(b.linked ? Symbols.link : Symbols.text_snippet, size: 20),
               title: Text.verbatim(b.title.trim().isEmpty ? tr('Untitled Note') : b.title, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text.verbatim(b.page == null ? b.snippet : '${tr('Page {n}', {'n': b.page! + 1})}: ${b.snippet}', maxLines: 3, overflow: TextOverflow.ellipsis),
               onTap: () => widget.onOpen(b.noteId, b.page),

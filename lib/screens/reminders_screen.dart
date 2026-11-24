@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
@@ -87,9 +88,9 @@ class _RemindDialogState extends State<_RemindDialog> {
             ]),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: OutlinedButton.icon(key: const ValueKey('remind-date'), icon: const Icon(Icons.event, size: 18), label: Text.verbatim(MaterialLocalizations.of(context).formatMediumDate(_at)), onPressed: _pickDate)),
+              Expanded(child: OutlinedButton.icon(key: const ValueKey('remind-date'), icon: const Icon(Symbols.event, size: 18), label: Text.verbatim(MaterialLocalizations.of(context).formatMediumDate(_at)), onPressed: _pickDate)),
               const SizedBox(width: 8),
-              OutlinedButton.icon(key: const ValueKey('remind-time'), icon: const Icon(Icons.schedule, size: 18), label: Text.verbatim(MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_at), alwaysUse24HourFormat: MediaQuery.of(context,).alwaysUse24HourFormat)), onPressed: _pickTime),
+              OutlinedButton.icon(key: const ValueKey('remind-time'), icon: const Icon(Symbols.schedule, size: 18), label: Text.verbatim(MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_at), alwaysUse24HourFormat: MediaQuery.of(context,).alwaysUse24HourFormat)), onPressed: _pickTime),
             ]),
             const SizedBox(height: 12),
             DropdownButtonFormField<Repeat>(
@@ -156,11 +157,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
   }
 
   IconData _icon(Reminder r) => switch (r.kind) {
-        ReminderKind.note => Icons.sticky_note_2_outlined,
-        ReminderKind.task => Icons.check_circle_outline,
-        ReminderKind.review => Icons.event_note_outlined,
-        ReminderKind.study => Icons.school_outlined,
-        ReminderKind.custom => Icons.notifications_none,
+        ReminderKind.note => Symbols.sticky_note_2,
+        ReminderKind.task => Symbols.check_circle_outline,
+        ReminderKind.review => Symbols.event_note,
+        ReminderKind.study => Symbols.school,
+        ReminderKind.custom => Symbols.notifications_none,
       };
 
   String _when(Reminder r) {
@@ -178,7 +179,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
       appBar: AppBar(title: const Text('Reminders')),
       floatingActionButton: FloatingActionButton.extended(
         key: const ValueKey('new-reminder'),
-        icon: const Icon(Icons.add_alert_outlined),
+        icon: const Icon(Symbols.add_alert),
         label: const Text('New reminder'),
         onPressed: () async {
           if (await showRemindDialog(context, _service)) await _load();
@@ -186,11 +187,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
       ),
       body: ListView(padding: const EdgeInsets.only(bottom: 88), children: [
         if (!_service.available)
-          _Banner(key: const ValueKey('reminders-unavailable'), icon: Icons.notifications_off_outlined, color: scheme.errorContainer, text: tr('Notifications are not available on this system. Reminders are kept, but nothing can tell you.'))
+          _Banner(key: const ValueKey('reminders-unavailable'), icon: Symbols.notifications_off, color: scheme.errorContainer, text: tr('Notifications are not available on this system. Reminders are kept, but nothing can tell you.'))
         else if (!_service.allowed)
           _Banner(
             key: const ValueKey('reminders-denied'),
-            icon: Icons.notifications_off_outlined,
+            icon: Symbols.notifications_off,
             color: scheme.errorContainer,
             text: tr('Notifications are not allowed for this app, so reminders cannot tell you.'),
             action: TextButton(key: const ValueKey('allow-notifications'), onPressed: _service.askPermission, child: const Text('Allow')),
@@ -236,7 +237,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
             subtitle: Text.verbatim(_when(r)),
             trailing: r.auto
                 ? null
-                : IconButton(key: ValueKey('delete-reminder-${r.id}'), tooltip: tr('Delete'), icon: const Icon(Icons.delete_outline), onPressed: () async {
+                : IconButton(key: ValueKey('delete-reminder-${r.id}'), tooltip: tr('Delete'), icon: const Icon(Symbols.delete_outline), onPressed: () async {
                     await _service.reminders.remove(r.id);
                     await _load();
                   }),
@@ -273,7 +274,7 @@ class RemindersButton extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(
         key: const ValueKey('open-reminders'),
         tooltip: tr('Reminders'),
-        icon: const Icon(Icons.notifications_none),
+        icon: const Icon(Symbols.notifications_none),
         onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => RemindersScreen(service: service))),
       );
 }

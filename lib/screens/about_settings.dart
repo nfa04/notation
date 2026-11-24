@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../widgets/paper.dart';
@@ -26,7 +27,7 @@ class AboutSettings extends StatelessWidget {
       const SizedBox(height: 10),
       OutlinedButton.icon(
         key: const ValueKey('about-licences'),
-        icon: const Icon(Icons.description_outlined),
+        icon: const Icon(Symbols.description),
         label: Text('Open-source licences'),
         onPressed: () => showLicensePage(context: context, applicationName: 'Notation',
             applicationIcon: const Padding(
@@ -37,7 +38,7 @@ class AboutSettings extends StatelessWidget {
       const SizedBox(height: 8),
       OutlinedButton.icon(
         key: const ValueKey('about-privacy'),
-        icon: const Icon(Icons.privacy_tip_outlined),
+        icon: const Icon(Symbols.privacy_tip),
         label: Text('Privacy policy'),
         onPressed: () => openInBrowser(privacyPolicyUrl),
       ),

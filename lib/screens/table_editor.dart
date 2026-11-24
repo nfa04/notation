@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/text.dart';
 
@@ -27,14 +28,14 @@ class _TableSizeDialogState extends State<_TableSizeDialog> {
         IconButton(
           key: ValueKey('$key-less'),
           tooltip: tr('Fewer'),
-          icon: const Icon(Icons.remove_circle_outline),
+          icon: const Icon(Symbols.remove_circle_outline),
           onPressed: value > 1 ? () => set(value - 1) : null,
         ),
         SizedBox(key: ValueKey(key), width: 28, child: Text.verbatim('$value', textAlign: TextAlign.center)),
         IconButton(
           key: ValueKey('$key-more'),
           tooltip: tr('More'),
-          icon: const Icon(Icons.add_circle_outline),
+          icon: const Icon(Symbols.add_circle_outline),
           onPressed: value < max ? () => set(value + 1) : null,
         ),
       ]);
@@ -269,13 +270,13 @@ class _TableEditorState extends State<TableEditor> {
     final style = TextStyle(fontSize: widget.fontSize, height: 1.3, color: widget.textColor);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Wrap(children: [
-        _tool('table-add-row', Icons.table_rows_outlined, 'Add a row below', _addRow),
-        _tool('table-remove-row', Icons.playlist_remove, 'Delete this row', _removeRow, enabled: _cells.length > 1),
-        _tool('table-add-column', Icons.view_column_outlined, 'Add a column to the right', _addColumn),
-        _tool('table-remove-column', Icons.remove_road_outlined, 'Delete this column', _removeColumn, enabled: _cells.first.length > 1),
-        _tool('table-sort-up', Icons.arrow_upward, 'Sort by this column, lowest first', () => _sort(false), enabled: _cells.length > 2),
-        _tool('table-sort-down', Icons.arrow_downward, 'Sort by this column, highest first', () => _sort(true), enabled: _cells.length > 2),
-        _tool('table-totals', Icons.functions, 'Add a row of totals', _addTotals, enabled: _cells.length > 1),
+        _tool('table-add-row', Symbols.table_rows, 'Add a row below', _addRow),
+        _tool('table-remove-row', Symbols.playlist_remove, 'Delete this row', _removeRow, enabled: _cells.length > 1),
+        _tool('table-add-column', Symbols.view_column, 'Add a column to the right', _addColumn),
+        _tool('table-remove-column', Symbols.remove_road, 'Delete this column', _removeColumn, enabled: _cells.first.length > 1),
+        _tool('table-sort-up', Symbols.arrow_upward, 'Sort by this column, lowest first', () => _sort(false), enabled: _cells.length > 2),
+        _tool('table-sort-down', Symbols.arrow_downward, 'Sort by this column, highest first', () => _sort(true), enabled: _cells.length > 2),
+        _tool('table-totals', Symbols.functions, 'Add a row of totals', _addTotals, enabled: _cells.length > 1),
       ]),
       Table(
         border: TableBorder(top: line, bottom: line, left: line, right: line, horizontalInside: line, verticalInside: line),

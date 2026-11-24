@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
@@ -464,7 +465,7 @@ class _BrushDesignerState extends State<BrushDesigner> {
               PopupMenuButton<BrushDesc>(
                 key: const ValueKey('brush-start-from'),
                 tooltip: tr('Start from the look of a brush'),
-                icon: const Icon(Icons.auto_fix_high_outlined),
+                icon: const Icon(Symbols.auto_fix_high),
                 onSelected: (d) => _set(d.named(_name.text)),
                 itemBuilder: (_) => [for (final d in BrushDesc.starting) PopupMenuItem(value: d, child: Text(tr(d.name)))],
               ),
@@ -478,11 +479,11 @@ class _BrushDesignerState extends State<BrushDesigner> {
               ),
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 4, children: [
-              OutlinedButton.icon(key: const ValueKey('brush-import'), onPressed: _import, icon: const Icon(Icons.file_open_outlined), label: Text(tr('Import .strokedesc'))),
-              OutlinedButton.icon(key: const ValueKey('brush-export'), onPressed: _export, icon: const Icon(Icons.ios_share), label: Text(tr('Export .strokedesc'))),
-              OutlinedButton.icon(key: const ValueKey('brush-copy-code'), onPressed: _copyCode, icon: const Icon(Icons.copy_outlined), label: Text(tr('Copy as text'))),
-              OutlinedButton.icon(key: const ValueKey('brush-paste-code'), onPressed: _pasteCode, icon: const Icon(Icons.content_paste_outlined), label: Text(tr('Paste from text'))),
-              if (_editing != null) OutlinedButton.icon(key: const ValueKey('brush-save-copy'), onPressed: _saveCopy, icon: const Icon(Icons.copy_all_outlined), label: Text(tr('Save as a copy'))),
+              OutlinedButton.icon(key: const ValueKey('brush-import'), onPressed: _import, icon: const Icon(Symbols.file_open), label: Text(tr('Import .strokedesc'))),
+              OutlinedButton.icon(key: const ValueKey('brush-export'), onPressed: _export, icon: const Icon(Symbols.ios_share), label: Text(tr('Export .strokedesc'))),
+              OutlinedButton.icon(key: const ValueKey('brush-copy-code'), onPressed: _copyCode, icon: const Icon(Symbols.content_copy), label: Text(tr('Copy as text'))),
+              OutlinedButton.icon(key: const ValueKey('brush-paste-code'), onPressed: _pasteCode, icon: const Icon(Symbols.content_paste), label: Text(tr('Paste from text'))),
+              if (_editing != null) OutlinedButton.icon(key: const ValueKey('brush-save-copy'), onPressed: _saveCopy, icon: const Icon(Symbols.copy_all), label: Text(tr('Save as a copy'))),
               if (_editing != null && editingListed != null)
                 TextButton(
                   key: const ValueKey('brush-toggle-listed'),

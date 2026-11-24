@@ -57,7 +57,7 @@ extension _EditorImages on _FixedPageNoteEditorState {
               children: [
                 IconButton.filledTonal(
                   tooltip: tr('Change theme image'),
-                  icon: const Icon(Icons.image_outlined, size: 18),
+                  icon: const Icon(Symbols.image, size: 18),
                   onPressed: _pickThemeImage,
                 ),
                 // the folder's banner is not the note's to remove
@@ -65,7 +65,7 @@ extension _EditorImages on _FixedPageNoteEditorState {
                   const SizedBox(width: 4),
                   IconButton.filledTonal(
                     tooltip: tr('Remove theme image'),
-                    icon: const Icon(Icons.hide_image_outlined, size: 18),
+                    icon: const Icon(Symbols.hide_image, size: 18),
                     onPressed: _removeThemeImage,
                   ),
                 ],

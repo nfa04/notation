@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../data/card_repository.dart';
@@ -91,9 +92,9 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
             key: const ValueKey('plan-tabs'),
             showSelectedIcon: false,
             segments: [
-              ButtonSegment(value: _Tab.overview, label: Text('Overview', key: const ValueKey('plan-tab-overview')), icon: const Icon(Icons.insights_outlined)),
-              ButtonSegment(value: _Tab.parts, label: Text.verbatim('${tr('Parts')} (${parts.length})', key: const ValueKey('plan-tab-parts')), icon: const Icon(Icons.view_agenda_outlined)),
-              ButtonSegment(value: _Tab.sessions, label: Text.verbatim('${tr('Sessions')} (${sessions.length})', key: const ValueKey('plan-tab-sessions')), icon: const Icon(Icons.event_note_outlined)),
+              ButtonSegment(value: _Tab.overview, label: Text('Overview', key: const ValueKey('plan-tab-overview')), icon: const Icon(Symbols.insights)),
+              ButtonSegment(value: _Tab.parts, label: Text.verbatim('${tr('Parts')} (${parts.length})', key: const ValueKey('plan-tab-parts')), icon: const Icon(Symbols.view_agenda)),
+              ButtonSegment(value: _Tab.sessions, label: Text.verbatim('${tr('Sessions')} (${sessions.length})', key: const ValueKey('plan-tab-sessions')), icon: const Icon(Symbols.event_note)),
             ],
             selected: {_tab},
             onSelectionChanged: (v) => setState(() => _tab = v.first),
@@ -230,7 +231,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     if (focus.isEmpty) {
       return Column(key: const ValueKey('plan-focus'), crossAxisAlignment: CrossAxisAlignment.start, children: [
         _section(context, tr('Focus on these')),
-        Row(children: [Icon(Icons.emoji_events_outlined, color: scheme.primary), const SizedBox(width: 8), Expanded(child: Text('Every part is learnt and gone over.'))]),
+        Row(children: [Icon(Symbols.emoji_events, color: scheme.primary), const SizedBox(width: 8), Expanded(child: Text('Every part is learnt and gone over.'))]),
       ]);
     }
     final names = {
@@ -334,7 +335,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
           ActionChip(
             key: ValueKey('plan-part-session-${u.id}-${s.key}'),
             visualDensity: VisualDensity.compact,
-            avatar: Icon(s.credited ? Icons.check_circle : Icons.schedule, size: 16, color: s.credited ? scheme.primary : scheme.outline),
+            avatar: Icon(s.credited ? Symbols.check_circle : Symbols.schedule, size: 16, color: s.credited ? scheme.primary : scheme.outline),
             label: Text.verbatim('${l.formatShortDate(s.session.start)}, ${_clock(context, s.session.start)} · ${kinds.map(kind).where((k) => k.isNotEmpty).join(', ')}', style: theme.textTheme.labelSmall),
             onPressed: () => openStudySession(context, planner, e.id, s.key, cards: cards, onOpenNoteAt: onOpenNoteAt, clock: clock),
           ),
@@ -378,13 +379,13 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
             IconButton(
               key: ValueKey('plan-summary-${u.id}'),
               tooltip: tr('Read the summary'),
-              icon: const Icon(Icons.summarize_outlined),
+              icon: const Icon(Symbols.summarize),
               onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => StudySummaryPage(title: u.title, points: points))),
             ),
           if (onOpenNoteAt != null)
             IconButton(
               tooltip: tr('Open the note'),
-              icon: const Icon(Icons.open_in_new),
+              icon: const Icon(Symbols.open_in_new),
               onPressed: () {
                 Navigator.popUntil(context, (r) => r.isFirst);
                 onOpenNoteAt!(u.noteId, u.fromPage);
@@ -400,14 +401,14 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     final scheme = theme.colorScheme;
     final past = s.session.end.isBefore(now);
     final (IconData, String, Color) state = s.credited
-        ? (Icons.check_circle, tr('Done'), scheme.primary)
+        ? (Symbols.check_circle, tr('Done'), scheme.primary)
         : s.gone
-            ? (Icons.event_busy_outlined, tr('Deleted in the calendar'), scheme.outline)
+            ? (Symbols.event_busy, tr('Deleted in the calendar'), scheme.outline)
             : s.unfinished
-                ? (Icons.timelapse, tr('Work left undone'), scheme.tertiary)
+                ? (Symbols.timelapse, tr('Work left undone'), scheme.tertiary)
                 : past
-                    ? (Icons.error_outline, tr('Not ticked off'), scheme.error)
-                    : (Icons.schedule, tr('To come'), scheme.outline);
+                    ? (Symbols.error_outline, tr('Not ticked off'), scheme.error)
+                    : (Symbols.schedule, tr('To come'), scheme.outline);
     return _flat(
       context,
       key: ValueKey('plan-session-${s.key}'),

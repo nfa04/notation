@@ -20,7 +20,7 @@ extension _EditorAudio on _FixedPageNoteEditorState {
           key: const ValueKey('audio-button'),
           tooltip: tr('Sound kept with this note'),
           visualDensity: VisualDensity.compact,
-          icon: Icon((_soundPlayer?.playing ?? false) ? Icons.graphic_eq : Icons.headphones_outlined, size: 20, color: _audioOpen ? Theme.of(context).colorScheme.primary : null),
+          icon: Icon((_soundPlayer?.playing ?? false) ? Symbols.graphic_eq : Symbols.headphones, size: 20, color: _audioOpen ? Theme.of(context).colorScheme.primary : null),
           onPressed: _openAudio,
         ),
       );

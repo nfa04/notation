@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'dart:async';
 
 import '../widgets/paper.dart';
@@ -439,7 +440,7 @@ class _SearchViewState extends State<SearchView> {
                 ),
               ActionChip(
                 key: const ValueKey('search-tags-add'),
-                avatar: const Icon(Icons.add, size: 16),
+                avatar: const Icon(Symbols.add, size: 16),
                 label: Text.verbatim(tr(f.tags.isEmpty ? 'Choose tags' : 'More')),
                 visualDensity: VisualDensity.compact,
                 onPressed: _pickTags,
@@ -451,7 +452,7 @@ class _SearchViewState extends State<SearchView> {
           Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             FilterChip(
               key: const ValueKey('search-favorites'),
-              avatar: const Icon(Icons.star_outline, size: 16),
+              avatar: const Icon(Symbols.star_outline, size: 16),
               label: Text.verbatim(tr('Favourites')),
               selected: f.favoritesOnly,
               showCheckmark: false,
@@ -520,8 +521,8 @@ class _SearchViewState extends State<SearchView> {
         title: const Text('Search'),
         actions: [
           if (!_query.isEmpty && problem == null)
-            IconButton(key: const ValueKey('search-save'), icon: const Icon(Icons.bookmark_add_outlined), tooltip: tr('Save this search'), onPressed: _saveCurrent),
-          IconButton(key: const ValueKey('search-saved'), icon: const Icon(Icons.bookmarks_outlined), tooltip: tr('Saved searches'), onPressed: _showSaved),
+            IconButton(key: const ValueKey('search-save'), icon: const Icon(Symbols.bookmark_add), tooltip: tr('Save this search'), onPressed: _saveCurrent),
+          IconButton(key: const ValueKey('search-saved'), icon: const Icon(Symbols.bookmarks), tooltip: tr('Saved searches'), onPressed: _showSaved),
         ],
       ),
       body: Column(children: [
@@ -534,13 +535,13 @@ class _SearchViewState extends State<SearchView> {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               hintText: tr(_regex ? 'A regular expression' : 'Search all notes'),
-              prefixIcon: const Icon(Icons.search),
+              prefixIcon: const Icon(Symbols.search),
               errorText: problem == null ? null : tr('Not a valid expression: {why}', {'why': problem}),
               suffixIcon: _text.text.isEmpty
                   ? null
                   : IconButton(
                       key: const ValueKey('search-clear'),
-                      icon: const Icon(Icons.clear),
+                      icon: const Icon(Symbols.clear),
                       tooltip: tr('Clear'),
                       onPressed: () {
                         _text.clear();
@@ -566,7 +567,7 @@ class _SearchViewState extends State<SearchView> {
             if (widget.knowledge != null)
               FilterChip(
                 key: const ValueKey('search-meaning'),
-                avatar: const Icon(Icons.auto_awesome_outlined, size: 16),
+                avatar: const Icon(Symbols.auto_awesome, size: 16),
                 label: Text.verbatim(tr('By meaning')),
                 tooltip: tr('Find notes by what they say about it, not by the words you typed'),
                 selected: _meaning,
@@ -583,7 +584,7 @@ class _SearchViewState extends State<SearchView> {
               ),
             FilterChip(
               key: const ValueKey('search-filters-toggle'),
-              avatar: const Icon(Icons.tune, size: 16),
+              avatar: const Icon(Symbols.tune, size: 16),
               label: Text.verbatim(_filter.activeCount == 0 ? tr('Filters') : tr('Filters ({n})', {'n': _filter.activeCount})),
               selected: _showFilters,
               showCheckmark: false,
@@ -617,7 +618,7 @@ class _SearchViewState extends State<SearchView> {
                   onSelected: (o) => setState(() => _order = o),
                   itemBuilder: (_) => [for (final o in SearchOrder.values) PopupMenuItem(value: o, child: Text.verbatim(_orderLabel(o)))],
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.sort, size: 16, color: Theme.of(context,).colorScheme.onSurfaceVariant),
+                    Icon(Symbols.sort, size: 16, color: Theme.of(context,).colorScheme.onSurfaceVariant),
                     const SizedBox(width: 4),
                     Text.verbatim(_orderLabel(_order), style: TextStyle(fontSize: 12, color: Theme.of(context,).colorScheme.onSurfaceVariant)),
                   ]),
@@ -665,7 +666,7 @@ class _SearchViewState extends State<SearchView> {
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               ListTile(
-                leading: Icon(note?.isPdf ?? false ? Icons.picture_as_pdf_outlined : Icons.note_alt_outlined),
+                leading: Icon(note?.isPdf ?? false ? Symbols.picture_as_pdf : Symbols.note_alt),
                 title: Text.verbatim(n.title.isEmpty ? tr('Untitled') : n.title),
                 subtitle: _where(note).isEmpty ? null : Text.verbatim(_where(note)),
                 onTap: () {
@@ -714,7 +715,7 @@ class _SearchViewState extends State<SearchView> {
               key: ValueKey('search-recent-$i'),
               dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history, size: 20),
+              leading: const Icon(Symbols.history, size: 20),
               title: Text.verbatim(_recent[i].query.text, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: _recent[i].filter.isDefault ? null : Text.verbatim(tr('With {n} filters', {'n': _recent[i].filter.activeCount})),
               onTap: () => _apply(_recent[i]),
@@ -732,7 +733,7 @@ class _SearchViewState extends State<SearchView> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         ListTile(
-          leading: Icon(note?.isPdf ?? false ? Icons.picture_as_pdf_outlined : Icons.note_alt_outlined),
+          leading: Icon(note?.isPdf ?? false ? Symbols.picture_as_pdf : Symbols.note_alt),
           title: Text.verbatim(note?.title.isEmpty ?? true ? tr('Untitled Note') : note!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: where.isEmpty ? null : Text.verbatim(where, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Text.verbatim('$count'),
@@ -852,7 +853,7 @@ class _SavedSearchesDialogState extends State<_SavedSearchesDialog> {
                         onTap: () => Navigator.pop(context, s),
                         trailing: IconButton(
                           key: ValueKey('search-forget-${s.name}'),
-                          icon: const Icon(Icons.delete_outline),
+                          icon: const Icon(Symbols.delete_outline),
                           tooltip: tr('Delete'),
                           onPressed: () async {
                             await widget.memory.forget(s.name);

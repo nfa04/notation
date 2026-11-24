@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/material.dart' hide Text;
 
 import '../ai/ai_prompt.dart';
@@ -86,7 +87,7 @@ class GraphStudy extends StatelessWidget {
               child: Text.verbatim(tr('Study: {topic}', {'topic': title}), style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
             Text.verbatim(trCount(facts.length, '{n} fact', '{n} facts'), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-            IconButton(tooltip: tr('Close'), icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+            IconButton(tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: () => Navigator.pop(context)),
           ]),
         ),
         TabBar(tabs: [Tab(text: tr('Flashcards')), Tab(text: tr('Quiz')), Tab(text: tr('Ask'))]),
@@ -194,7 +195,7 @@ class _CardsTabState extends State<_CardsTab> with AutomaticKeepAliveClientMixin
       ]),
       if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text.verbatim(_error!, key: const ValueKey('study-error'), style: TextStyle(color: scheme.error))),
       const SizedBox(height: 14),
-      Align(alignment: Alignment.centerLeft, child: FilledButton.icon(key: const ValueKey('study-cards-make'), onPressed: _make, icon: const Icon(Icons.auto_awesome, size: 18), label: const Text('Make flashcards'))),
+      Align(alignment: Alignment.centerLeft, child: FilledButton.icon(key: const ValueKey('study-cards-make'), onPressed: _make, icon: const Icon(Symbols.auto_awesome, size: 18), label: const Text('Make flashcards'))),
     ]);
   }
 }
@@ -333,7 +334,7 @@ class _QuizTabState extends State<_QuizTab> with AutomaticKeepAliveClientMixin {
         ]),
         if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text.verbatim(_error!, key: const ValueKey('study-error'), style: TextStyle(color: scheme.error))),
         const SizedBox(height: 14),
-        Align(alignment: Alignment.centerLeft, child: FilledButton.icon(key: const ValueKey('quiz-make'), onPressed: _make, icon: const Icon(Icons.quiz_outlined, size: 18), label: const Text('Make a quiz'))),
+        Align(alignment: Alignment.centerLeft, child: FilledButton.icon(key: const ValueKey('quiz-make'), onPressed: _make, icon: const Icon(Symbols.quiz, size: 18), label: const Text('Make a quiz'))),
       ]);
     }
     final q = quiz.current;
@@ -346,7 +347,7 @@ class _QuizTabState extends State<_QuizTab> with AutomaticKeepAliveClientMixin {
       ]),
       const SizedBox(height: 16),
       if (q == null || (quiz.done && g == null)) ...[
-        Icon(Icons.emoji_events_outlined, size: 40, color: scheme.primary),
+        Icon(Symbols.emoji_events, size: 40, color: scheme.primary),
         const SizedBox(height: 8),
         Text('You have mastered every question.', key: const ValueKey('quiz-done')),
       ] else ...[
@@ -368,7 +369,7 @@ class _QuizTabState extends State<_QuizTab> with AutomaticKeepAliveClientMixin {
           )
         else ...[
           Row(children: [
-            Icon(g.correct ? Icons.check_circle : Icons.cancel_outlined, color: g.correct ? Colors.green : scheme.error),
+            Icon(g.correct ? Symbols.check_circle : Symbols.cancel, color: g.correct ? Colors.green : scheme.error),
             const SizedBox(width: 8),
             Text.verbatim(tr('Score {n} of 10', {'n': g.score}), key: const ValueKey('quiz-score'), style: Theme.of(context).textTheme.titleSmall),
           ]),
@@ -381,7 +382,7 @@ class _QuizTabState extends State<_QuizTab> with AutomaticKeepAliveClientMixin {
       ],
       if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text.verbatim(_error!, key: const ValueKey('study-error'), style: TextStyle(color: scheme.error))),
       const SizedBox(height: 14),
-      TextButton.icon(onPressed: () => setState(() => _quiz = null), icon: const Icon(Icons.refresh, size: 18), label: const Text('Make a new quiz')),
+      TextButton.icon(onPressed: () => setState(() => _quiz = null), icon: const Icon(Symbols.refresh, size: 18), label: const Text('Make a new quiz')),
     ]);
   }
 }

@@ -1,3 +1,4 @@
+import 'package:material_symbols_icons/symbols.dart';
 import '../style/color_names.dart';
 import 'package:flutter/material.dart' hide Text;
 import '../l10n/text.dart';
@@ -83,7 +84,7 @@ class _TextBoxStyleDialogState extends State<TextBoxStyleDialog> {
       dot(
         selected,
         key: ValueKey('$keyPrefix-wheel'),
-        child: const Icon(Icons.palette_outlined, size: 18),
+        child: const Icon(Symbols.palette, size: 18),
         onTap: () async {
           final picked = await pickColorOnWheel(context, selected);
           if (picked != null) pick(picked);
