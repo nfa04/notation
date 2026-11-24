@@ -318,8 +318,8 @@ extension _EditorZoom on _FixedPageNoteEditorState {
   Widget _buildZoomControls() {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      elevation: 2,
-      shape: const StadiumBorder(),
+      elevation: 0,
+      shape: StadiumBorder(side: BorderSide(color: scheme.outlineVariant)),
       color: scheme.surface.withValues(alpha: 0.92),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -67,7 +67,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: FixedPageNoteEditor(noteId: id, repository: repo)));
     await settle();
-    await tester.tap(find.text('Import PDF'));
+    await tester.tap(find.byTooltip('Import PDF'));
     await settle(50);
     await tester.pump(const Duration(seconds: 1));
     final saved = (await tester.runAsync(() async {

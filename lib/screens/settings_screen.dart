@@ -395,7 +395,7 @@ class SettingsScreen extends StatelessWidget {
                   : TabBar(
                       isScrollable: true,
                       tabAlignment: TabAlignment.start,
-                      tabs: [for (final c in categories) Tab(key: ValueKey('settings-tab-${c.label}'), icon: Icon(c.icon, size: 20), text: tr(c.label))],
+                      tabs: [for (final c in categories) Tab(key: ValueKey('settings-tab-${c.label}'), text: tr(c.label))],
                     ),
             ),
             body: TabBarView(

@@ -86,19 +86,19 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       highlightElevation: 0,
       backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: scheme.onSurfaceVariant.withValues(alpha: 0.5))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: scheme.onSurfaceVariant.withValues(alpha: 0.3))),
     ),
     // fields: a hairline box with small corners, the ink on focus
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: rule),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.6))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.onSurface, width: 1.5)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.onSurface)),
     ),
     // buttons: small square corners, no pill; chips and segments flat with a hairline and a pale selection
     filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, backgroundColor: scheme.onSurface, foregroundColor: scheme.surface, disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12), textStyle: (base.textTheme.labelLarge ?? const TextStyle()).copyWith(inherit: false, fontWeight: FontWeight.w500))),
     elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(shape: r6, elevation: 0, shadowColor: Colors.transparent, surfaceTintColor: Colors.transparent, backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, side: rule)),
     outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(shape: r6, side: BorderSide(color: scheme.outlineVariant), foregroundColor: scheme.onSurface)),
-    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: r6)),
+    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: r6, foregroundColor: scheme.onSurface)),
     chipTheme: base.chipTheme.copyWith(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: rule), side: rule, backgroundColor: scheme.surface, selectedColor: scheme.secondaryContainer, surfaceTintColor: Colors.transparent, elevation: 0, pressElevation: 0, labelStyle: TextStyle(fontFamily: paperFont, fontSize: 13, color: scheme.onSurface)),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
@@ -110,7 +110,18 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
         selectedForegroundColor: scheme.onSurface,
       ),
     ),
+    // switches and boxes: the ink when on (a quiet mark, not the accent)
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? scheme.surface : scheme.onSurfaceVariant),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? scheme.onSurface : Colors.transparent),
+      trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? scheme.onSurface : scheme.outline),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? scheme.onSurface : Colors.transparent),
+      checkColor: WidgetStatePropertyAll(scheme.surface),
+      side: BorderSide(color: scheme.onSurfaceVariant, width: 1.2),
+    ),
     tabBarTheme: base.tabBarTheme.copyWith(dividerColor: scheme.outlineVariant, indicatorColor: scheme.onSurface, labelColor: scheme.onSurface, unselectedLabelColor: scheme.onSurfaceVariant),
-    listTileTheme: base.listTileTheme.copyWith(selectedTileColor: scheme.onSurface.withValues(alpha: 0.07), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+    listTileTheme: base.listTileTheme.copyWith(selectedColor: scheme.onSurface, selectedTileColor: scheme.onSurface.withValues(alpha: 0.07), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
   );
 }

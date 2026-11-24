@@ -116,8 +116,8 @@ void main() {
       await open(tester);
       expect(find.byKey(const ValueKey('canvas-fit')), findsOneWidget);
       expect(find.byKey(const ValueKey('pages-menu')), findsNothing);
-      expect(find.text('Export PDF'), findsNothing);
-      expect(find.text('Import PDF'), findsNothing);
+      expect(find.byTooltip('Export PDF'), findsNothing);
+      expect(find.byTooltip('Import PDF'), findsNothing);
       expect(find.byTooltip('Page size'), findsNothing);
       expect(find.byType(CustomScrollView), findsNothing);
       await close(tester);
@@ -127,7 +127,7 @@ void main() {
       await open(tester, canvas: false);
       expect(find.byKey(const ValueKey('canvas-fit')), findsNothing);
       expect(find.byKey(const ValueKey('pages-menu')), findsOneWidget);
-      expect(find.text('Export PDF'), findsOneWidget);
+      expect(find.byTooltip('Export PDF'), findsOneWidget);
       await close(tester);
     });
 
@@ -338,7 +338,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('make-canvas')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('canvas-fit')), findsOneWidget);
-      expect(find.text('Export PDF'), findsNothing);
+      expect(find.byTooltip('Export PDF'), findsNothing);
       expect(find.text('hello canvas'), findsOneWidget);
       expect(tester.widget<IconButton>(find.byKey(const ValueKey('undo-any'))).onPressed, isNull);
       await tester.pump(const Duration(seconds: 1));

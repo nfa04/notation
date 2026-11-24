@@ -118,8 +118,8 @@ void main() {
 
     // and the PDF export does not choke on it
     FilePickerPlatform.instance = FakeFilePicker(savePath: '${dir.path}/out.pdf');
-    await tester.ensureVisible(find.text('Export PDF')); // the toolbar scrolls sideways
-    await tester.tap(find.text('Export PDF'));
+    await tester.ensureVisible(find.byTooltip('Export PDF')); // the toolbar scrolls sideways
+    await tester.tap(find.byTooltip('Export PDF'));
     for (var i = 0; i < 120 && !File('${dir.path}/out.pdf').existsSync(); i++) {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));

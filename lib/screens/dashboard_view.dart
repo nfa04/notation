@@ -444,7 +444,7 @@ class _DashboardViewState extends State<DashboardView> {
                           if (widget.planner != null) StudySessionCard(planner: widget.planner!, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt),
                           Text(
                             'Welcome back',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w300),
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w300),
                           ),
                           const SizedBox(height: 4),
                           Text(

@@ -571,7 +571,9 @@ class _CalendarViewState extends State<CalendarView> {
             ]),
             const SizedBox(height: 4),
             Expanded(
-              child: Column(children: [
+              child: DecoratedBox(
+                decoration: BoxDecoration(border: Border(top: BorderSide(color: scheme.outlineVariant), left: BorderSide(color: scheme.outlineVariant))),
+                child: Column(children: [
                 for (var week = 0; week < 6; week++)
                   Expanded(
                     child: Row(children: [
@@ -579,6 +581,7 @@ class _CalendarViewState extends State<CalendarView> {
                     ]),
                   ),
               ]),
+              ),
             ),
           ],
         ],
@@ -591,7 +594,7 @@ class _CalendarViewState extends State<CalendarView> {
     final isSelected = day == _selected;
     final isToday = day == today;
     final look = _style.dayStyle(day);
-    final radius = (_style.theme.radius * 1.2).clamp(4.0, 20.0);
+    const radius = 0.0; // (one ruled grid, not a field of boxes: the lines are between the days)
 
     // what to show in the cell: all-day events, timed events, then tasks
     final events = _events.where((e) => e.occursOn(day)).toList()
@@ -600,7 +603,7 @@ class _CalendarViewState extends State<CalendarView> {
     final total = events.length + tasks.length;
 
     return Padding(
-      padding: const EdgeInsets.all(2),
+      padding: EdgeInsets.zero,
       child: _stylable(
         () => _styleDay(day),
         InkWell(
@@ -614,7 +617,7 @@ class _CalendarViewState extends State<CalendarView> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               color: isSelected ? scheme.primaryContainer : look?.color?.withValues(alpha: 0.3),
-              border: Border.all(color: isToday ? scheme.onSurface : scheme.outlineVariant, width: isToday ? 1.5 : 1),
+              border: Border(right: BorderSide(color: scheme.outlineVariant), bottom: BorderSide(color: scheme.outlineVariant)),
             ),
             child: _narrow
                 // too small for the chips: the day number and a dot for each thing planned
@@ -658,11 +661,19 @@ class _CalendarViewState extends State<CalendarView> {
                   SizedBox(
                     height: header,
                     child: Row(children: [
-                      Text.verbatim('${day.day}',
-                          style: TextStyle(
-                            fontWeight: isToday ? FontWeight.w500 : null,
-                            color: inMonth ? null : Colors.grey,
-                          )),
+                      // (today: the number in an ink disc, the one mark that is not a line)
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 20),
+                        height: 20,
+                        alignment: Alignment.center,
+                        decoration: isToday ? BoxDecoration(shape: BoxShape.circle, color: scheme.onSurface) : null,
+                        child: Text.verbatim('${day.day}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isToday ? FontWeight.w500 : null,
+                              color: isToday ? scheme.surface : (inMonth ? null : Colors.grey),
+                            )),
+                      ),
                       const Spacer(),
                       if (look?.emoji != null) Text.verbatim(look!.emoji!, style: const TextStyle(fontSize: 14)),
                     ]),
@@ -759,7 +770,9 @@ class _CalendarViewState extends State<CalendarView> {
             hintText: tr('Add a task for this day'),
             prefixIcon: const Icon(Icons.add_task),
             suffixIcon: IconButton(icon: const Icon(Icons.send_rounded), tooltip: tr('Add'), onPressed: _add),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+            border: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.onSurface)),
           ),
           onSubmitted: (_) => _add(),
         ),

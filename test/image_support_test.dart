@@ -91,8 +91,8 @@ void main() {
     await tester.pump();
     expect(tester.getSize(controls).width, greaterThan(sizeBefore.width));
 
-    await tester.ensureVisible(find.text('Export PDF')); // the toolbar scrolls sideways
-    await tester.tap(find.text('Export PDF'));
+    await tester.ensureVisible(find.byTooltip('Export PDF')); // the toolbar scrolls sideways
+    await tester.tap(find.byTooltip('Export PDF'));
     // the export uses timers of the test clock and real file work: alternate
     for (var i = 0; i < 100 && !File(out).existsSync(); i++) {
       await tester.pump(const Duration(milliseconds: 50));

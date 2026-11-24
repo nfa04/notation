@@ -359,19 +359,17 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       ],
       // (only a note without a PDF: one that has one adds more with the button below, or rearranges them in the page dialog)
       if (_on(Feature.pdf) && !_infinite && _importedPdfName == null) ...[
-      ElevatedButton.icon(
-        onPressed: _isLoadingPdf ? null : _pickAndLoadPdfFile,
+      IconButton(
+        key: const ValueKey('import-pdf-button'),
+        tooltip: tr('Import PDF'),
         icon: _importingPdf
             ? const SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator.adaptive(strokeWidth: 2),
               )
-            : const Icon(Icons.folder_open_rounded, size: 16),
-        label: const Text(
-          'Import PDF',
-          style: TextStyle(fontSize: 12),
-        ),
+            : const Icon(Icons.file_open_outlined, size: 20),
+        onPressed: _isLoadingPdf ? null : _pickAndLoadPdfFile,
       ),
       const SizedBox(width: 8),
       ],
@@ -423,13 +421,11 @@ extension _EditorLayout on _FixedPageNoteEditorState {
       if (_hasDocument) _documentExportMenu(),
       // (a canvas has no pages to cut it into)
       if (_on(Feature.pdf) && !_infinite)
-      ElevatedButton.icon(
+      IconButton(
+        key: const ValueKey('export-pdf-button'),
+        tooltip: tr('Export PDF'),
+        icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
         onPressed: !_isLoadingPdf ? _exportPdf : null,
-        icon: const Icon(Icons.download_rounded, size: 16),
-        label: const Text(
-          'Export PDF',
-          style: TextStyle(fontSize: 12)
-        ),
       ),
       ],
     };

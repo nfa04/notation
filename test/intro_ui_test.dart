@@ -319,8 +319,8 @@ void main() {
       expect(find.byTooltip('Highlighter (see-through, in the chosen color)'), findsOneWidget);
       expect(find.byKey(const ValueKey('straighten-toggle')), findsOneWidget);
       expect(find.byKey(const ValueKey('empty-plot')), findsOneWidget);
-      expect(find.text('Import PDF'), findsOneWidget);
-      expect(find.text('Export PDF'), findsOneWidget);
+      expect(find.byTooltip('Import PDF'), findsOneWidget);
+      expect(find.byTooltip('Export PDF'), findsOneWidget);
       expect(find.byTooltip('Lasso: draw around drawings, text boxes and pictures to select them'), findsOneWidget);
 
       await tester.runAsync(() => features.apply(FeaturePresets.forAreas({UseArea.humanities})..remove(Feature.highlighter)..remove(Feature.pdf)..remove(Feature.images)..remove(Feature.lasso)));
@@ -331,8 +331,8 @@ void main() {
       expect(find.byTooltip('Add a picture'), findsNothing);
       expect(find.byTooltip('Highlighter (see-through, in the chosen color)'), findsNothing);
       expect(find.byTooltip('Lasso: draw around drawings, text boxes and pictures to select them'), findsNothing);
-      expect(find.text('Import PDF'), findsNothing);
-      expect(find.text('Export PDF'), findsNothing);
+      expect(find.byTooltip('Import PDF'), findsNothing);
+      expect(find.byTooltip('Export PDF'), findsNothing);
       // what is always there is there
       expect(find.byKey(const ValueKey('add-text-box')), findsOneWidget);
       expect(find.byTooltip('Eraser (drawings only)'), findsOneWidget);

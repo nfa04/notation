@@ -346,6 +346,8 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
       width: _paperWidth,
       height: pageHeight,
       // (none for the sheets of a document, which have their own: and nothing of the tile takes a tap that is for what is on them, below it)
+      // (a hairline round the page, painted over it so it takes no room: on the white of the light theme the shadow alone is not an edge)
+      foregroundDecoration: split || _infinite ? null : BoxDecoration(border: Border.all(color: Colors.black.withValues(alpha: 0.10))),
       decoration: split
           ? null
           : BoxDecoration(

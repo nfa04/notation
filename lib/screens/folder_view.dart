@@ -963,7 +963,7 @@ class _FolderViewState extends State<FolderView> {
   /// Folder title; with a theme image it becomes a banner with the title on it.
   Widget _buildHeader(String title) {
     final folder = _inRealFolder ? _folder(_scope) : null;
-    final titleStyle = Theme.of(context,).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w300);
+    final titleStyle = Theme.of(context,).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w300);
     final image = folder?.themeImage;
 
     if (folder == null) return Text(title, style: titleStyle);

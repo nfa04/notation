@@ -557,7 +557,7 @@ class _SearchViewState extends State<SearchView> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          child: SizedBox(width: double.infinity, child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             if (!_meaning) ...[
               _toggle('search-case', 'Aa', 'Match the case', _case, (v) => _case = v),
               _toggle('search-word', 'ab', 'Whole words only', _word, (v) => _word = v),
@@ -592,7 +592,7 @@ class _SearchViewState extends State<SearchView> {
             ),
             if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2)),
             if (_reading != null) Text.verbatim(_reading!, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ]),
+          ])),
         ),
         if (_showFilters) _filterPanel(),
         if (r != null)

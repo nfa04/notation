@@ -94,7 +94,7 @@ void main() {
       await settle(30);
 
       if (importHere) {
-        await tester.tap(find.text('Import PDF'));
+        await tester.tap(find.byTooltip('Import PDF'));
         await settle(50);
       } else {
         final sha = sha256.convert(bytes).toString();
