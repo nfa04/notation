@@ -127,7 +127,7 @@ class _GraphLibraryState extends State<GraphLibrary> {
                           shape: const Border(),
                           collapsedShape: const Border(),
                           leading: Icon(g.mode == 'notes' ? Icons.description_outlined : Icons.lightbulb_outline),
-                          title: Text.verbatim(g.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: g.id == widget.frontId ? const TextStyle(fontWeight: FontWeight.bold) : null),
+                          title: Text.verbatim(g.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: g.id == widget.frontId ? const TextStyle(fontWeight: FontWeight.w500) : null),
                           subtitle: Text.verbatim(
                             '${g.mode == 'notes' ? tr('Notes') : tr('Facts')} - ${_scope(g)} - ${_GraphViewState._ago(g.builtAt)}'
                             '${_versions.where((v) => v.graphUid == g.uid).isEmpty ? '' : ' - ${trCount(_versions.where((v) => v.graphUid == g.uid).length, '{n} earlier picture', '{n} earlier pictures')}'}',

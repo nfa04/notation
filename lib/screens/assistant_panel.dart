@@ -370,7 +370,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
           key: ValueKey('assistant-question-$i'),
           margin: const EdgeInsets.only(bottom: 8, left: 40),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(8)),
           child: SelectableText(m.text, style: TextStyle(color: scheme.onPrimaryContainer)),
         ),
       );
@@ -383,8 +383,9 @@ class _AssistantPanelState extends State<AssistantPanel> {
         margin: const EdgeInsets.only(bottom: 8, right: 24),
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
         decoration: BoxDecoration(
-          color: m.failed ? scheme.errorContainer : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          color: m.failed ? scheme.errorContainer : null,
+          border: m.failed ? null : Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (var j = 0; j < m.steps.length; j++) _step(context, m.steps[j], i, j),
@@ -495,7 +496,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
       key: ValueKey('assistant-source-row-$i-$n'),
       padding: const EdgeInsets.only(top: 6),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: 22, child: Text.verbatim('${n + 1}', style: small.copyWith(fontWeight: FontWeight.w700))),
+        SizedBox(width: 22, child: Text.verbatim('${n + 1}', style: small.copyWith(fontWeight: FontWeight.w500))),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -560,7 +561,7 @@ class _AssistantPanelState extends State<AssistantPanel> {
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text.verbatim('${tr('Sources')}:', style: small.copyWith(fontWeight: FontWeight.w600)),
+            Text.verbatim('${tr('Sources')}:', style: small.copyWith(fontWeight: FontWeight.w500)),
             for (var n = 0; n < (_allSources.contains(i) ? check.sources.length : math.min(check.sources.length, 4)); n++)
               _sourceRow(check.sources[n], i, n, scheme, small, label, open),
             if (check.sources.length > 4 && !_allSources.contains(i))
