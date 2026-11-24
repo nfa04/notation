@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 /// that came with them (assets/licenses/, assets/fonts/). When a plugin brings another library, add its text here.
 const bundledLicenses = <({String package, String asset})>[
   (package: 'DejaVu fonts', asset: 'assets/fonts/DejaVu-LICENSE.txt'),
+  (package: 'Inter font', asset: 'assets/fonts/Inter-LICENSE.txt'),
   (package: 'Liberation fonts', asset: 'assets/fonts/Liberation-LICENSE.txt'),
   (package: 'PDFium (and the libraries in it)', asset: 'assets/licenses/pdfium.txt'),
   (package: 'ONNX Runtime', asset: 'assets/licenses/onnxruntime.txt'),

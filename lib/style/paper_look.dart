@@ -7,6 +7,8 @@ import 'platform_look.dart';
 ///
 /// A layer over the Material theme like [iosLook] (which is put over it, so the iOS look still wins where it has an opinion), and
 /// like it only about surfaces and type: no widget changes. With high contrast the colours of the scheme are left alone.
+const paperFont = 'Inter';
+
 ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
   final dark = base.brightness == Brightness.dark;
   var scheme = base.colorScheme;
@@ -27,8 +29,11 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
     );
   }
   final rule = BorderSide(color: scheme.outlineVariant);
-  final title = TextStyle(color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w300, letterSpacing: 0.1);
+  final title = TextStyle(fontFamily: paperFont, color: scheme.onSurface, fontSize: 22, fontWeight: FontWeight.w300, letterSpacing: 0.1);
   return base.copyWith(
+    // Inter is bundled (SIL Open Font License), so the light weights look the same on every platform
+    textTheme: base.textTheme.apply(fontFamily: paperFont),
+    primaryTextTheme: base.primaryTextTheme.apply(fontFamily: paperFont),
     extensions: [...base.extensions.values, const PaperLookMarker()],
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
