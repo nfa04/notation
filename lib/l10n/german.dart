@@ -571,7 +571,7 @@ const germanTexts = <String, String>{
   'Join a live session (paste an invite link)': 'Live-Sitzung beitreten (Einladungslink einfügen)',
   'Open a note file (.uninote)': 'Notizdatei (.uninote) öffnen',
   'Could not load notes: {error}': 'Notizen konnten nicht geladen werden: {error}',
-  'Welcome back 👋': 'Willkommen zurück 👋',
+  'Welcome back': 'Willkommen zurück 👋',
   'No notes yet - create your first one.': 'Noch keine Notizen - erstelle deine erste.',
   'Here are your recent study notes:': 'Hier sind deine letzten Lernnotizen:',
   'New Note': 'Neue Notiz',

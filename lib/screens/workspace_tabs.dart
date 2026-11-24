@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' hide Text;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart' show HardwareKeyboard;
 
 import '../l10n/language.dart';
@@ -119,17 +120,16 @@ class WorkspaceTabStrip extends StatelessWidget {
       // a middle click closes, as in a browser
       onTertiaryTapUp: (_) => onClose(t.key),
       onTap: () => onSelect(t.key, beside: HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed),
-      child: Container(
+      child: _Hover(builder: (hovered) => Container(
         constraints: const BoxConstraints(minWidth: 90, maxWidth: 220),
-        padding: const EdgeInsets.only(left: 10, right: 2),
+        padding: const EdgeInsets.only(left: 14, right: 2),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(width: 1.5, color: hasKeys ? scheme.onSurface : (on ? scheme.onSurface.withValues(alpha: 0.35) : Colors.transparent))),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(t.icon, size: 16, color: hasKeys ? scheme.onSurface : scheme.onSurfaceVariant),
-          const SizedBox(width: 6),
           Flexible(child: Text.verbatim(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: hasKeys ? FontWeight.w500 : FontWeight.normal, color: hasKeys ? scheme.onSurface : scheme.onSurfaceVariant))),
-          IconButton(
+          // the close mark shows on the tabs that are open on screen and under the pointer; elsewhere it is a gap (a middle click or the menu close it)
+          if (!(on || hovered || _touch)) const SizedBox(width: 14) else IconButton(
             key: ValueKey('tab-close-${t.key}'),
             tooltip: tr('Close tab'),
             visualDensity: VisualDensity.compact,
@@ -140,7 +140,26 @@ class WorkspaceTabStrip extends StatelessWidget {
             onPressed: () => onClose(t.key),
           ),
         ]),
-      ),
+      )),
     );
   }
+}
+
+
+bool get _touch => const {TargetPlatform.android, TargetPlatform.iOS}.contains(defaultTargetPlatform);
+
+/// Tells its builder whether the pointer is over it.
+class _Hover extends StatefulWidget {
+  final Widget Function(bool hovered) builder;
+  const _Hover({required this.builder});
+
+  @override
+  State<_Hover> createState() => _HoverState();
+}
+
+class _HoverState extends State<_Hover> {
+  bool _in = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(onEnter: (_) => setState(() => _in = true), onExit: (_) => setState(() => _in = false), child: widget.builder(_in));
 }

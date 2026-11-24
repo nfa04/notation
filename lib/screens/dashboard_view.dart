@@ -432,7 +432,7 @@ class _DashboardViewState extends State<DashboardView> {
             slivers: [
               SliverPadding(
                 // (a phone: less margin, and room under the last cards for the button)
-                padding: phone ? const EdgeInsets.fromLTRB(16, 12, 16, 96) : const EdgeInsets.all(24.0),
+                padding: phone ? const EdgeInsets.fromLTRB(16, 12, 16, 96) : const EdgeInsets.fromLTRB(24, 24, 24, 96),
                 sliver: SliverMainAxisGroup(
                   slivers: [
                     SliverToBoxAdapter(
@@ -443,7 +443,7 @@ class _DashboardViewState extends State<DashboardView> {
                           if (widget.automations != null) AskCard(service: widget.automations!, repository: widget.repository, onOpenNote: widget.onOpenNote),
                           if (widget.planner != null) StudySessionCard(planner: widget.planner!, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt),
                           Text(
-                            'Welcome back 👋',
+                            'Welcome back',
                             style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w300),
                           ),
                           const SizedBox(height: 4),
@@ -526,143 +526,92 @@ class _DashboardViewState extends State<DashboardView> {
           maxCrossAxisExtent: phone ? 200 : 280,
           mainAxisSpacing: phone ? 12 : 16,
           crossAxisSpacing: phone ? 12 : 16,
-          childAspectRatio: phone ? 0.8 : 0.85,
+          childAspectRatio: phone ? 0.68 : 0.74,
         ),
         itemCount: notes.length,
         itemBuilder: (context, index) => _card(notes[index], _cardColors[index % _cardColors.length]),
       );
 
+  /// A note: its page (with the cover picture behind it, if it has one) and under it, on the plain ground, its title and when it changed.
+  /// Nothing is written over the page, so the handwriting stays clear.
   Widget _card(NoteSummary note, Color color) {
-    return Card(
-      elevation: 0,
-      color: color,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: _selected.contains(note.id)
-            ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 3)
-            : BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => _selecting || selectModifierPressed ? _toggleSelected(note.id) : widget.onOpenNote(note.id),
-        onSecondaryTapUp: (d) => _showCardMenu(note, d.globalPosition),
-        onLongPress: () => _selecting ? _toggleSelected(note.id) : _showCardMenu(note, _lastPress),
-        onTapDown: (d) => _lastPress = d.globalPosition,
-        child: Stack(fit: StackFit.expand, children: [
-          if (note.themeImage != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: BoundedFileImage(
-                File(note.themeImage!),
-                key: ValueKey(note.themeImage),
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
+    final scheme = Theme.of(context).colorScheme;
+    final selected = _selected.contains(note.id);
+    final corners = BorderRadius.circular(6);
+    return Card(elevation: 0, color: Colors.transparent, margin: EdgeInsets.zero, shape: const RoundedRectangleBorder(), child: InkWell(
+      borderRadius: corners,
+      onTap: () => _selecting || selectModifierPressed ? _toggleSelected(note.id) : widget.onOpenNote(note.id),
+      onSecondaryTapUp: (d) => _showCardMenu(note, d.globalPosition),
+      onLongPress: () => _selecting ? _toggleSelected(note.id) : _showCardMenu(note, _lastPress),
+      onTapDown: (d) => _lastPress = d.globalPosition,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: corners,
+              border: Border.all(color: selected ? scheme.primary : scheme.outlineVariant, width: selected ? 2 : 1),
             ),
-          ],
-          if (widget.previews != null)
-            Positioned.fill(
-              child: NotePreviewImage(
-                previews: widget.previews,
-                noteId: note.id,
-                changed: note.updatedAt,
-                locked: note.locked,
-                opacity: note.themeImage != null ? 0.65 : 0.9,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          if (note.themeImage != null) ...[
-            // darkens the picture so that the title stays readable
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.all(Radius.circular(8)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0, 0.5, 1],
-                  colors: [Color(0xB3000000), Color(0x40000000), Color(0xB3000000)],
-                ),
-              ),
-            ),
-          ],
-          if (note.themeImage == null && widget.previews != null)
-            // the card colours are always light, so a light fade keeps the title clear of the page preview
-            DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.all(Radius.circular(8)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0, 0.4, 0.65, 1],
-                  colors: [color.withValues(alpha: 0.95), color.withValues(alpha: 0), color.withValues(alpha: 0), color.withValues(alpha: 0.95)],
-                ),
-              ),
-            ),
-          Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text.verbatim(
-                      note.shownTitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: note.themeImage != null ? Colors.white : Colors.black87,
-                          shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null),
+            child: ClipRRect(
+              borderRadius: corners,
+              child: Stack(fit: StackFit.expand, children: [
+                if (note.themeImage != null)
+                  BoundedFileImage(File(note.themeImage!), key: ValueKey(note.themeImage), fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
+                if (widget.previews != null)
+                  NotePreviewImage(previews: widget.previews, noteId: note.id, changed: note.updatedAt, locked: note.locked, opacity: note.themeImage != null ? 0.75 : 0.95, borderRadius: corners),
+                Positioned(
+                  right: 8,
+                  bottom: 6,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    SharedBadge(
+                      key: ValueKey('shared-badge-${note.id}'),
+                      kind: widget.collab?.shared.kindOf(note.id) ?? SharedKind.none,
+                      from: widget.collab?.shared.fromWhom(note.id),
+                      color: Colors.black54,
                     ),
-                  ),
-                  if (_selecting)
-                    Checkbox.adaptive(key: ValueKey('select-${note.id}'), value: _selected.contains(note.id), onChanged: (_) => _toggleSelected(note.id))
-                  else ...[
-                  IconButton(
-                    key: ValueKey('star-${note.id}'),
-                    tooltip: tr(note.favorite ? 'Remove from favourites' : 'Add to favourites'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                    icon: Icon(note.favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                        size: 20, color: note.favorite ? Theme.of(context).colorScheme.primary : (note.themeImage != null ? Colors.white : Colors.black87)),
-                    onPressed: () => _toggleFavorite(note),
-                  ),
-                  PopupMenuButton<void>(
-                    tooltip: tr('More'),
-                    padding: EdgeInsets.zero,
-                    icon: Icon(Icons.more_vert, size: 18, color: note.themeImage != null ? Colors.white : Colors.black87),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(onTap: () => _toggleFavorite(note), child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
-                      if (widget.noteFiles != null && !note.locked)
-                        PopupMenuItem(onTap: () => saveNoteAsFile(context, widget.noteFiles!, note.id, note.title), child: const Text('Save as a file...')),
-                      PopupMenuItem(onTap: () => _toggleSelected(note.id), child: const Text('Select')),
-                      PopupMenuItem(onTap: () => _deleteNote(note), child: const Text('Delete')),
-                    ],
-                  ),
-                  ],
-                ],
-              ),
-              Text(_ago(note.updatedAt),
-                  style: TextStyle(fontSize: 11, color: note.themeImage != null ? Colors.white : Colors.black87, shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null)),
-              const Spacer(),
-              Row(children: [
-                SharedBadge(
-                  key: ValueKey('shared-badge-${note.id}'),
-                  kind: widget.collab?.shared.kindOf(note.id) ?? SharedKind.none,
-                  from: widget.collab?.shared.fromWhom(note.id),
-                  color: note.themeImage != null ? Colors.white : Colors.black87,
+                    if (note.locked || note.isPdf) Icon(note.locked ? Icons.lock_outline : Icons.picture_as_pdf_outlined, size: 16, color: Colors.black54),
+                  ]),
                 ),
-                const Spacer(),
-                Icon(note.locked ? Icons.lock_outline : (note.isPdf ? Icons.picture_as_pdf : Icons.edit_note_rounded), color: note.themeImage != null ? Colors.white : Colors.black87, shadows: note.themeImage != null ? const [Shadow(blurRadius: 4, color: Colors.black54)] : null),
-              ])
-            ],
+              ]),
+            ),
           ),
         ),
+        const SizedBox(height: 8),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text.verbatim(note.shownTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, height: 1.25, color: scheme.onSurface)),
+              const SizedBox(height: 2),
+              Text(_ago(note.updatedAt), style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+            ]),
+          ),
+          if (_selecting)
+            Checkbox.adaptive(key: ValueKey('select-${note.id}'), value: selected, onChanged: (_) => _toggleSelected(note.id))
+          else ...[
+            IconButton(
+              key: ValueKey('star-${note.id}'),
+              tooltip: tr(note.favorite ? 'Remove from favourites' : 'Add to favourites'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+              icon: Icon(note.favorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 18, color: note.favorite ? scheme.primary : scheme.onSurfaceVariant),
+              onPressed: () => _toggleFavorite(note),
+            ),
+            PopupMenuButton<void>(
+              tooltip: tr('More'),
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              icon: Icon(Icons.more_vert, size: 18, color: scheme.onSurfaceVariant),
+              itemBuilder: (_) => [
+                PopupMenuItem(onTap: () => _toggleFavorite(note), child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
+                if (widget.noteFiles != null && !note.locked)
+                  PopupMenuItem(onTap: () => saveNoteAsFile(context, widget.noteFiles!, note.id, note.title), child: const Text('Save as a file...')),
+                PopupMenuItem(onTap: () => _toggleSelected(note.id), child: const Text('Select')),
+                PopupMenuItem(onTap: () => _deleteNote(note), child: const Text('Delete')),
+              ],
+            ),
+          ],
         ]),
-      ),
-    );
+      ]),
+    ));
   }
 }

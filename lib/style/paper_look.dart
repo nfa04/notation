@@ -95,7 +95,7 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.onSurface, width: 1.5)),
     ),
     // buttons: small square corners, no pill; chips and segments flat with a hairline and a pale selection
-    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, textStyle: (base.textTheme.labelLarge ?? const TextStyle()).copyWith(inherit: false, fontWeight: FontWeight.w500))),
+    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, backgroundColor: scheme.onSurface, foregroundColor: scheme.surface, disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12), textStyle: (base.textTheme.labelLarge ?? const TextStyle()).copyWith(inherit: false, fontWeight: FontWeight.w500))),
     elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(shape: r6, elevation: 0, shadowColor: Colors.transparent, surfaceTintColor: Colors.transparent, backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, side: rule)),
     outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(shape: r6, side: BorderSide(color: scheme.outlineVariant), foregroundColor: scheme.onSurface)),
     textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: r6)),
@@ -103,8 +103,8 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
         shape: r6,
-        side: rule,
-        backgroundColor: scheme.surface,
+        side: BorderSide.none,
+        backgroundColor: Colors.transparent,
         foregroundColor: scheme.onSurfaceVariant,
         selectedBackgroundColor: scheme.secondaryContainer,
         selectedForegroundColor: scheme.onSurface,

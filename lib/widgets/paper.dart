@@ -39,8 +39,9 @@ class PaperPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final box = Material(
-      color: tinted ? scheme.surfaceContainerLow : scheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: scheme.outlineVariant)),
+      // ruled, not boxed: a hairline above and below (a pale ground with small corners when it is to stand out a little)
+      color: tinted ? scheme.surfaceContainerLow : Colors.transparent,
+      shape: tinted ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)) : _Ruled(BorderSide(color: scheme.outlineVariant)),
       clipBehavior: Clip.antiAlias,
       child: onTap == null ? Padding(padding: padding, child: child) : InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
     );
@@ -111,5 +112,31 @@ class PageHeader extends StatelessWidget implements PreferredSizeWidget {
         ]),
       ),
     );
+  }
+}
+
+
+/// A shape with a line at its top and bottom edge only.
+class _Ruled extends ShapeBorder {
+  final BorderSide side;
+  const _Ruled(this.side);
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.symmetric(vertical: side.width);
+
+  @override
+  ShapeBorder scale(double t) => _Ruled(side.scale(t));
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    final paint = side.toPaint();
+    canvas.drawLine(rect.topLeft, rect.topRight, paint);
+    canvas.drawLine(rect.bottomLeft, rect.bottomRight, paint);
   }
 }

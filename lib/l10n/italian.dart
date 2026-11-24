@@ -562,7 +562,7 @@ const italianTexts = <String, String>{
   'Join a live session (paste an invite link)': 'Partecipa a una sessione dal vivo (incolla un link d’invito)',
   'Open a note file (.uninote)': 'Apri un file di nota (.uninote)',
   'Could not load notes: {error}': 'Impossibile caricare le note: {error}',
-  'Welcome back 👋': 'Bentornato 👋',
+  'Welcome back': 'Bentornato 👋',
   'No notes yet - create your first one.': 'Ancora nessuna nota: creane una.',
   'Here are your recent study notes:': 'Ecco le tue note di studio recenti:',
   'New Note': 'Nuova nota',
