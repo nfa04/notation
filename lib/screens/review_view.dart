@@ -196,7 +196,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             child: Container(
               key: ValueKey('review-card-$_done-$_flipped'),
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: _flipped ? scheme.tertiaryContainer : scheme.primaryContainer, borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: _flipped ? scheme.tertiaryContainer : scheme.primaryContainer, borderRadius: BorderRadius.circular(8)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(_flipped ? 'Answer' : 'Question', style: TextStyle(fontSize: 12, letterSpacing: 0.6, color: scheme.onSurfaceVariant)),
                 Expanded(

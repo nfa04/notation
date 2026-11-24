@@ -258,7 +258,7 @@ class _Banner extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
         child: Row(children: [Icon(icon), const SizedBox(width: 12), Expanded(child: Text.verbatim(text)), ?action]),
       );
 }

@@ -197,7 +197,7 @@ class _IdeasDialogState extends State<IdeasDialog> {
                     message: '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
                     child: InkWell(
                       key: ValueKey('ideas-colour-$i'),
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(10),
                       onTap: () => Navigator.pop(context, IdeasResult(colours: [c])),
                       child: Container(
                         width: 48,

@@ -241,7 +241,7 @@ class _IntroScreenState extends State<IntroScreen> {
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Icon(Icons.devices_outlined, size: 22),
                 const SizedBox(width: 10),
@@ -303,7 +303,7 @@ class _IntroScreenState extends State<IntroScreen> {
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Icon(Icons.fingerprint, size: 22),
               const SizedBox(width: 10),
@@ -337,7 +337,7 @@ class _IntroScreenState extends State<IntroScreen> {
             Material(
               key: const ValueKey('intro-profiles-offer'),
               color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -415,7 +415,7 @@ class _IntroScreenState extends State<IntroScreen> {
       const SizedBox(height: 20),
       Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Icon(Icons.devices_outlined, size: 22),
           const SizedBox(width: 10),
@@ -473,7 +473,7 @@ class _IntroScreenState extends State<IntroScreen> {
       const SizedBox(height: 16),
       Material(
         color: _ai ? scheme.surfaceContainerLow : scheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 8, 12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -560,7 +560,7 @@ class _DownloadBanner extends StatelessWidget {
           key: const ValueKey('intro-downloads'),
           margin: const EdgeInsets.only(top: 8),
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             for (final m in busy) ...[
               Row(children: [

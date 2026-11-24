@@ -627,7 +627,7 @@ class _DashboardViewState extends State<DashboardView> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                     icon: Icon(note.favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                        size: 20, color: note.favorite ? Colors.amber : (note.themeImage != null ? Colors.white : Colors.black87)),
+                        size: 20, color: note.favorite ? Theme.of(context).colorScheme.primary : (note.themeImage != null ? Colors.white : Colors.black87)),
                     onPressed: () => _toggleFavorite(note),
                   ),
                   PopupMenuButton<void>(

@@ -80,7 +80,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
         key: const ValueKey('favorite-note'),
         tooltip: tr(_favorite ? 'Remove from favourites' : 'Add to favourites'),
         visualDensity: VisualDensity.compact,
-        icon: Icon(_favorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 20, color: _favorite ? Colors.amber : null),
+        icon: Icon(_favorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 20, color: _favorite ? Theme.of(context).colorScheme.primary : null),
         onPressed: _toggleFavorite,
       ),
       ],

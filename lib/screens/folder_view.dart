@@ -767,7 +767,7 @@ class _FolderViewState extends State<FolderView> {
           children: [
             hasChildren
                 ? InkWell(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                     onTap: () => setState(() => expanded ? _expanded.remove(f.id) : _expanded.add(f.id)),
                     child: Icon(expanded ? Icons.expand_more : Icons.chevron_right, size: 22),
                   )

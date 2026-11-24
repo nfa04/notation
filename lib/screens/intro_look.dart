@@ -134,11 +134,11 @@ class _PenTestPadState extends State<PenTestPad> {
     final scheme = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
           key: const ValueKey('intro-pen-pad'),
           height: 140,
-          decoration: BoxDecoration(color: scheme.surfaceContainerLow, border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: scheme.surfaceContainerLow, border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(8)),
           child: Listener(
             behavior: HitTestBehavior.opaque,
             onPointerDown: _down,

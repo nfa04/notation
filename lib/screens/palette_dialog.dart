@@ -20,7 +20,7 @@ class PaletteDialog extends StatelessWidget {
               for (final (i, c) in colours.indexed)
                 InkWell(
                   key: ValueKey('palette-color-$i'),
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(10),
                   onTap: () => Navigator.pop(context, [c]),
                   child: Container(
                     width: 48,

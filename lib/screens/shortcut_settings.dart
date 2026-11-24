@@ -218,7 +218,7 @@ class _KeyRecorderState extends State<_KeyRecorder> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 20),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: scheme.primary, width: 2),
                 color: scheme.surfaceContainerHighest,
               ),
