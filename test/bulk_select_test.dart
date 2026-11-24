@@ -69,7 +69,11 @@ void main() {
     // select two others with a long press and the menu, and throw them away
     await tester.tap(find.byKey(const ValueKey('select-notes')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Three'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Three'));
+    await tester.ensureVisible(find.text('Four'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Four'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('selection-delete')));

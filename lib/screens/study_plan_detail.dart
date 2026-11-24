@@ -4,6 +4,7 @@ import '../data/card_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../review/study_material.dart';
+import '../widgets/paper.dart';
 import '../review/study_planner.dart';
 import '../review/study_schedule.dart';
 import '../review/study_progress.dart';
@@ -14,6 +15,12 @@ String _clock(BuildContext context, DateTime t) =>
     MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(t), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context));
 
 String _length(int minutes) => minutes < 90 ? trCount(minutes, '{n} minute', '{n} minutes') : tr('{n} hours', {'n': (minutes / 60).toStringAsFixed(1).replaceFirst(RegExp(r'\.0$'), '')});
+
+/// The surfaces of the plan are ruled, not boxed: no ground, a hairline under (or around the top and bottom of) the rows.
+Card _flat(BuildContext context, {Key? key, EdgeInsetsGeometry margin = EdgeInsets.zero, bool top = false, bool bottom = false, Color? color, required Widget child}) {
+  final line = BorderSide(color: Theme.of(context).colorScheme.outlineVariant);
+  return Card(key: key, elevation: 0, margin: margin, color: color ?? Colors.transparent, clipBehavior: Clip.antiAlias, shape: Border(top: top ? line : BorderSide.none, bottom: bottom ? line : BorderSide.none), child: child);
+}
 
 /// A plan as a whole: how far it is, its parts with their progress and summaries, and every session by day (done, missed, to come).
 class StudyPlanDetail extends StatefulWidget {
@@ -102,9 +109,9 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
           if (curve.length > 1)
             Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 8), child: ProgressDiagram(points: curve, today: today, exam: DateTime(e.exam.year, e.exam.month, e.exam.day), workAt: (d) => workAround(e, now, d))),
+              child: _flat(
+                context,
+                child: Padding(padding: const EdgeInsets.fromLTRB(0, 12, 0, 8), child: ProgressDiagram(points: curve, today: today, exam: DateTime(e.exam.year, e.exam.month, e.exam.day), workAt: (d) => workAround(e, now, d))),
               ),
             ),
           if (sessions.isEmpty) Padding(padding: const EdgeInsets.only(top: 16), child: Text('There are no sessions yet. Approve the plan to get them.', key: const ValueKey('plan-detail-no-sessions'))),
@@ -133,16 +140,17 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     final l = MaterialLocalizations.of(context);
     final studied = studiedMinutes(e);
     final color = switch (progress.pace) { PlanPace.behind => scheme.tertiary, _ => scheme.primary };
-    final icon = switch (progress.pace) { PlanPace.onTrack => Icons.check_circle_outline, PlanPace.ahead => Icons.trending_up, PlanPace.behind => Icons.flag_outlined };
-    Widget stat(IconData i, String t) => Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(children: [Icon(i, size: 16, color: scheme.onSurfaceVariant), const SizedBox(width: 6), Expanded(child: Text.verbatim(t, style: theme.textTheme.bodySmall))]),
-        );
-    return Card(
+    final facts = [
+      tr('{done} of {all} sessions done', {'done': done, 'all': all}),
+      if (studied > 0) tr('{time} studied', {'time': _length(studied)}),
+      tr('{time} still to study', {'time': _length(left)}),
+    ];
+    return _flat(
+      context,
       key: const ValueKey('plan-progress'),
-      margin: EdgeInsets.zero,
+      bottom: true,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 20),
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           if (progress.hasParts) ...[ReadinessRing(value: progress.readiness, marker: progress.planned, color: color), const SizedBox(width: 16)],
           Expanded(
@@ -153,15 +161,11 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Row(children: [
-                    Icon(icon, size: 16, color: color),
-                    const SizedBox(width: 4),
                     Flexible(child: Text.verbatim(PlanProgressBlock.paceText(progress), key: const ValueKey('plan-pace'), style: theme.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w500))),
                   ]),
                 ),
-              const SizedBox(height: 4),
-              stat(Icons.event_available_outlined, tr('{done} of {all} sessions done', {'done': done, 'all': all})),
-              if (studied > 0) stat(Icons.local_fire_department_outlined, tr('{time} studied', {'time': _length(studied)})),
-              stat(Icons.timer_outlined, tr('{time} still to study', {'time': _length(left)})),
+              const SizedBox(height: 6),
+              Text.verbatim(facts.join('  ·  '), style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
             ]),
           ),
         ]),
@@ -170,9 +174,9 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
   }
 
   Widget _section(BuildContext context, String title, {Widget? trailing}) => Padding(
-        padding: const EdgeInsets.only(top: 20, bottom: 8),
+        padding: const EdgeInsets.only(top: 28, bottom: 10),
         child: Row(children: [
-          Expanded(child: Text.verbatim(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500))),
+          Expanded(child: Text.verbatim(title, style: PaperSection.style(context))),
           ?trailing,
         ]),
       );
@@ -197,20 +201,20 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     return Column(key: const ValueKey('plan-standing'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       _section(context, tr('Where the parts stand')),
       ClipRRect(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(2),
         child: SizedBox(
-          height: 12,
+          height: 4,
           child: Row(children: [
             for (final s in PartStanding.values.reversed)
               if (count[s]! > 0) Expanded(flex: count[s]!, child: Container(color: colors[s])),
           ]),
         ),
       ),
-      const SizedBox(height: 8),
-      Wrap(spacing: 16, runSpacing: 4, children: [
+      const SizedBox(height: 10),
+      Wrap(spacing: 20, runSpacing: 4, children: [
         for (final s in PartStanding.values.reversed)
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 10, height: 10, decoration: BoxDecoration(color: colors[s], borderRadius: BorderRadius.circular(3), border: s == PartStanding.notStarted ? Border.all(color: scheme.outlineVariant) : null)),
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: colors[s], shape: BoxShape.circle, border: s == PartStanding.notStarted ? Border.all(color: scheme.outlineVariant) : null)),
             const SizedBox(width: 6),
             Text.verbatim('${names[s]} (${count[s]})', style: theme.textTheme.bodySmall),
           ]),
@@ -237,23 +241,24 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     };
     return Column(key: const ValueKey('plan-focus'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       _section(context, tr('Focus on these'), trailing: TextButton(onPressed: () => setState(() => _tab = _Tab.parts), child: Text('All parts'))),
-      Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
+      _flat(
+        context,
+        top: true,
+        bottom: true,
         child: Column(children: [
           for (final (i, u) in focus.indexed) ...[
             if (i > 0) const Divider(height: 1),
             InkWell(
               onTap: () => setState(() => _tab = _Tab.parts),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     Expanded(child: Text.verbatim(u.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge)),
                     Text.verbatim(names[partStanding(e.progress[u.id])]!, style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
                   ]),
                   const SizedBox(height: 6),
-                  LayeredBar(value: e.progress[u.id]?.reviewed ?? 0, behind: e.progress[u.id]?.learned ?? 0, height: 6),
+                  LayeredBar(value: e.progress[u.id]?.reviewed ?? 0, behind: e.progress[u.id]?.learned ?? 0, height: 3),
                 ]),
               ),
             ),
@@ -280,7 +285,9 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     final running = planner.running?.key == s.key && planner.running?.planId == e.id;
     return Card(
       key: const ValueKey('plan-next-up'),
+      elevation: 0,
       color: scheme.primaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       margin: const EdgeInsets.only(top: 12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
@@ -340,11 +347,12 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
     final p = e.progress[u.id];
     final points = e.material[u.id]?.points ?? const <String>[];
     final difficulty = switch (u.difficulty) { Difficulty.easy => tr('Easy'), Difficulty.medium => tr('Medium'), Difficulty.hard => tr('Hard') };
-    return Card(
+    return _flat(
+      context,
       key: ValueKey('plan-part-${u.id}'),
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      bottom: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        padding: const EdgeInsets.fromLTRB(0, 10, 4, 10),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -400,14 +408,14 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
                 : past
                     ? (Icons.error_outline, tr('Not ticked off'), scheme.error)
                     : (Icons.schedule, tr('To come'), scheme.outline);
-    return Card(
+    return _flat(
+      context,
       key: ValueKey('plan-session-${s.key}'),
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      color: s.credited ? scheme.surfaceContainerLow : scheme.surfaceContainerHigh,
+      bottom: true,
       child: InkWell(
         onTap: s.gone ? null : () => openStudySession(context, planner, e.id, s.key, cards: cards, onOpenNoteAt: onOpenNoteAt, clock: clock),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(padding: const EdgeInsets.only(top: 2, right: 10), child: Icon(state.$1, size: 20, color: state.$3)),
             Expanded(

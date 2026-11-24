@@ -122,11 +122,13 @@ class WorkspaceTabStrip extends StatelessWidget {
       onTap: () => onSelect(t.key, beside: HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed),
       child: _Hover(builder: (hovered) => Container(
         constraints: const BoxConstraints(minWidth: 90, maxWidth: 220),
-        padding: const EdgeInsets.only(left: 14, right: 2),
+        padding: const EdgeInsets.only(left: 10, right: 2),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(width: 1.5, color: hasKeys ? scheme.onSurface : (on ? scheme.onSurface.withValues(alpha: 0.35) : Colors.transparent))),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(t.icon, size: 16, color: hasKeys ? scheme.onSurface : scheme.onSurfaceVariant),
+          const SizedBox(width: 6),
           Flexible(child: Text.verbatim(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: hasKeys ? FontWeight.w500 : FontWeight.normal, color: hasKeys ? scheme.onSurface : scheme.onSurfaceVariant))),
           // the close mark shows on the tabs that are open on screen and under the pointer; elsewhere it is a gap (a middle click or the menu close it)
           if (!(on || hovered || _touch)) const SizedBox(width: 14) else IconButton(
