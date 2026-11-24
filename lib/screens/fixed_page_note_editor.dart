@@ -1591,8 +1591,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   DateTime _areaDownTime = DateTime.now();
   double _areaTravel = 0;
 
-  /// What is on screen of each page, rendered as sharp as the current zoom needs, over the normal picture.
-  final Map<int, _SharpPatch> _hiRes = {};
+  /// What is on screen of each page, rendered as sharp as the current zoom needs, over the normal picture. Each page listens to
+  /// its own: a sharp picture that comes redraws that page, not the editor (see [_sharpNotifier]).
+  final Map<int, ValueNotifier<_SharpPatch?>> _hiRes = {};
   final Set<int> _hiResPending = {};
 
   /// Pixel width the whole of a page would have at the current zoom; 0 = the normal picture will do.
@@ -2268,8 +2269,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _replaceFocus.dispose();
     _zoomSettle?.cancel();
     _dragScroll?.cancel();
-    for (final patch in _hiRes.values) {
-      patch.dispose();
+    for (final shown in _hiRes.values) {
+      shown.value?.dispose();
+      shown.dispose();
     }
     for (final words in _wordsOf.values) {
       words.dispose();

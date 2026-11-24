@@ -418,24 +418,28 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
               Builder(
                 builder: (context) {
                   // zoomed in: ask for a sharper picture of what is on screen of this page (shown over the normal one)
+                  // (asked when the editor is built, not when the picture comes: that only draws this page again)
                   if (_hiResWidth > 0) {
                     WidgetsBinding.instance.addPostFrameCallback(
                       (_) => _requestHiRes(pageIndex),
                     );
                   }
-                  final sharp = _hiRes[pageIndex];
                   return Stack(
                     children: [
                       _PageImage(data: page, width: _paperWidth, height: pageHeight),
-                      if (sharp != null)
-                        Positioned.fromRect(
-                          rect: sharp.rect,
-                          child: RawImage(
-                            image: sharp.image,
-                            fit: BoxFit.fill,
-                            filterQuality: FilterQuality.medium,
-                          ),
+                      Positioned.fill(
+                        child: ValueListenableBuilder<_SharpPatch?>(
+                          valueListenable: _sharpNotifier(pageIndex),
+                          builder: (_, sharp, _) => sharp == null
+                              ? const SizedBox.shrink()
+                              : Stack(children: [
+                                  Positioned.fromRect(
+                                    rect: sharp.rect,
+                                    child: RawImage(image: sharp.image, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+                                  ),
+                                ]),
                         ),
+                      ),
                     ],
                   );
                 },

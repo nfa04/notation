@@ -287,12 +287,16 @@ extension _PdfEdit on _FixedPageNoteEditorState {
       _forgetWords(page); // (its text may have changed: it is read again)
       _jobs.dropWhere((j) => j.page == page && j.kind != PageJobKind.words);
       _hiResPending.remove(page);
-      final sharp = _hiRes.remove(page);
+      final sharp = _hiRes[page]?.value;
+      _hiRes[page]?.value = null;
       if (sharp != null) stale.add(sharp.image);
     } else {
       _forgetPages();
-      stale.addAll(_hiRes.values.map((patch) => patch.image));
-      _hiRes.clear();
+      for (final shown in _hiRes.values) {
+        final sharp = shown.value;
+        shown.value = null;
+        if (sharp != null) stale.add(sharp.image);
+      }
       _hiResPending.clear();
     }
     _pdfPageTexts = null;

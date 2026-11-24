@@ -220,10 +220,7 @@ extension _EditorPdfPages on _FixedPageNoteEditorState {
       _selectedImage = null;
       _nativePages = {};
       _forgetPages();
-      for (final patch in _hiRes.values) {
-        patch.dispose();
-      }
-      _hiRes.clear();
+      _dropSharp();
       _hiResPending.clear();
       _pageHeights.clear();
 

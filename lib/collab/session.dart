@@ -545,7 +545,20 @@ class CollabSession extends ChangeNotifier {
   /// Whether this device is the one that reads the handwriting of the note in the background: the host (or a note not in a session). A
   /// guest does not - reading the same strokes on every device was the same work N times - and takes what the host read
   /// ([announceReadings]). A guest whose link broke reads for itself until it is back, and so does a guest whose host is gone.
-  bool get readsInk => role == SessionRole.host || _state != SessionState.live;
+  /// When the host cannot read (its handwriting reader is switched off or not installed) it says so, and the guests read for
+  /// themselves.
+  bool get readsInk => role == SessionRole.host || _state != SessionState.live || !_hostReadsInk;
+
+  /// On the host: whether it can read the handwriting for the guests ([offerInkReading]). On a guest: whether the host said it can.
+  /// True until a host says otherwise (an older app never says anything, and reads as it always did).
+  bool _hostReadsInk = true;
+
+  /// On the host: whether the handwriting can be read here for the guests. Told to the guests, which read for themselves when it cannot.
+  void offerInkReading(bool can) {
+    if (role != SessionRole.host || can == _hostReadsInk) return;
+    _hostReadsInk = can;
+    if (_state == SessionState.live) unawaited(_broadcast({'t': 'inkreader', 'ok': can}));
+  }
 
   /// The host tells the guests what it read of the handwriting ([readings]: texts, unsure words and formulas by the key of the strokes
   /// they were read from, which is the same on every device). Nothing is sent by a guest, and nothing is sent to guests that do not
@@ -952,6 +965,7 @@ class CollabSession extends ChangeNotifier {
     }
     await peer.send(_bandsMessage());
     await peer.send({'t': 'checker', 'ok': _hostReadsMaths});
+    await peer.send({'t': 'inkreader', 'ok': _hostReadsInk});
     if (registered.changed) await _broadcast({'t': 'roster', 'r': registered.roster.toJson()}, except: peer);
     _successionTimer ??= Timer.periodic(_successionTick, (_) => _reconsiderSuccession());
     _reconsiderSuccession();
@@ -1750,6 +1764,12 @@ class CollabSession extends ChangeNotifier {
         if (ok != _hostReadsMaths) {
           _hostReadsMaths = ok;
           notifyListeners();
+        }
+      case 'inkreader':
+        final ok = m['ok'] != false;
+        if (ok != _hostReadsInk) {
+          _hostReadsInk = ok;
+          notifyListeners(); // (the editor starts reading here, or stops)
         }
       case 'at':
         _takePage(m['site'] as String?, m['page'], m['sheet'], m['q']);

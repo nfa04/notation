@@ -30,6 +30,17 @@ class _ZoomScrollPosition extends ScrollPositionWithSingleContext {
 }
 
 /// Zooming and panning with fingers, the wheel and the controls, and the sharper pages shown while zoomed in.
+/// Whether a sharp patch that covers [patch] of a page (in units of the page) covers [visible], the part of it on screen. The patch is
+/// cut on whole pixels of a picture [pixelWidth] wide, so at the edge of the page it can end up to one pixel short of it, and a pixel
+/// can be more than half a unit of the page: a pixel of slack. (Without it a patch at the bottom of a page never covered it: it was
+/// asked for again at every frame, the editor was rebuilt for ever, and the handwriting was never read, as it waits for a quiet moment.)
+@visibleForTesting
+bool sharpPatchCovers(Rect patch, Rect visible, {required double paperWidth, required int pixelWidth}) {
+  final slack = math.max(0.5, paperWidth / pixelWidth + 0.01);
+  final grown = patch.inflate(slack);
+  return grown.contains(visible.topLeft) && grown.contains(visible.bottomRight);
+}
+
 extension _EditorZoom on _FixedPageNoteEditorState {
   FingerMode get _fingerMode => widget.stylus?.fingers ?? FingerMode.auto;
 
@@ -234,12 +245,21 @@ extension _EditorZoom on _FixedPageNoteEditorState {
       setState(() {
         _hiResWidth = wanted;
         _jobs.dropWhere((j) => j.kind == PageJobKind.sharp);
-        for (final patch in _hiRes.values) {
-          patch.dispose();
-        }
-        _hiRes.clear();
+        _dropSharp();
       });
     });
+  }
+
+  /// What page [page] shows of its sharp picture; its page listens to this.
+  ValueNotifier<_SharpPatch?> _sharpNotifier(int page) => _hiRes.putIfAbsent(page, () => ValueNotifier(null));
+
+  /// Lets go of the sharp pictures of every page, or of those [where] says (each of those pages shows its normal picture again).
+  void _dropSharp([bool Function(int page)? where]) {
+    for (final MapEntry(key: page, value: shown) in _hiRes.entries) {
+      if (shown.value == null || (where != null && !where(page))) continue;
+      shown.value!.dispose(); // (what is on screen has a copy of its own until the page is drawn again)
+      shown.value = null;
+    }
   }
 
   /// The part of page [page] that is on the screen, in units of the page; null when none of it is.
@@ -262,8 +282,8 @@ extension _EditorZoom on _FixedPageNoteEditorState {
     if (_pinching || (_zoomSettle?.isActive ?? false)) return;
     final visible = _visibleRectOf(page);
     if (visible == null) return;
-    final have = _hiRes[page];
-    if (have != null && have.fullWidth == _hiResWidth && have.rect.inflate(0.5).contains(visible.topLeft) && have.rect.inflate(0.5).contains(visible.bottomRight)) return;
+    final have = _hiRes[page]?.value;
+    if (have != null && have.fullWidth == _hiResWidth && sharpPatchCovers(have.rect, visible, paperWidth: _paperWidth, pixelWidth: _hiResWidth)) return;
     if (!_hiResPending.add(page)) return;
     final epoch = _pagesEpoch;
     _jobs.add(PageJob(page, PageJobKind.sharp), (run) async {
@@ -294,17 +314,14 @@ extension _EditorZoom on _FixedPageNoteEditorState {
         patch.dispose(); // the zoom or the PDF moved on meanwhile
         return;
       }
-      setState(() {
-        _hiRes.remove(page)?.dispose();
-        _hiRes[page] = patch;
-        // pages no longer on screen are not worth the memory
-        final (first, last) = _screenPages();
-        _hiRes.removeWhere((p, old) {
-          final off = p < first - 1 || p > last + 1;
-          if (off) old.dispose();
-          return off;
-        });
-      });
+      // only this page is drawn again, not the editor: a setState here would also save, send to a live session and restart the
+      // wait of the ink reader, for a picture
+      final shown = _sharpNotifier(page);
+      shown.value?.dispose();
+      shown.value = patch;
+      // pages no longer on screen are not worth the memory
+      final (first, last) = _screenPages();
+      _dropSharp((p) => p < first - 1 || p > last + 1);
     }, onError: (Object e) {
       if (e is! PageJobDropped) debugPrint('sharper page $page failed: $e');
     }).whenComplete(() => _hiResPending.remove(page));

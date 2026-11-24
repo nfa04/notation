@@ -76,5 +76,17 @@ void main() {
     final box = patch.renderObject! as RenderBox;
     expect(box.size.width, lessThan(800), reason: 'only what is on screen (and a little around it), not the whole page');
     expect((patch.widget as RawImage).image!.width * (patch.widget as RawImage).image!.height, lessThan(16e6));
+
+    // and then the editor is not built again while nothing happens: once a sharp picture that did not cover what was on screen asked
+    // for another one, for ever, and each time the whole editor was built, saved and the ink reader's wait started over
+    // (a widget the editor makes in its build is the same one as long as it is not built again)
+    Widget editorBuild() => find.descendant(of: find.byType(FixedPageNoteEditor), matching: find.byType(Scaffold)).evaluate().first.widget;
+    final built = editorBuild();
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    }
+    expect(identical(editorBuild(), built), isTrue, reason: 'nothing changed: the editor has no reason to be built again');
+    expect(sharper, findsOneWidget);
   });
 }

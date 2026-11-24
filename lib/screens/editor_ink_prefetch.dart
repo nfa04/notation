@@ -12,9 +12,15 @@ extension _EditorInkPrefetch on _FixedPageNoteEditorState {
 
   Future<String?> _startInk() => _reader.start();
 
-  /// A good moment to read in the background: the person is not drawing and the app is on screen.
-  bool _inkQuiet() =>
-      mounted && _currentActiveStroke == null && WidgetsBinding.instance.lifecycleState != AppLifecycleState.paused && WidgetsBinding.instance.lifecycleState != AppLifecycleState.hidden;
+  /// A good moment to read in the background: the person is not drawing and the app is on screen. The host of a live session reads
+  /// also while its window is hidden or the app is in the background: the guests take what it reads and read nothing themselves.
+  bool _inkQuiet() {
+    if (!mounted || _currentActiveStroke != null) return false;
+    final life = WidgetsBinding.instance.lifecycleState;
+    if (life != AppLifecycleState.paused && life != AppLifecycleState.hidden) return true;
+    final live = _live;
+    return live != null && live.role == SessionRole.host && live.state == SessionState.live;
+  }
 
   /// [icon] of a conversion button, with a green dot when what is selected has been read already (the result is
   /// there at once).

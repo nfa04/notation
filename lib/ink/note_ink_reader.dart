@@ -144,9 +144,10 @@ class NoteInkReader {
         strokes: strokes,
         canRun: () => readsNow && isQuiet(),
         idle: idle,
-        // (only the page in view and its neighbours; a rest after each piece so that the screen keeps up)
-        // (all of it when the writing is read for the search)
-        wanted: (c) => indexInk || (c.page - visiblePage()).abs() <= 1,
+        // (the whole note, the page in view first and then the ones around it, so that nothing waits for a scroll; a rest after each
+        // piece so that the screen keeps up). Read line by line for the maths check it is the page in view and its neighbours only:
+        // that reading is much heavier.
+        wanted: (c) => !checkOn || indexInk || (c.page - visiblePage()).abs() <= 1,
         order: (c) => (c.page - visiblePage()).abs(), // (the page in view first, then those around it)
         pause: idle < const Duration(seconds: 1) ? Duration.zero : const Duration(milliseconds: 250),
       )

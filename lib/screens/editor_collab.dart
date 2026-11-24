@@ -116,6 +116,9 @@ extension _EditorCollab on _FixedPageNoteEditorState {
     s.wantMathCheck(_checkOn);
     final math = widget.math;
     s.offerMathReading(math != null && math.status == HandwritingStatus.installed);
+    // (and whether the handwriting is read here at all: when it is not, the guests read it for themselves)
+    final hw = widget.handwriting;
+    s.offerInkReading(hw != null && hw.status == HandwritingStatus.installed && _inSettings(Feature.handwriting));
   }
 
   Future<void> _startLive([SessionInvite? invite, HostTransport? transport, bool trustAll = false]) async {

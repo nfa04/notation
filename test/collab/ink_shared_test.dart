@@ -166,6 +166,26 @@ void main() {
     expect(g.session!.readsInk, isTrue);
   });
 
+  test('a guest reads for itself when the host says it cannot read (its reader off), and stops when the host can again', () async {
+    final h = device();
+    h.note.strokes[0] = word('a', 100, 100);
+    final host = CollabSession.host(invite, hub.host, h.binding, name: 'Anna');
+    toClose.add(host);
+    h.session = host;
+    host.offerInkReading(false); // (what the editor says when its handwriting reader is off or not installed)
+    final g = await guest(host, from: h);
+    await until(() => g.session!.readsInk);
+    expect(g.session!.readsInk, isTrue, reason: 'told with the welcome');
+    await readAll(g);
+    await until(() => g.hw.calls.isNotEmpty, ms: 5000);
+    expect(g.hw.calls, isNotEmpty);
+    expect(h.hw.calls, isEmpty);
+
+    host.offerInkReading(true); // (switched on at the host, during the session)
+    await until(() => !g.session!.readsInk);
+    expect(g.session!.readsInk, isFalse);
+  });
+
   test('a guest that checks the maths reads nothing: the host reads by lines for it and shares the formulas', () async {
     final h = device(maths: true);
     h.note.strokes[0] = word('a', 100, 100) + word('b', 100, 500);
