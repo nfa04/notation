@@ -126,4 +126,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(x(), home);
   });
+
+  testWidgets('Pop folds a tool away: nothing left when closed, grows in a short time when opened', (tester) async {
+    var open = false;
+    late StateSetter set;
+    await tester.pumpWidget(_app(StatefulBuilder(builder: (context, s) {
+      set = s;
+      return Column(children: [Pop(open: open, child: const SizedBox(key: ValueKey('t'), height: 40, width: 40))]);
+    })));
+    expect(find.byKey(const ValueKey('t')), findsNothing);
+    expect(tester.getSize(find.byType(Pop)).height, 0);
+    set(() => open = true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(tester.getSize(find.byType(Pop)).height, inExclusiveRange(0, 40));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.getSize(find.byType(Pop)).height, 40);
+    set(() => open = false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const ValueKey('t')), findsNothing);
+  });
 }

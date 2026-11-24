@@ -581,8 +581,9 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
       const SizedBox(height: 8),
       if (_on(Feature.shapes)) ...[
         Center(heightFactor: 1, child: _shapeButton()),
-        if (_shape != ShapeTool.freehand && !_erasing && !_lassoing)
-          Center(
+        Pop(
+          open: _shape != ShapeTool.freehand && !_erasing && !_lassoing,
+          child: Center(
             heightFactor: 1,
             child: IconButton(
               key: const ValueKey('shape-style'),
@@ -595,7 +596,8 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
               onPressed: _chooseShapeStyle,
             ),
           ),
-        if (_connecting) Center(heightFactor: 1, child: _routeButton()),
+        ),
+        Pop(open: _connecting, child: Center(heightFactor: 1, child: _routeButton())),
         const SizedBox(height: 8),
       ],
       Center(
@@ -718,7 +720,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             onPressed: _toggleBucket,
           ),
         ),
-        if (_bucketOn) Center(heightFactor: 1, child: _fillGapButton()),
+        Pop(open: _bucketOn, child: Center(heightFactor: 1, child: _fillGapButton())),
       ],
       const ToolGroupDivider(width: 32, height: 24),
       Center(
@@ -784,22 +786,24 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
           },
         ),
       ),
-      if (_moreTools) ...[
-      Center(
-        heightFactor: 1,
-        child: IconButton(
-          key: const ValueKey('clear-page'),
-          icon: const Icon(Symbols.cleaning_services, size: 22),
-          tooltip: tr('Clear the drawings and highlights on this page'),
-          onPressed: _clearPage,
+      Pop(
+        open: _moreTools,
+        child: Center(
+          heightFactor: 1,
+          child: IconButton(
+            key: const ValueKey('clear-page'),
+            icon: const Icon(Symbols.cleaning_services, size: 22),
+            tooltip: tr('Clear the drawings and highlights on this page'),
+            onPressed: _clearPage,
+          ),
         ),
       ),
-      if (_on(Feature.flipbook) && !_infinite) Center(heightFactor: 1, child: _onionButton()),
-      if (_on(Feature.guides)) Center(heightFactor: 1, child: _guidesButton()),
-      if (_on(Feature.stabiliser)) Center(heightFactor: 1, child: _stabiliserButton()),
-      if (_on(Feature.symmetry)) Center(heightFactor: 1, child: _symmetryButton()),
+      if (_on(Feature.flipbook) && !_infinite) Pop(open: _moreTools, child: Center(heightFactor: 1, child: _onionButton())),
+      if (_on(Feature.guides)) Pop(open: _moreTools, child: Center(heightFactor: 1, child: _guidesButton())),
+      if (_on(Feature.stabiliser)) Pop(open: _moreTools, child: Center(heightFactor: 1, child: _stabiliserButton())),
+      if (_on(Feature.symmetry)) Pop(open: _moreTools, child: Center(heightFactor: 1, child: _symmetryButton())),
       if (_on(Feature.straighten))
-        Center(
+        Pop(open: _moreTools, child: Center(
           heightFactor: 1,
           child: IconButton.filledTonal(
             key: const ValueKey('straighten-toggle'),
@@ -820,9 +824,9 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
               );
             },
           ),
-        ),
+        )),
       if (_on(Feature.plots)) ...[
-        Center(
+        Pop(open: _moreTools, child: Center(
           heightFactor: 1,
           child: IconButton(
             key: const ValueKey('empty-plot'),
@@ -830,8 +834,7 @@ extension _EditorDrawBar on _FixedPageNoteEditorState {
             tooltip: tr('Place an empty plot to draw into'),
             onPressed: _addEmptyPlot,
           ),
-        ),
-      ],
+        )),
       ],
     ];
     return Container(

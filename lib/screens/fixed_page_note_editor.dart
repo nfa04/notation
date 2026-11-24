@@ -200,6 +200,7 @@ import '../speech/speakable_text.dart';
 import '../speech/speech_to_text.dart';
 import '../spelling/spell_menu.dart';
 import '../spelling/spell_service.dart';
+import '../style/motion.dart';
 import '../style/color_names.dart';
 import '../shortcuts/shortcut_action.dart';
 import '../shortcuts/shortcut_service.dart';

@@ -94,6 +94,46 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
       );
 }
 
+/// A tool that comes and goes in a bar: it grows to its height and fades in, and folds up again, in [Motion.fast]. Unlike [Reveal]
+/// it is nothing at all when closed (no width asked for), so it sits in a Wrap or a Column of tools. Starts as it is (no motion on build).
+class Pop extends StatefulWidget {
+  final bool open;
+  final Widget child;
+
+  const Pop({super.key, required this.open, required this.child});
+
+  @override
+  State<Pop> createState() => _PopState();
+}
+
+class _PopState extends State<Pop> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: Motion.fast, value: widget.open ? 1 : 0);
+  late final Animation<double> _curve = CurvedAnimation(parent: _c, curve: Motion.curveIn, reverseCurve: Motion.curveOut);
+
+  @override
+  void didUpdateWidget(Pop old) {
+    super.didUpdateWidget(old);
+    if (widget.open == old.open) return;
+    _c.duration = Motion.of(context, Motion.fast);
+    widget.open ? _c.forward() : _c.reverse();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) => _c.isDismissed
+            ? const SizedBox.shrink()
+            : ClipRect(child: SizeTransition(sizeFactor: _curve, child: FadeTransition(opacity: _curve, child: child))),
+        child: widget.child,
+      );
+}
+
 /// Fades its child in whenever [token] changes (and when it first appears): a pane that shows another tab does not cut to it. The
 /// child stays where it is in the tree, so its state (and anything keyed inside it) is not touched.
 class FadeOnChange extends StatefulWidget {
