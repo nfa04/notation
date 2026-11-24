@@ -24,6 +24,7 @@ import '../sync/task_calendar_mirror.dart';
 import '../reminders/reminder.dart';
 import '../reminders/reminder_service.dart';
 import 'reminders_screen.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 /// Month calendar on the left, tasks on the right.
@@ -399,7 +400,7 @@ class _CalendarViewState extends State<CalendarView> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return const Center(child: CircularProgressIndicator.adaptive());
-    return Scaffold(
+    return Appear(rise: 0, child: Scaffold(
       backgroundColor: _style.backgroundFor(Theme.of(context).brightness),
       appBar: AppBar(
         title: const Text('Calendar'),
@@ -459,7 +460,7 @@ class _CalendarViewState extends State<CalendarView> {
                 SizedBox(width: 380, child: _buildTaskPanel()),
               ],
             ),
-    );
+    ));
   }
 
   /// A phone's app bar has room for a sync button and a menu with the rest (the new-event button is at the foot of the page).
@@ -546,7 +547,9 @@ class _CalendarViewState extends State<CalendarView> {
           const SizedBox(height: 8),
           if (_weekMode)
             Expanded(
-              child: WeekView(
+              child: FadeOnChange(
+                token: _weekStart,
+                child: WeekView(
                 weekStart: _weekStart,
                 selected: _selected,
                 today: today,
@@ -559,7 +562,7 @@ class _CalendarViewState extends State<CalendarView> {
                 onStyleEvent: _styleEvent,
                 onStyleTask: _styleTask,
                 onStyleDay: _styleDay,
-              ),
+              )),
             )
           else ...[
             Row(children: [
@@ -570,14 +573,14 @@ class _CalendarViewState extends State<CalendarView> {
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(border: Border(top: BorderSide(color: scheme.outlineVariant), left: BorderSide(color: scheme.outlineVariant))),
-                child: Column(children: [
+                child: FadeOnChange(token: _month, child: Column(children: [
                 for (var week = 0; week < 6; week++)
                   Expanded(
                     child: Row(children: [
                       for (var i = 0; i < 7; i++) Expanded(child: _dayCell(days[week * 7 + i], today, scheme)),
                     ]),
                   ),
-              ]),
+              ])),
               ),
             ),
           ],
@@ -609,7 +612,8 @@ class _CalendarViewState extends State<CalendarView> {
             setState(() => _selected = day);
             if (!inMonth) _goToMonth(day);
           },
-          child: Container(
+          child: AnimatedContainer(
+            duration: Motion.of(context, Motion.fast),
             padding: EdgeInsets.all(_narrow ? 3 : 5),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),

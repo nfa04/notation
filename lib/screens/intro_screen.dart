@@ -8,6 +8,7 @@ import '../features/toolbar_profiles.dart';
 import '../ink/ink_recognizer.dart' show HandwritingStatus;
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../style/motion.dart';
 import '../profile/user_profile.dart';
 import '../widgets/notation_logo.dart';
 import '../devicesync/device_sync_service.dart';
@@ -191,7 +192,9 @@ class _IntroScreenState extends State<IntroScreen> {
                 Row(children: [
                   for (var i = 0; i < _steps; i++)
                     Expanded(
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: Motion.of(context, Motion.medium),
+                        curve: Motion.curveIn,
                         height: 4,
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(color: i <= _step ? scheme.primary : scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(2)),
@@ -199,7 +202,7 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
                 ]),
                 const SizedBox(height: 24),
-                Expanded(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_page(context), if (last) _welcomeOffer()]))),
+                Expanded(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [FadeOnChange(token: _step, child: _page(context)), if (last) FadeOnChange(token: _step, child: _welcomeOffer())]))),
                 if (widget.smart != null) _DownloadBanner(smart: widget.smart!),
                 const SizedBox(height: 12),
                 Row(children: [

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 
@@ -181,6 +183,42 @@ class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
         child: widget.rise == 0
             ? widget.child
             : AnimatedBuilder(animation: _curve, builder: (_, child) => Transform.translate(offset: Offset(0, widget.rise * (1 - _curve.value)), child: child), child: widget.child),
+      );
+}
+
+/// Shakes its child sideways each time [token] changes (not when it first appears): a wrong passcode says no with the field itself.
+class Shake extends StatefulWidget {
+  final Object token;
+  final Widget child;
+
+  const Shake({super.key, required this.token, required this.child});
+
+  @override
+  State<Shake> createState() => _ShakeState();
+}
+
+class _ShakeState extends State<Shake> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: Motion.slow);
+
+  @override
+  void didUpdateWidget(Shake old) {
+    super.didUpdateWidget(old);
+    if (widget.token == old.token) return;
+    if (Motion.of(context, Motion.slow) == Duration.zero) return;
+    _c.forward(from: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (_, child) => Transform.translate(offset: Offset(math.sin(_c.value * math.pi * 4) * 8 * (1 - _c.value), 0), child: child),
+        child: widget.child,
       );
 }
 

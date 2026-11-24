@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' hide Text;
 
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../style/motion.dart';
 import '../lock/note_lock_service.dart';
 import '../style/platform_dialog.dart';
 
@@ -36,6 +37,9 @@ class _UnlockDialogState extends State<_UnlockDialog> {
   final _secret = TextEditingController();
   bool _busy = false, _wrong = false, _hidden = true;
 
+  /// Counts the wrong answers: the field shakes at each.
+  int _misses = 0;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +66,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
       setState(() {
         _busy = false;
         _wrong = true;
+        _misses++;
       });
     }
   }
@@ -86,7 +91,9 @@ class _UnlockDialogState extends State<_UnlockDialog> {
       content: SizedBox(
         width: 360,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(
+          Shake(
+            token: _misses,
+            child: TextField(
             key: const ValueKey('unlock-secret'),
             controller: _secret,
             autofocus: true,
@@ -103,7 +110,7 @@ class _UnlockDialogState extends State<_UnlockDialog> {
                 onPressed: () => setState(() => _hidden = !_hidden),
               ),
             ),
-          ),
+          )),
           if (_busy)
             const Padding(padding: EdgeInsets.only(top: 12), child: LinearProgressIndicator()),
           if (widget.device && !_busy)

@@ -19,6 +19,7 @@ import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../graph/study.dart';
 import 'graph_study.dart';
+import '../style/motion.dart';
 import '../style/platform_dialog.dart';
 
 part 'graph_library.dart';
@@ -1000,7 +1001,7 @@ _graphMenu(g),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator.adaptive())
-          : Column(
+          : Appear(rise: 0, child: Column(
               children: [
                 if (!widget.pinned && widget.service.graphs.isNotEmpty) _tabs(context),
                 if (_generating || widget.service.graphs.isEmpty)
@@ -1080,9 +1081,9 @@ _graphMenu(g),
                       ? const Center(
                           child: CircularProgressIndicator.adaptive(),
                         )
-                      : graph == null || graph.isEmpty ? _empty(context) : _body(context, graph)),
+                      : FadeOnChange(token: graph ?? 0, child: graph == null || graph.isEmpty ? _empty(context) : _body(context, graph))),
               ],
-            ),
+            )),
     );
   }
 

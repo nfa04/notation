@@ -104,4 +104,26 @@ void main() {
     expect(deck.knownCount, 1);
     expect(find.text('q1'), findsOneWidget);
   });
+
+  testWidgets('Appear fades in from nothing, and is whole at once with reduced motion', (tester) async {
+    await tester.pumpWidget(_app(const Appear(child: SizedBox(key: ValueKey('a'), width: 10, height: 10))));
+    FadeTransition fade() => tester.widget(find.ancestor(of: find.byKey(const ValueKey('a')), matching: find.byType(FadeTransition)).first);
+    expect(fade().opacity.value, 0.0);
+    await tester.pumpAndSettle();
+    expect(fade().opacity.value, 1.0);
+    await tester.pumpWidget(_app(const Appear(key: ValueKey('b'), child: SizedBox(key: ValueKey('a'), width: 10, height: 10)), noMotion: true));
+    expect(fade().opacity.value, 1.0);
+  });
+
+  testWidgets('Shake moves the child sideways when the token changes, and ends where it began', (tester) async {
+    Widget app(int t) => _app(Shake(token: t, child: const SizedBox(key: ValueKey('s'), width: 10, height: 10)));
+    double x() => tester.getTopLeft(find.byKey(const ValueKey('s'))).dx;
+    await tester.pumpWidget(app(0));
+    final home = x();
+    await tester.pumpWidget(app(1));
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(x(), isNot(home));
+    await tester.pumpAndSettle();
+    expect(x(), home);
+  });
 }
