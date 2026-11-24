@@ -704,7 +704,7 @@ class _FolderViewState extends State<FolderView> {
           key: ValueKey('tag-row-${n.tag}'),
           dense: true,
           contentPadding: EdgeInsets.only(left: 16.0 + 16 * n.depth, right: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
           selected: _scope == '$_tagPrefix${n.tag}',
           leading: n.children.isEmpty
               ? const Icon(Icons.tag, size: 18)
@@ -737,7 +737,7 @@ class _FolderViewState extends State<FolderView> {
   Widget _pseudoRow(String scope, String label, IconData icon, int count, {int waiting = 0}) {
     final row = ListTile(
       dense: true,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       selected: _scope == scope,
       leading: Icon(icon, size: 20),
       title: Text(label),
@@ -758,7 +758,7 @@ class _FolderViewState extends State<FolderView> {
     final expanded = _expanded.contains(f.id);
     final row = ListTile(
       dense: true,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       selected: _scope == f.id,
       contentPadding: EdgeInsets.only(left: 4.0 + depth * 18, right: 0),
       leading: SizedBox(
@@ -963,7 +963,7 @@ class _FolderViewState extends State<FolderView> {
   /// Folder title; with a theme image it becomes a banner with the title on it.
   Widget _buildHeader(String title) {
     final folder = _inRealFolder ? _folder(_scope) : null;
-    final titleStyle = Theme.of(context,).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold);
+    final titleStyle = Theme.of(context,).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w300);
     final image = folder?.themeImage;
 
     if (folder == null) return Text(title, style: titleStyle);
@@ -981,7 +981,7 @@ class _FolderViewState extends State<FolderView> {
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(8),
       child: SizedBox(
         height: 180,
         child: Stack(
@@ -1046,15 +1046,14 @@ class _FolderViewState extends State<FolderView> {
   Widget _noteTile(NoteSummary n) {
     final kind = widget.collab?.shared.kindOf(n.id) ?? SharedKind.none;
     final where = (_scope == _all || _scope == _shared || _scope == _favorites) && n.folderId != null ? '  -  ${_path(n.folderId)}' : '';
-    final card = Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.withValues(alpha: 0.25)),
+    final scheme = Theme.of(context).colorScheme;
+    // a row with a hairline under it, not a card
+    final card = DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      color: _selected.contains(n.id) ? Theme.of(context).colorScheme.secondaryContainer : null,
       child: ListTile(
+        tileColor: _selected.contains(n.id) ? scheme.secondaryContainer : null,
         leading: _selecting
             ? Checkbox.adaptive(key: ValueKey('select-${n.id}'), value: _selected.contains(n.id), onChanged: (_) => _toggleSelected(n.id))
             : SizedBox(
@@ -1102,7 +1101,7 @@ class _FolderViewState extends State<FolderView> {
                   if (!_narrow) IconButton(
                     key: ValueKey('star-${n.id}'),
                     tooltip: tr(n.favorite ? 'Remove from favourites' : 'Add to favourites'),
-                    icon: Icon(n.favorite ? Icons.star_rounded : Icons.star_outline_rounded, color: n.favorite ? Colors.amber : null),
+                    icon: Icon(n.favorite ? Icons.star_rounded : Icons.star_outline_rounded, color: n.favorite ? scheme.onSurface : null),
                     onPressed: () => _toggleFavorite(n),
                   ),
                   SharedBadge(key: ValueKey('shared-badge-${n.id}'), kind: kind, from: widget.collab?.shared.fromWhom(n.id)),
