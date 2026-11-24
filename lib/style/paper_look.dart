@@ -64,9 +64,9 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       backgroundColor: scheme.surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: rule),
-      titleTextStyle: TextStyle(color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w400),
+      titleTextStyle: TextStyle(fontFamily: paperFont, color: scheme.onSurface, fontSize: 20, fontWeight: FontWeight.w400),
     ),
-    bottomSheetTheme: base.bottomSheetTheme.copyWith(backgroundColor: scheme.surface, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: const BorderRadius.vertical(top: Radius.circular(10)), side: rule)),
+    bottomSheetTheme: base.bottomSheetTheme.copyWith(showDragHandle: true, dragHandleColor: scheme.outlineVariant, dragHandleSize: const Size(36, 3), backgroundColor: scheme.surface, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: const BorderRadius.vertical(top: Radius.circular(10)), side: rule)),
     popupMenuTheme: base.popupMenuTheme.copyWith(color: scheme.surface, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: rule)),
     // the bar of the phone: flat, a hairline on top, no pill behind the chosen place (it is the ink one)
     navigationBarTheme: base.navigationBarTheme.copyWith(
@@ -76,7 +76,7 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       height: 60,
       indicatorColor: Colors.transparent,
       iconTheme: WidgetStateProperty.resolveWith((s) => IconThemeData(size: 22, color: s.contains(WidgetState.selected) ? scheme.onSurface : scheme.onSurfaceVariant)),
-      labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(fontSize: 11, fontWeight: s.contains(WidgetState.selected) ? FontWeight.w500 : FontWeight.w400, color: s.contains(WidgetState.selected) ? scheme.onSurface : scheme.onSurfaceVariant)),
+      labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(fontFamily: paperFont, fontSize: 11, fontWeight: s.contains(WidgetState.selected) ? FontWeight.w500 : FontWeight.w400, color: s.contains(WidgetState.selected) ? scheme.onSurface : scheme.onSurfaceVariant)),
     ),
     // a button that floats: flat with a hairline instead of a shadow
     floatingActionButtonTheme: base.floatingActionButtonTheme.copyWith(
@@ -95,11 +95,11 @@ ThemeData paperLook(ThemeData base, {bool highContrast = false}) {
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: scheme.onSurface, width: 1.5)),
     ),
     // buttons: small square corners, no pill; chips and segments flat with a hairline and a pale selection
-    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, textStyle: const TextStyle(fontWeight: FontWeight.w500))),
+    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: r6, elevation: 0, textStyle: TextStyle(fontFamily: paperFont, fontWeight: FontWeight.w500))),
     elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(shape: r6, elevation: 0, shadowColor: Colors.transparent, surfaceTintColor: Colors.transparent, backgroundColor: scheme.surface, foregroundColor: scheme.onSurface, side: rule)),
     outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(shape: r6, side: BorderSide(color: scheme.outlineVariant), foregroundColor: scheme.onSurface)),
     textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: r6)),
-    chipTheme: base.chipTheme.copyWith(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: rule), side: rule, backgroundColor: scheme.surface, selectedColor: scheme.secondaryContainer, surfaceTintColor: Colors.transparent, elevation: 0, pressElevation: 0, labelStyle: TextStyle(fontSize: 13, color: scheme.onSurface)),
+    chipTheme: base.chipTheme.copyWith(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: rule), side: rule, backgroundColor: scheme.surface, selectedColor: scheme.secondaryContainer, surfaceTintColor: Colors.transparent, elevation: 0, pressElevation: 0, labelStyle: TextStyle(fontFamily: paperFont, fontSize: 13, color: scheme.onSurface)),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
         shape: r6,
