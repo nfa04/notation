@@ -148,7 +148,7 @@ class _WeekViewState extends State<WeekView> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             color: isSelected ? scheme.primaryContainer : look?.color?.withValues(alpha: 0.3),
-            border: Border(left: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+            border: Border(left: BorderSide(color: scheme.outlineVariant)),
           ),
           child: Column(children: [
             Text.verbatim(tr(_weekdays[day.weekday - 1]), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -160,7 +160,7 @@ class _WeekViewState extends State<WeekView> {
                 child: Text.verbatim('${day.day}',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isToday ? FontWeight.bold : null,
+                      fontWeight: isToday ? FontWeight.w500 : null,
                       color: isToday ? scheme.onPrimary : null,
                     )),
               ),
@@ -181,7 +181,7 @@ class _WeekViewState extends State<WeekView> {
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: day == widget.selected ? scheme.primaryContainer.withValues(alpha: 0.35) : look?.color?.withValues(alpha: 0.15),
-        border: Border(left: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+        border: Border(left: BorderSide(color: scheme.outlineVariant)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         for (final e in events)
@@ -261,7 +261,7 @@ class _WeekViewState extends State<WeekView> {
             color: day == widget.selected
                 ? scheme.primaryContainer.withValues(alpha: 0.2)
                 : widget.style.dayStyle(day)?.color?.withValues(alpha: 0.12),
-            border: Border(left: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+            border: Border(left: BorderSide(color: scheme.outlineVariant)),
           ),
           child: Stack(clipBehavior: Clip.hardEdge, children: [
             Positioned.fill(child: CustomPaint(painter: _HourLines(Colors.grey.withValues(alpha: 0.2)))),

@@ -490,7 +490,7 @@ class _CalendarViewState extends State<CalendarView> {
   Widget _calendarTitle() => Text(
         _weekMode ? _weekTitle : '${tr(_monthNames[_month.month - 1])} ${_month.year}',
         overflow: TextOverflow.ellipsis,
-        style: (_narrow ? Theme.of(context).textTheme.titleLarge : Theme.of(context).textTheme.headlineSmall)?.copyWith(fontWeight: FontWeight.bold),
+        style: (_narrow ? Theme.of(context).textTheme.titleLarge : Theme.of(context).textTheme.headlineSmall)?.copyWith(fontWeight: FontWeight.w300),
       );
 
   Widget _modeSwitch() => SegmentedButton<bool>(
@@ -614,7 +614,7 @@ class _CalendarViewState extends State<CalendarView> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               color: isSelected ? scheme.primaryContainer : look?.color?.withValues(alpha: 0.3),
-              border: Border.all(color: isToday ? scheme.primary : Colors.grey.withValues(alpha: 0.2), width: isToday ? 2 : 1),
+              border: Border.all(color: isToday ? scheme.onSurface : scheme.outlineVariant, width: isToday ? 1.5 : 1),
             ),
             child: _narrow
                 // too small for the chips: the day number and a dot for each thing planned
@@ -624,7 +624,7 @@ class _CalendarViewState extends State<CalendarView> {
                         left: 0,
                         top: 0,
                         child: Text.verbatim('${day.day}',
-                            style: TextStyle(fontSize: 13, height: 1, fontWeight: isToday ? FontWeight.bold : null, color: inMonth ? null : Colors.grey)),
+                            style: TextStyle(fontSize: 13, height: 1, fontWeight: isToday ? FontWeight.w500 : null, color: inMonth ? null : Colors.grey)),
                       ),
                       if (look?.emoji != null) Positioned(right: 0, top: 0, child: Text.verbatim(look!.emoji!, style: const TextStyle(fontSize: 10, height: 1))),
                       Positioned(
@@ -660,7 +660,7 @@ class _CalendarViewState extends State<CalendarView> {
                     child: Row(children: [
                       Text.verbatim('${day.day}',
                           style: TextStyle(
-                            fontWeight: isToday ? FontWeight.bold : null,
+                            fontWeight: isToday ? FontWeight.w500 : null,
                             color: inMonth ? null : Colors.grey,
                           )),
                       const Spacer(),
@@ -744,7 +744,7 @@ class _CalendarViewState extends State<CalendarView> {
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Text(_formatDay(_selected), style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            child: Text(_formatDay(_selected), style: Theme.of(context,).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w300)),
           ),
           IconButton(
             tooltip: tr('Decorate this day'),
@@ -759,7 +759,7 @@ class _CalendarViewState extends State<CalendarView> {
             hintText: tr('Add a task for this day'),
             prefixIcon: const Icon(Icons.add_task),
             suffixIcon: IconButton(icon: const Icon(Icons.send_rounded), tooltip: tr('Add'), onPressed: _add),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
           ),
           onSubmitted: (_) => _add(),
         ),
@@ -809,7 +809,7 @@ class _CalendarViewState extends State<CalendarView> {
           style: st,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text.verbatim(st.label(e.title), style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text.verbatim(st.label(e.title), style: const TextStyle(fontWeight: FontWeight.w500)),
             Text.verbatim('$time  -  ${e.calendarName}${e.repeats ? '  -  ${tr('repeats')}' : ''}',
                 style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ]),
@@ -820,7 +820,7 @@ class _CalendarViewState extends State<CalendarView> {
 
   Widget _sectionTitle(String text, {Color? color}) => Padding(
         padding: const EdgeInsets.only(top: 20, bottom: 4),
-        child: Text(text, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+        child: Text(text, style: TextStyle(fontWeight: FontWeight.w500, color: color)),
       );
 
   Widget _taskTile(Task t, {bool showDate = false}) {

@@ -118,7 +118,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
           for (final d in byDay.entries) ...[
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 2),
-              child: Text.verbatim(l.formatFullDate(d.key), style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+              child: Text.verbatim(l.formatFullDate(d.key), style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w500)),
             ),
             for (final s in d.value) _session(context, e, s, now),
           ],
@@ -147,7 +147,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
           if (progress.hasParts) ...[ReadinessRing(value: progress.readiness, marker: progress.planned, color: color), const SizedBox(width: 16)],
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text.verbatim(days == 0 ? tr('The exam is today') : trCount(days, '{n} day to go', '{n} days to go'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+              Text.verbatim(days == 0 ? tr('The exam is today') : trCount(days, '{n} day to go', '{n} days to go'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w300)),
               Text.verbatim(l.formatFullDate(e.exam), style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
               if (progress.hasParts)
                 Padding(
@@ -155,7 +155,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
                   child: Row(children: [
                     Icon(icon, size: 16, color: color),
                     const SizedBox(width: 4),
-                    Flexible(child: Text.verbatim(PlanProgressBlock.paceText(progress), key: const ValueKey('plan-pace'), style: theme.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w600))),
+                    Flexible(child: Text.verbatim(PlanProgressBlock.paceText(progress), key: const ValueKey('plan-pace'), style: theme.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w500))),
                   ]),
                 ),
               const SizedBox(height: 4),
@@ -172,7 +172,7 @@ class _StudyPlanDetailState extends State<StudyPlanDetail> {
   Widget _section(BuildContext context, String title, {Widget? trailing}) => Padding(
         padding: const EdgeInsets.only(top: 20, bottom: 8),
         child: Row(children: [
-          Expanded(child: Text.verbatim(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
+          Expanded(child: Text.verbatim(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500))),
           ?trailing,
         ]),
       );

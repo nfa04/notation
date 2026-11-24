@@ -66,7 +66,7 @@ class PlanProgressBlock extends StatelessWidget {
     final icon = switch (progress.pace) { PlanPace.onTrack => Icons.check_circle_outline, PlanPace.ahead => Icons.trending_up, PlanPace.behind => Icons.flag_outlined };
     return Column(key: const ValueKey('plan-progress'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-        Text.verbatim('${(progress.readiness * 100).round()} %', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+        Text.verbatim('${(progress.readiness * 100).round()} %', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
         const SizedBox(width: 6),
         Text('ready for the exam', style: theme.textTheme.bodyMedium),
       ]),
@@ -223,7 +223,7 @@ class _ProgressDiagramState extends State<ProgressDiagram> {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text.verbatim(
             '${MaterialLocalizations.of(context).formatFullDate(p.day)}${isToday ? ' · ${tr('Today')}' : isExam ? ' · ${tr('Exam')}' : ''}',
-            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 6),
           Row(children: [
@@ -237,7 +237,7 @@ class _ProgressDiagramState extends State<ProgressDiagram> {
               const SizedBox(width: 6),
               Expanded(child: Text.verbatim(tr('Done: {m} % ready', {'m': (p.actual! * 100).round()}), style: label)),
               if (delta != null && delta != 0)
-                Text.verbatim('${delta > 0 ? '+' : '−'}${delta.abs()} %', style: label?.copyWith(color: delta > 0 ? scheme.primary : scheme.tertiary, fontWeight: FontWeight.w600)),
+                Text.verbatim('${delta > 0 ? '+' : '−'}${delta.abs()} %', style: label?.copyWith(color: delta > 0 ? scheme.primary : scheme.tertiary, fontWeight: FontWeight.w500)),
             ]),
           if (!isToday) ...[
             const Divider(height: 16),
@@ -462,7 +462,7 @@ class ReadinessRing extends StatelessWidget {
       child: Stack(alignment: Alignment.center, children: [
         CustomPaint(size: Size.square(size), painter: _RingPainter(value.clamp(0.0, 1.0), marker, color ?? scheme.primary, scheme.surfaceContainerHighest, scheme.onSurface)),
         Column(mainAxisSize: MainAxisSize.min, children: [
-          Text.verbatim('${(value * 100).round()}%', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text.verbatim('${(value * 100).round()}%', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
           Text('ready', style: theme.textTheme.labelSmall),
         ]),
       ]),

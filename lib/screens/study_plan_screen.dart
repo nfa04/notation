@@ -963,7 +963,7 @@ class _StudyProposalPageState extends State<StudyProposalPage> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
                 Text.verbatim('${_time(context, x.session.start)}-${_time(context, x.session.end)}',
-                    style: theme.textTheme.labelLarge?.copyWith(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+                    style: theme.textTheme.labelLarge?.copyWith(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w500)),
                 if (badge != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
