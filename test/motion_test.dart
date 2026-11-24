@@ -98,6 +98,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(deck.knownCount, 0);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
     await tester.pumpAndSettle();
     expect(deck.knownCount, 1);

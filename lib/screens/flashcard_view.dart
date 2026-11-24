@@ -7,7 +7,7 @@ import '../ai/flashcards.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../markdown/markdown_table.dart';
-import '../style/motion.dart';
+import 'study_card.dart';
 
 /// The flashcards of the assistant: choose how many, wait while they are made, then turn them over one
 /// by one and say whether they were known. Missed cards can be studied again, or all of them put on the note.
@@ -126,157 +126,56 @@ class _DeckViewState extends State<DeckView> {
   ValueChanged<String>? get onAddToNote => widget.onAddToNote;
   Future<int> Function(List<Flashcard> cards)? get onKeep => widget.onKeep;
 
-  // (no autofocus: beside the assistant's chat the typing field must keep the keyboard until a card is clicked)
-  final _focus = FocusNode(debugLabel: 'flashcards');
-  int _dir = 1;
-
-  /// Changes with every card in front (also when a skipped card puts another at the same place).
-  Object get _cardKey => (deck.position, deck.current);
-
   @override
-  void dispose() {
-    _focus.dispose();
-    super.dispose();
-  }
-
-  /// Space turns the card over and back, the arrows put it off and bring it back, 1 is "Again" and 2 "Got it".
-  KeyEventResult _key(FocusNode node, KeyEvent e) {
-    if (e is! KeyDownEvent || deck.finished) return KeyEventResult.ignored;
-    final kb = HardwareKeyboard.instance;
-    if (kb.isControlPressed || kb.isMetaPressed || kb.isAltPressed) return KeyEventResult.ignored;
-    final key = e.logicalKey;
-    if (key == LogicalKeyboardKey.space) {
-      deck.flip();
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _dir = 1;
-      deck.skip();
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
-      _dir = -1;
-      deck.unskip();
-    } else if (deck.flipped && (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1)) {
-      _dir = 1;
-      deck.again();
-    } else if (deck.flipped && (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2)) {
-      _dir = 1;
-      deck.gotIt();
-    } else {
-      return KeyEventResult.ignored;
-    }
-    return KeyEventResult.handled;
-  }
-
-  @override
-  Widget build(BuildContext context) => Focus(
-        focusNode: _focus,
-        onKeyEvent: _key,
-        child: ListenableBuilder(listenable: deck, builder: (context, _) => deck.finished ? _finished(context) : _study(context)),
-      );
+  Widget build(BuildContext context) => ListenableBuilder(listenable: deck, builder: (context, _) => deck.finished ? _finished(context) : _study(context));
 
   Widget _study(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final card = deck.current!;
-    final front = !deck.flipped;
     final page = card.page;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Text.verbatim(tr('Card {n} of {total}', {'n': deck.position + 1, 'total': deck.roundLength}),
-              key: const ValueKey('flashcards-progress'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          const Spacer(),
-          if (onKeep != null) _KeepButton(cards: deck.cards, onKeep: onKeep!, compact: true),
-          IconButton(
-            key: const ValueKey('flashcards-shuffle'),
-            tooltip: tr('Shuffle and start over'),
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Symbols.shuffle, size: 20),
-            onPressed: () => deck.startOver(shuffle: true),
-          ),
-          IconButton(
-            key: const ValueKey('flashcards-new'),
-            tooltip: tr('Make new flashcards'),
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Symbols.refresh, size: 20),
-            onPressed: onNew,
-          ),
-        ]),
-        const SizedBox(height: 4),
-        TweenAnimationBuilder<double>(
-          tween: Tween(end: deck.position / deck.roundLength),
-          duration: Motion.of(context, Motion.medium),
-          curve: Motion.curveIn,
-          builder: (context, v, _) => LinearProgressIndicator(value: v),
+    // (no autofocus: beside the assistant's chat the typing field must keep the keyboard until a card is clicked)
+    return StudyCard(
+      // changes with every card in front (also when a skipped card puts another at the same place)
+      cardKey: (deck.position, card),
+      front: card.front,
+      back: card.back,
+      flipped: deck.flipped,
+      onFlip: deck.flip,
+      onMove: (dir) => dir > 0 ? deck.skip() : deck.unskip(),
+      ratings: const [
+        StudyRating(key: ValueKey('flashcard-again'), label: 'Again'),
+        StudyRating(key: ValueKey('flashcard-got'), label: 'Got it', primary: true),
+      ],
+      onRate: (i) => i == 0 ? deck.again() : deck.gotIt(),
+      progress: deck.position / deck.roundLength,
+      header: Row(children: [
+        Text.verbatim(tr('Card {n} of {total}', {'n': deck.position + 1, 'total': deck.roundLength}),
+            key: const ValueKey('flashcards-progress'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        const Spacer(),
+        if (onKeep != null) _KeepButton(cards: deck.cards, onKeep: onKeep!, compact: true),
+        IconButton(
+          key: const ValueKey('flashcards-shuffle'),
+          tooltip: tr('Shuffle and start over'),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Symbols.shuffle, size: 20),
+          onPressed: () => deck.startOver(shuffle: true),
         ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: GestureDetector(
-            key: const ValueKey('flashcard'),
-            onTap: () {
-              _focus.requestFocus();
-              deck.flip();
-            },
-            // the next card comes in from the right while the one before leaves to the left; turning the same card over is the flip inside
-            child: AnimatedSwitcher(
-              duration: Motion.of(context, Motion.medium),
-              switchInCurve: Motion.curveIn,
-              switchOutCurve: Motion.curveOut,
-              transitionBuilder: (child, animation) {
-                final arriving = child.key == ValueKey(_cardKey);
-                return FadeTransition(opacity: animation, child: SlideTransition(position: Tween(begin: Offset((arriving ? 0.12 : -0.12) * _dir, 0), end: Offset.zero).animate(animation), child: child));
-              },
-              child: FlipCard(
-                key: ValueKey(_cardKey),
-                front: front,
-                face: (front) => Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: front ? scheme.primaryContainer : scheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(front ? 'Question' : 'Answer',
-                      style: TextStyle(fontSize: 12, letterSpacing: 0.6, color: (front ? scheme.onPrimaryContainer : scheme.onTertiaryContainer).withValues(alpha: 0.7))),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        child: Text.verbatim(
-                          front ? card.front : card.back,
-                          key: ValueKey(front ? 'flashcard-front' : 'flashcard-back'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 20, color: front ? scheme.onPrimaryContainer : scheme.onTertiaryContainer),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Row(children: [
-                    if (page != null && onJumpToPage != null)
-                      ActionChip(
-                        key: const ValueKey('flashcard-page'),
-                        label: Text.verbatim(tr('Page {n}', {'n': page + 1})),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onJumpToPage!(page),
-                      ),
-                    const Spacer(),
-                    if (front) Text('Tap to see the answer', style: TextStyle(fontSize: 12, color: scheme.onPrimaryContainer.withValues(alpha: 0.7))),
-                  ]),
-                ]),
-              ),
-              ),
-            ),
-          ),
+        IconButton(
+          key: const ValueKey('flashcards-new'),
+          tooltip: tr('Make new flashcards'),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Symbols.refresh, size: 20),
+          onPressed: onNew,
         ),
-        const SizedBox(height: 12),
-        if (front)
-          FilledButton(key: const ValueKey('flashcard-flip'), onPressed: deck.flip, child: const Text('Show the answer'))
-        else
-          Row(children: [
-            Expanded(child: OutlinedButton(key: const ValueKey('flashcard-again'), onPressed: deck.again, child: const Text('Again'))),
-            const SizedBox(width: 12),
-            Expanded(child: FilledButton(key: const ValueKey('flashcard-got'), onPressed: deck.gotIt, child: const Text('Got it'))),
-          ]),
       ]),
+      corner: page != null && onJumpToPage != null
+          ? ActionChip(
+              key: const ValueKey('flashcard-page'),
+              label: Text.verbatim(tr('Page {n}', {'n': page + 1})),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => onJumpToPage!(page),
+            )
+          : null,
     );
   }
 

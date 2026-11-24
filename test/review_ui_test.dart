@@ -30,20 +30,20 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-back')), findsOneWidget);
+      expect(find.byKey(const ValueKey('flashcard-back')), findsOneWidget);
       // and back again
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-back')), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('review-card-0-false')));
+      expect(find.byKey(const ValueKey('flashcard-back')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('flashcard')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-back')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('review-card-0-true')));
+      expect(find.byKey(const ValueKey('flashcard-back')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('flashcard')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-back')), findsNothing);
+      expect(find.byKey(const ValueKey('flashcard-back')), findsNothing);
 
       // an arrow goes to the other card without answering, and back
       final first = find.text('first?');
@@ -94,14 +94,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.byKey(const ValueKey('review-front')), findsOneWidget);
-      expect(find.byKey(const ValueKey('review-back')), findsNothing);
+      expect(find.byKey(const ValueKey('flashcard-front')), findsOneWidget);
+      expect(find.byKey(const ValueKey('flashcard-back')), findsNothing);
       expect(find.text('2 left'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('review-show')));
+      await tester.tap(find.byKey(const ValueKey('flashcard-flip')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-back')), findsOneWidget);
+      expect(find.byKey(const ValueKey('flashcard-back')), findsOneWidget);
       // the buttons say when the card would come back
       expect(find.text('10 min'), findsOneWidget);
       expect(find.text('1 d'), findsNWidgets(2)); // hard and good
@@ -116,7 +116,7 @@ void main() {
       expect(find.text('Capital of France?'), findsNothing);
       expect(find.text('2 left'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('review-show')));
+      await tester.tap(find.byKey(const ValueKey('flashcard-flip')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('review-good')));
@@ -126,7 +126,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('Capital of France?'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('review-show')));
+      await tester.tap(find.byKey(const ValueKey('flashcard-flip')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('review-easy')));
