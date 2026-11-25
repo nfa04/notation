@@ -8,6 +8,8 @@ import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -68,5 +70,6 @@ void main() {
     await drag(const Offset(100, 500), const Offset(400, 560));
     expect(strokes().last.brush, 'ext:inks/felt');
     expect(strokes().last.width, closeTo(9, 1e-9), reason: 'the width chosen (3), three times as thick');
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 }

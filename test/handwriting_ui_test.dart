@@ -323,6 +323,7 @@ void main() {
     await finger.up();
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('convert-to-math')), findsNothing);
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 }
 

@@ -10,6 +10,8 @@ import 'package:notes/models/canvas_models.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -57,6 +59,7 @@ void main() {
 
       expect(find.byTooltip('Delete drawing'), findsOneWidget);
       await tester.pump(const Duration(seconds: 1)); // let the double-tap timer run out
+      await closeEditor(tester); // (the mode the note was left in is written as it closes)
     });
   }
 

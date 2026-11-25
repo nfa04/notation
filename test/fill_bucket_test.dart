@@ -10,6 +10,8 @@ import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -96,6 +98,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('undo-any')));
     await tester.pumpAndSettle();
     expect(strokes(), hasLength(1));
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('a fill can be picked by a touch inside it (its line is not there to be touched), and then bent', (tester) async {
@@ -115,6 +118,7 @@ void main() {
     expect(find.byKey(const ValueKey('transform-selection')), findsOneWidget, reason: 'the fill under the touch is selected');
     expect(find.byKey(const ValueKey('resize-br')), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('outside the shape the paper is filled round it, and a page with no lines says so', (tester) async {
@@ -134,6 +138,7 @@ void main() {
     expect(fills, hasLength(1));
     expect(pointInPolygon(const Offset(50, 50), fills.single.points), isTrue);
     expect(pointInPolygon(const Offset(250, 200), fills.single.points), isFalse, reason: 'the inside of the box is left out');
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 
   testWidgets('the button and another tool switch the bucket off; the gap menu offers four sizes', (tester) async {

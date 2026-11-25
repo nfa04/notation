@@ -10,6 +10,8 @@ import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:notes/style/tool_columns.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -269,6 +271,7 @@ void main() {
     expect(tester.getRect(page).width, inExclusiveRange(withDraw, alone));
     await tester.pumpAndSettle();
     expect(tester.getRect(page).width, withDraw);
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
   testWidgets('opening document mode does not scroll the page to where the caret was left', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);

@@ -9,6 +9,8 @@ import 'package:notes/painters/canvas_painters.dart';
 import 'package:notes/screens/fixed_page_note_editor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'close_editor.dart';
+
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -215,5 +217,6 @@ void main() {
     expect(strokes().single.points.first, after);
     await tap('undo-any');
     expect(strokes().single.points.first, before);
+    await closeEditor(tester); // (the mode the note was left in is written as it closes)
   });
 }

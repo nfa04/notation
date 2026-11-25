@@ -10,7 +10,6 @@ import 'package:notes/review/study_generate.dart';
 import 'package:notes/review/study_material.dart';
 import 'package:notes/review/study_planner.dart';
 import 'package:notes/review/study_practice.dart';
-import 'package:notes/review/study_schedule.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'fake_study_calendar.dart';
