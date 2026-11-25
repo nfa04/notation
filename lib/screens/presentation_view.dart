@@ -59,6 +59,7 @@ class _PresentationViewState extends State<PresentationView> {
   late int _page = widget.initialPage.clamp(0, widget.pageCount - 1);
   final _focus = FocusNode();
   final _clock = Stopwatch()..start();
+  final _seconds = ValueNotifier<int>(0);
   Timer? _hide, _tick, _laserIdle;
   bool _controls = true;
   bool _blackout = false;
@@ -85,7 +86,7 @@ class _PresentationViewState extends State<PresentationView> {
     super.initState();
     _startPlaying();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _controls) setState(() {});
+      if (mounted && _controls) _seconds.value++; // (only the clock redraws, not the pages)
     });
     _wake();
   }
@@ -94,6 +95,7 @@ class _PresentationViewState extends State<PresentationView> {
   void dispose() {
     _hide?.cancel();
     _tick?.cancel();
+    _seconds.dispose();
     _play?.cancel();
     _laserIdle?.cancel();
     _pages.dispose();
@@ -234,7 +236,9 @@ class _PresentationViewState extends State<PresentationView> {
           const Spacer(),
           Text.verbatim(tr('Page {n} of {total}', {'n': _page + 1, 'total': widget.pageCount}), key: const ValueKey('presentation-page'), style: const TextStyle(color: white)),
           const SizedBox(width: 12),
-          Text.verbatim(_time(_clock.elapsed), key: const ValueKey('presentation-clock'), style: const TextStyle(color: white, fontFeatures: [FontFeature.tabularFigures()])),
+          ValueListenableBuilder<int>(
+              valueListenable: _seconds,
+              builder: (context, _, _) => Text.verbatim(_time(_clock.elapsed), key: const ValueKey('presentation-clock'), style: const TextStyle(color: white, fontFeatures: [FontFeature.tabularFigures()]))),
           const Spacer(),
           if (widget.flipbook) ...[
             IconButton(

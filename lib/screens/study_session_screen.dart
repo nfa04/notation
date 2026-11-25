@@ -62,6 +62,7 @@ class StudySessionScreen extends StatefulWidget {
 
 class _StudySessionScreenState extends State<StudySessionScreen> {
   Timer? _tick;
+  final _ticks = ValueNotifier<int>(0); // only the clock listens: the rest of the screen stays still between seconds
   _Step _step = _Step.work;
   final _minutes = TextEditingController();
   Set<int> _done = {};
@@ -81,13 +82,14 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
   void initState() {
     super.initState();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _mine != null && !_mine!.paused) setState(() {});
+      if (mounted && _mine != null && !_mine!.paused) _ticks.value++;
     });
   }
 
   @override
   void dispose() {
     _tick?.cancel();
+    _ticks.dispose();
     _minutes.dispose();
     super.dispose();
   }
@@ -206,10 +208,13 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
       _when(context, s),
       const SizedBox(height: 16),
       Center(
-        child: Text.verbatim(
-          _clock(r?.elapsed(_now()) ?? Duration.zero),
-          key: const ValueKey('session-clock'),
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()], color: r?.paused == true ? scheme.outline : null),
+        child: ValueListenableBuilder<int>(
+          valueListenable: _ticks,
+          builder: (context, _, _) => Text.verbatim(
+            _clock(_mine?.elapsed(_now()) ?? Duration.zero),
+            key: const ValueKey('session-clock'),
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(fontFeatures: const [FontFeature.tabularFigures()], color: r?.paused == true ? scheme.outline : null),
+          ),
         ),
       ),
       const SizedBox(height: 8),
