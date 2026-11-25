@@ -10,8 +10,8 @@ import 'package:notes/devicesync/sync_link.dart';
 import 'fakes.dart';
 import 'harness.dart';
 
-/// "Connect temporarily": a browser shows a code, the phone scans it and hands the browser a link of its profile through the room of
-/// the code, and the usual pairing goes on from there.
+/// "Connect temporarily": a browser shows a code, the phone scans it and meets the browser in the room of the code; the two pair there
+/// with digits from the code's secret, and the profile's secret goes to the browser only with the yes on the phone.
 void main() {
   setUpAll(AppDatabase.initFfi);
 
@@ -30,9 +30,20 @@ void main() {
     final server = FakeServer();
     final rooms = <Device, FakeRoom>{};
     late Device phone, browser;
+    Future<void> until(bool Function() ok, {int ms = 8000, String? reason}) async {
+      final end = DateTime.now().add(Duration(milliseconds: ms));
+      while (!ok()) {
+        if (DateTime.now().isAfter(end)) fail(reason ?? 'timed out');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    phone = await Device.create('Phone', root, profileId: 'aaaaaaaaaaaaaaaa');
+    browser = await Device.create('Browser', root, profileId: 'bbbbbbbbbbbbbbbb');
+    final phoneKeys = MemorySyncKeys(), browserKeys = MemorySyncKeys();
     DeviceSyncService make(Device d) => DeviceSyncService(
           settings: d.settings,
-          keys: MemorySyncKeys(),
+          keys: d == phone ? phoneKeys : browserKeys,
           library: d.library,
           profile: d.profile,
           serverOf: () => 'wss://signal.example',
@@ -46,16 +57,6 @@ void main() {
           rollCallWait: const Duration(milliseconds: 300),
           temporaryLife: const Duration(seconds: 2),
         );
-    Future<void> until(bool Function() ok, {int ms = 8000, String? reason}) async {
-      final end = DateTime.now().add(Duration(milliseconds: ms));
-      while (!ok()) {
-        if (DateTime.now().isAfter(end)) fail(reason ?? 'timed out');
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-    }
-
-    phone = await Device.create('Phone', root, profileId: 'aaaaaaaaaaaaaaaa');
-    browser = await Device.create('Browser', root, profileId: 'bbbbbbbbbbbbbbbb');
     final sp = make(phone), sb = make(browser);
     await sp.load();
     await sb.load();
@@ -65,16 +66,27 @@ void main() {
       final code = await sb.startConnect();
       expect(sb.connectOffer, isNotNull);
       await sp.answerConnect(ConnectLink.parse(code.toLink())!);
-      await until(() => sb.connectArrived != null, reason: 'the link did not arrive');
+      await until(() => sb.connectAnswered && sp.requests.isNotEmpty, reason: 'no request/code');
+      final profileSecret = SyncSecret((await phoneKeys.profileSecret())!).toText();
+      final codeRoom = (await code.secret.roomKeys()).room;
 
-      final link = sb.takeConnectedLink()!;
-      expect(sb.connectOffer, isNull); // the room of the code is left
-      await sb.joinWith(link);
-      await until(() => sp.requests.isNotEmpty && sb.joinCodeNeedsAnswer, reason: 'no request/code');
+      // the two meet in the room of the code, not in the room of the profile, and nothing of the profile has gone over yet
+      expect(rooms[phone]!.name, codeRoom);
+      expect(await browserKeys.profileSecret(), isNull);
+      expect(server.sent.any((m) => '$m'.contains(profileSecret)), isFalse);
+
+      expect(sb.takeConnect(), isTrue);
+      expect(sb.connectOffer, isNull);
       expect(sp.requests.single.code, sb.joinCode);
       sb.confirmJoinCode(true);
+      expect(await browserKeys.profileSecret(), isNull); // (the browser's own yes is not enough)
       sp.answer(sp.requests.single.id, true);
       await until(() => sb.joined && sb.isSetUp, reason: 'not joined: ${sb.joinProblem} ${sb.problem}');
+      expect(SyncSecret((await browserKeys.profileSecret())!).toText(), profileSecret);
+      expect(sb.signalServer, 'wss://signal.example');
+      // the phone went back to the room of its profile
+      expect(sp.answeringConnect, isFalse);
+      await until(() => rooms[phone]!.name != codeRoom, reason: 'the phone stayed in the room of the code');
 
       expect(await browser.text(note), 'hello');
       expect(sb.temporary, isTrue);
@@ -104,6 +116,68 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await phone.db.close();
       await browser.db.close();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('whoever made a code gets nothing of the profile when the phone says no', () async {
+    final root = await Directory.systemTemp.createTemp('tempconnect_no_');
+    final server = FakeServer();
+    final rooms = <Device, FakeRoom>{};
+    late Device phone, visitor;
+    final phoneKeys = MemorySyncKeys(), visitorKeys = MemorySyncKeys();
+    DeviceSyncService make(Device d) => DeviceSyncService(
+          settings: d.settings,
+          keys: d == phone ? phoneKeys : visitorKeys,
+          library: d.library,
+          profile: d.profile,
+          serverOf: () => 'wss://signal.example',
+          changes: d.repo.changes,
+          openRoom: (srv, secret) async => rooms[d] = FakeRoom(server, (await secret.roomKeys()).room),
+          makeLinker: (room, me) => FakeLinker(server, (room as FakeRoom).name, me),
+          heartbeat: const Duration(milliseconds: 300),
+          resync: const Duration(seconds: 30),
+          changeDelay: const Duration(milliseconds: 150),
+          offerFor: const Duration(seconds: 30),
+          rollCallWait: const Duration(milliseconds: 300),
+        );
+    Future<void> until(bool Function() ok, {int ms = 8000, String? reason}) async {
+      final end = DateTime.now().add(Duration(milliseconds: ms));
+      while (!ok()) {
+        if (DateTime.now().isAfter(end)) fail(reason ?? 'timed out');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    phone = await Device.create('Phone', root, profileId: 'aaaaaaaaaaaaaaaa');
+    visitor = await Device.create('Visitor', root, profileId: 'bbbbbbbbbbbbbbbb');
+    final sp = make(phone), sv = make(visitor);
+    await sp.load();
+    await sv.load();
+    try {
+      final note = await phone.note('Private', 'secret words');
+      final code = await sv.startConnect(); // (a code someone made and sent as a link)
+      await sp.answerConnect(code);
+      await until(() => sv.connectAnswered && sp.requests.isNotEmpty, reason: 'no request');
+      sv.takeConnect();
+      sv.confirmJoinCode(true); // (the visitor says the digits match, whatever they are)
+      sp.answer(sp.requests.single.id, false);
+      await until(() => !sv.joining, reason: 'the join did not end');
+
+      expect(sv.joined, isFalse);
+      expect(await visitorKeys.profileSecret(), isNull);
+      final profileSecret = SyncSecret((await phoneKeys.profileSecret())!).toText();
+      expect(server.sent.any((m) => '$m'.contains(profileSecret)), isFalse);
+      expect(await visitor.repo.loadNote(note), isNull);
+      expect(sp.peers, isEmpty);
+      sp.stopOffering();
+      expect(sp.answeringConnect, isFalse);
+    } finally {
+      sp.dispose();
+      sv.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await phone.db.close();
+      await visitor.db.close();
       await root.delete(recursive: true);
     }
   });

@@ -263,11 +263,18 @@ class _SyncSettingsState extends State<SyncSettings> {
 }
 
 /// Makes the link that adds a device and waits for it: shows the link, and when a device asks, the code to compare.
-Future<void> showAddDeviceDialog(BuildContext context, DeviceSyncService service) async {
+///
+/// With [connect] (the code of a browser) no link is made: this device waits in the room of the code for the browser, and lets it in
+/// only after the person compared the digits.
+Future<void> showAddDeviceDialog(BuildContext context, DeviceSyncService service, {ConnectLink? connect}) async {
   SyncLink? link;
   String? problem;
   try {
-    link = await service.offerLink();
+    if (connect != null) {
+      await service.answerConnect(connect);
+    } else {
+      link = await service.offerLink();
+    }
   } catch (e) {
     problem = '$e'.replaceFirst('Bad state: ', '');
   }
@@ -277,7 +284,8 @@ Future<void> showAddDeviceDialog(BuildContext context, DeviceSyncService service
   var open = true, sawRequest = false, closing = false;
   void watch() {
     if (service.requests.isNotEmpty) sawRequest = true;
-    if (link != null && sawRequest && !closing && service.offeredLink == null && service.requests.isEmpty) {
+    final over = link != null ? service.offeredLink == null : connect != null && !service.answeringConnect;
+    if (problem == null && over && sawRequest && !closing && service.requests.isEmpty) {
       closing = true;
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (open && navigator.mounted) navigator.pop();
@@ -288,7 +296,7 @@ Future<void> showAddDeviceDialog(BuildContext context, DeviceSyncService service
   service.addListener(watch);
   await showDialog<void>(
     context: context,
-    builder: (context) => _AddDeviceDialog(service: service, link: link, problem: problem),
+    builder: (context) => _AddDeviceDialog(service: service, link: link, connect: problem == null ? connect : null, problem: problem),
   );
   open = false;
   service.removeListener(watch);
@@ -356,9 +364,12 @@ class SyncPeers extends StatelessWidget {
 class _AddDeviceDialog extends StatelessWidget {
   final DeviceSyncService service;
   final SyncLink? link;
+
+  /// The code of a browser this device answers (instead of a link it offers).
+  final ConnectLink? connect;
   final String? problem;
 
-  const _AddDeviceDialog({required this.service, this.link, this.problem});
+  const _AddDeviceDialog({required this.service, this.link, this.connect, this.problem});
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +377,7 @@ class _AddDeviceDialog extends StatelessWidget {
     return ListenableBuilder(
       listenable: service,
       builder: (context, _) {
-        final done = link != null && service.offeredLink == null && service.requests.isEmpty;
+        final done = service.requests.isEmpty && (link != null ? service.offeredLink == null : connect != null && !service.answeringConnect);
         return PlatformAlertDialog(
           title: const Text('Add a device'),
           content: SizedBox(
@@ -377,7 +388,19 @@ class _AddDeviceDialog extends StatelessWidget {
                   Text.verbatim(problem!, key: const ValueKey('sync-add-problem'), style: TextStyle(color: scheme.error))
                 else if (done)
                   const Text('Done: the device is part of your profile now.', key: ValueKey('sync-add-done'))
-                else ...[
+                else if (connect != null) ...[
+                  if (service.requests.isEmpty)
+                    Row(children: [
+                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2)),
+                      const SizedBox(width: 10),
+                      const Expanded(child: Text('Waiting for the browser...', key: ValueKey('sync-connect-waiting'))),
+                    ]),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Nothing of your profile goes to the browser until you compare the six digits and say yes.',
+                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+                ] else ...[
                   const Text('On the other device open Notation, go to Settings → Sync profile → "Use a link from another device" (or the first screen of the app) and enter this link:'),
                   const SizedBox(height: 10),
                   Container(
@@ -435,11 +458,13 @@ class _AddDeviceDialog extends StatelessWidget {
 }
 
 /// Asks for a link from another device (or takes [initial]) and joins its profile: shows the code to compare, and the result.
-Future<bool> showJoinDialog(BuildContext context, DeviceSyncService service, {SyncLink? initial}) async {
+///
+/// [underWay]: the join was started already (a browser that showed its code), the dialog only follows it.
+Future<bool> showJoinDialog(BuildContext context, DeviceSyncService service, {SyncLink? initial, bool underWay = false}) async {
   final joined = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => _JoinDialog(service: service, initial: initial),
+    builder: (context) => _JoinDialog(service: service, initial: initial, underWay: underWay),
   );
   return joined ?? false;
 }
@@ -447,8 +472,9 @@ Future<bool> showJoinDialog(BuildContext context, DeviceSyncService service, {Sy
 class _JoinDialog extends StatefulWidget {
   final DeviceSyncService service;
   final SyncLink? initial;
+  final bool underWay;
 
-  const _JoinDialog({required this.service, this.initial});
+  const _JoinDialog({required this.service, this.initial, this.underWay = false});
 
   @override
   State<_JoinDialog> createState() => _JoinDialogState();
@@ -457,12 +483,12 @@ class _JoinDialog extends StatefulWidget {
 class _JoinDialogState extends State<_JoinDialog> {
   late final _link = TextEditingController(text: widget.initial?.toLink() ?? '');
   String? _error;
-  bool _started = false;
+  late bool _started = widget.underWay;
 
   @override
   void initState() {
     super.initState();
-    if (widget.initial != null) WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+    if (widget.initial != null && !widget.underWay) WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
   @override
@@ -690,8 +716,8 @@ class _CloudSyncCardState extends State<_CloudSyncCard> {
 }
 
 
-/// Browser: shows the code of a temporary connection, and when the phone has answered it goes on with the usual join (the six digits
-/// to compare, then the notes come over). True when the browser joined.
+/// Browser: shows the code of a temporary connection and waits as a device that joins; when the phone has answered it goes on with
+/// the usual join (the six digits to compare, then the profile and the notes come over). True when the browser joined.
 Future<bool> showConnectDialog(BuildContext context, DeviceSyncService service) async {
   ConnectLink? code;
   String? problem;
@@ -709,9 +735,11 @@ Future<bool> showConnectDialog(BuildContext context, DeviceSyncService service) 
     service.stopConnect();
     return false;
   }
-  final link = service.takeConnectedLink();
-  if (link == null || !context.mounted) return false;
-  return showJoinDialog(context, service, initial: link);
+  if (!service.takeConnect() || !context.mounted) {
+    service.stopConnect();
+    return false;
+  }
+  return showJoinDialog(context, service, underWay: true);
 }
 
 class _ConnectDialog extends StatefulWidget {
@@ -739,7 +767,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
   }
 
   void _check() {
-    if (widget.service.connectArrived != null && mounted) Navigator.pop(context, true);
+    if (widget.service.connectAnswered && mounted) Navigator.pop(context, true);
   }
 
   @override
@@ -779,22 +807,76 @@ class _ConnectDialogState extends State<_ConnectDialog> {
   }
 }
 
-/// Phone: scans the code that the web version shows and hands the browser a link of this profile; then the usual "let it in?" dialog.
+/// Phone: scans the code that the web version shows and waits for the browser in the room of the code; then the usual "let it in?" dialog.
 Future<void> scanAndAnswerConnect(BuildContext context, DeviceSyncService service) async {
   final code = await scanConnectLink(context);
   if (code == null || !context.mounted) return;
   await answerConnectCode(context, service, code);
 }
 
-/// Phone: the code of a browser is known (scanned, or opened from the camera app).
+/// Phone: the code of a browser is known (scanned, or opened as a link - which any web page can do). The person is asked first, with
+/// the server the code names, and warned when it is not the server of the profile's devices; then this device waits for the browser.
 Future<void> answerConnectCode(BuildContext context, DeviceSyncService service, ConnectLink code) async {
-  try {
-    await service.answerConnect(code);
-  } catch (e) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim('$e'.replaceFirst('Bad state: ', ''))));
-    return;
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (context) => _ConnectAskDialog(code: code, ownServer: service.signalServer),
+  );
+  if (go != true || !context.mounted) return;
+  await showAddDeviceDialog(context, service, connect: code);
+}
+
+/// The host (and port, if one is given) of a signalling server address, for people to read.
+String serverHost(String server) {
+  final uri = Uri.tryParse(server);
+  if (uri == null || uri.host.isEmpty) return server;
+  return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+}
+
+/// Whether two signalling server addresses are the same server (the scheme, host, port and path; a trailing slash does not count).
+bool sameServer(String a, String b) {
+  String norm(String s) {
+    final t = s.trim();
+    return (t.endsWith('/') ? t.substring(0, t.length - 1) : t).toLowerCase();
   }
-  if (!context.mounted) return;
-  await showAddDeviceDialog(context, service);
+
+  return norm(a) == norm(b);
+}
+
+class _ConnectAskDialog extends StatelessWidget {
+  final ConnectLink code;
+  final String? ownServer;
+
+  const _ConnectAskDialog({required this.code, this.ownServer});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final other = ownServer != null && ownServer!.isNotEmpty && !sameServer(ownServer!, code.server);
+    return PlatformAlertDialog(
+      title: const Text('Let a browser connect?'),
+      content: SizedBox(
+        width: 420,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text.verbatim(tr('A browser asks to use your profile for a while. It reaches this device through the server {host}.', {'host': serverHost(code.server)})),
+          if (other) ...[
+            const SizedBox(height: 10),
+            Text.verbatim(
+              tr('This code uses another server ({host}) than your devices ({own}). Go on only if you made this code yourself just now, in a browser in front of you.', {
+                'host': serverHost(code.server),
+                'own': serverHost(ownServer!),
+              }),
+              key: const ValueKey('sync-connect-other-server'),
+              style: TextStyle(color: scheme.error),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text('Nothing of your profile goes to the browser until you compare the six digits and say yes.', style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        ]),
+      ),
+      actions: [
+        TextButton(key: const ValueKey('sync-connect-ask-no'), onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(key: const ValueKey('sync-connect-ask-yes'), onPressed: () => Navigator.pop(context, true), child: const Text('Continue')),
+      ],
+    );
+  }
 }

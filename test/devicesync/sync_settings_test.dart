@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:notes/features/feature.dart';
 import 'package:notes/profile/user_profile.dart';
 import 'package:notes/screens/intro_screen.dart';
 import 'package:notes/devicesync/sync_devices.dart';
+import 'package:notes/devicesync/sync_keys.dart';
 import 'package:notes/devicesync/sync_link.dart';
 import 'package:notes/screens/sync_settings.dart';
 
@@ -136,5 +138,80 @@ void main() {
     // without the service the first screen is as it was
     await tester.pumpWidget(MaterialApp(home: IntroScreen(profile: profile, features: features)));
     expect(find.byKey(const ValueKey('intro-sync')), findsNothing);
+  });
+
+  testWidgets('a browser code that is opened as a link is answered only after a yes, with a warning when its server is not the profile\'s', (tester) async {
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late Directory root;
+    late Device a;
+    late DeviceSyncService service;
+    final server = FakeServer();
+    await tester.runAsync(() async {
+      root = await Directory.systemTemp.createTemp('syncui_connect_');
+      a = await Device.create('Phone', root);
+      service = DeviceSyncService(
+        settings: a.settings,
+        keys: MemorySyncKeys(),
+        library: a.library,
+        profile: a.profile,
+        serverOf: () => 'wss://signal.example',
+        openRoom: (srv, secret) async => FakeRoom(server, (await secret.roomKeys()).room),
+        makeLinker: (room, me) => FakeLinker(server, (room as FakeRoom).name, me),
+      );
+      await service.load();
+    });
+    addTearDown(() async {
+      service.dispose();
+      await a.db.close();
+      await root.delete(recursive: true);
+    });
+
+    late BuildContext context;
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (c) {
+      context = c;
+      return const Scaffold();
+    })));
+
+    // a code that names another server: the person is warned, and Cancel answers nothing
+    unawaited(answerConnectCode(context, service, ConnectLink('wss://evil.example', SyncSecret.create())));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('evil.example'), findsWidgets);
+    expect(find.byKey(const ValueKey('sync-connect-other-server')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('sync-connect-ask-no')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(service.answeringConnect, isFalse);
+    expect(server.opened, isEmpty);
+
+    // the profile's own server: no warning; with Continue the phone waits for the browser in the room of the code
+    final code = ConnectLink('wss://signal.example/', SyncSecret.create());
+    unawaited(answerConnectCode(context, service, code));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('sync-connect-other-server')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('sync-connect-ask-yes')));
+    await tester.pump();
+    for (var i = 0; i < 10 && !service.answeringConnect; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(service.answeringConnect, isTrue);
+    expect(find.byKey(const ValueKey('sync-connect-waiting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sync-link')), findsNothing); // (no link of the profile is shown or made for a code)
+    final codeRoom = await tester.runAsync(() async => (await code.secret.roomKeys()).room);
+    expect(server.opened.map((r) => r.name), [codeRoom]);
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const ValueKey('sync-add-close')));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(service.answeringConnect, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
   });
 }

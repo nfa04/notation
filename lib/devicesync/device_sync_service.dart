@@ -494,6 +494,19 @@ class DeviceSyncService extends ChangeNotifier {
   /// Makes the link for another device to join this profile with (and, the first time, the profile's secret) and waits for it
   /// for a while. Throws when there is no signalling server to use.
   Future<SyncLink> offerLink() async {
+    final secret = await _readyToOffer();
+    _offering = true;
+    _link = SyncLink(_server!, secret, from: _profile.name);
+    _offerTimer?.cancel();
+    _offerTimer = Timer(offerFor, stopOffering);
+    notifyListeners();
+    _announce();
+    await _applyPolicy();
+    return _link!;
+  }
+
+  /// Makes sure the profile has a secret and a signalling server (the first time a device is added) and that this device is on its list.
+  Future<SyncSecret> _readyToOffer() async {
     final server = _server ?? serverOf();
     if (server == null || server.isEmpty) throw StateError(tr('There is no signalling server: set one in the live collaboration settings.'));
     final me = await _ensureIdentity();
@@ -512,20 +525,13 @@ class DeviceSyncService extends ChangeNotifier {
       await book.add(PairedDevice(id: me.id, name: _deviceName, publicKey: me.publicKey, addedAt: DateTime.now().millisecondsSinceEpoch));
     }
     _scheduleChecks();
-    _offering = true;
-    _link = SyncLink(_server!, secret, from: _profile.name);
-    _offerTimer?.cancel();
-    _offerTimer = Timer(offerFor, stopOffering);
-    notifyListeners();
-    _announce();
-    await _applyPolicy();
-    return _link!;
+    return secret;
   }
 
   void stopOffering() {
     if (!_offering) return;
     _offering = false;
-    _answeringConnect = false;
+    _answer = null;
     _offerTimer?.cancel();
     for (final r in List.of(_requests)) {
       answer(r.id, false);
@@ -566,6 +572,9 @@ class DeviceSyncService extends ChangeNotifier {
   Completer<bool>? _joinConfirm;
   String? _joinProblem;
   bool _joined = false;
+  bool _joinViaConnect = false;
+  ({String server, SyncSecret secret})? _handed;
+  Duration? _joinWithin;
 
   /// This device came with a link and is looking for the device that made it.
   bool get joining => _joinLink != null;
@@ -580,8 +589,13 @@ class DeviceSyncService extends ChangeNotifier {
 
   /// Comes into the profile of [link]: looks for the device that made it, shows the code, and - when the person there says yes -
   /// takes over the profile (id and name) and the notes, folders and settings.
-  Future<void> joinWith(SyncLink link) async {
+  Future<void> joinWith(SyncLink link) => _beginJoin(link);
+
+  Future<void> _beginJoin(SyncLink link, {bool viaConnect = false, Duration? within}) async {
     await _ensureIdentity();
+    _joinViaConnect = viaConnect;
+    _handed = null;
+    _joinWithin = within;
     _joinLink = link;
     _joinCode = null;
     _joinProblem = null;
@@ -597,7 +611,7 @@ class DeviceSyncService extends ChangeNotifier {
   /// closes the room and with it the connection, and the sync would fail with "the connection was lost" half-way.
   void _armJoinTimer() {
     _joinTimer?.cancel();
-    _joinTimer = Timer(joinFor, () {
+    _joinTimer = Timer(_joinWithin ?? joinFor, () {
       if (_joinLink == null) return;
       if (_active > 0) {
         _armJoinTimer();
@@ -627,6 +641,13 @@ class DeviceSyncService extends ChangeNotifier {
 
   void _endJoin() {
     _joinLink = null;
+    _joinViaConnect = false;
+    _handed = null;
+    _joinWithin = null;
+    if (_connect != null) {
+      _connect = null;
+      _connectTimedOut?.cancel();
+    }
     _joinTimer?.cancel();
     _joinCode = null;
     final c = _joinConfirm;
@@ -637,10 +658,16 @@ class DeviceSyncService extends ChangeNotifier {
   }
 
   Future<void> _commitJoin(SyncLink link) async {
-    await _keys.setProfileSecret(link.secret.bytes);
-    await _settings.set(_kServer, link.server);
-    _secret = link.secret;
-    _server = link.server;
+    // (a join through a browser's code came with a secret made for the visit: the profile's own was handed over with the yes)
+    final handed = _joinViaConnect ? _handed : (server: link.server, secret: link.secret);
+    _joinViaConnect = false;
+    _handed = null;
+    _joinWithin = null;
+    if (handed == null) throw StateError(tr('The other device did not hand over its profile'));
+    await _keys.setProfileSecret(handed.secret.bytes);
+    await _settings.set(_kServer, handed.server);
+    _secret = handed.secret;
+    _server = handed.server;
     _joined = true;
     if (_temporary) {
       // (a browser that is here for a while only keeps the notes in step by itself: there is no later time to press "Sync now")
@@ -665,10 +692,7 @@ class DeviceSyncService extends ChangeNotifier {
   bool _temporary = false;
   bool _unsynced = false;
   ConnectLink? _connect;
-  SyncRoom? _connectRoom;
-  StreamSubscription<Map<String, Object?>>? _connectSub;
-  Timer? _connectTimer;
-  SyncLink? _connectArrived;
+  Timer? _connectTimedOut;
 
   /// This browser holds a temporary session: it signs out when its tab is closed (see lib/web/temporary_session_web.dart).
   bool get temporary => _temporary && isSetUp;
@@ -716,78 +740,74 @@ class DeviceSyncService extends ChangeNotifier {
   /// The code that is on offer now for a device with a profile to scan.
   ConnectLink? get connectOffer => _connect;
 
-  /// The link a device answered the code with (once it has): [takeConnectedLink] turns it into the join.
-  SyncLink? get connectArrived => _connectArrived;
+  /// Browser: a device answered the code and the six digits are shown ([joinCode]); [takeConnect] goes on with the join.
+  bool get connectAnswered => _connect != null && _joinViaConnect && _joinCode != null;
 
-  /// Browser: makes a code for a device that has a profile to scan, and waits in the room of its secret for the device to answer with
-  /// a link of its profile. Throws when there is no signalling server.
+  /// Browser: makes a code for a device that has a profile to scan, and waits in the room of the code's secret - a secret made for this
+  /// visit only - as a device that joins. The device that scans it meets this one there; the six digits come from the code's secret; and
+  /// only with the person's yes on that device does this one get the profile's own secret (see [PairingOffer.handOver]). Throws when there
+  /// is no signalling server.
   Future<ConnectLink> startConnect() async {
     final server = _server ?? serverOf();
     if (server == null || server.isEmpty) throw StateError(tr('There is no signalling server: set one in the live collaboration settings.'));
-    await _ensureIdentity();
     stopConnect();
     final secret = SyncSecret.create();
-    final room = await _openRoom(server, secret);
-    if (_disposed) {
-      await room.close();
-      throw StateError('closed');
-    }
-    _connectRoom = room;
-    _connectArrived = null;
-    _connect = ConnectLink(server, secret);
-    _connectSub = room.messages.listen((m) {
-      if (m['t'] != 'link' || m['l'] is! String) return;
-      final link = SyncLink.parse(m['l'] as String);
-      if (link == null) return;
-      _connectArrived = link;
-      notifyListeners();
-    });
-    _connectTimer = Timer(offerFor, stopConnect);
+    final code = ConnectLink(server, secret);
+    await _beginJoin(SyncLink(server, secret), viaConnect: true, within: offerFor);
+    if (_disposed) throw StateError('closed');
+    _connect = code;
+    _connectTimedOut?.cancel();
+    _connectTimedOut = Timer(offerFor, stopConnect);
     notifyListeners();
-    return _connect!;
+    return code;
   }
 
+  /// Browser: no device is wanted for the code any more (the dialog was closed, or the time is up).
   void stopConnect() {
-    _connectTimer?.cancel();
-    _connectSub?.cancel();
-    final room = _connectRoom;
-    _connectRoom = null;
-    _connectSub = null;
-    final had = _connect != null || _connectArrived != null;
+    _connectTimedOut?.cancel();
+    if (_connect == null) return;
     _connect = null;
-    _connectArrived = null;
-    if (room != null) unawaited(room.close());
-    if (had && !_disposed) notifyListeners();
+    if (_disposed) return;
+    if (_joinViaConnect && _joinLink != null) {
+      _endJoin();
+    } else {
+      notifyListeners();
+    }
   }
 
-  /// Browser: the device answered the code. The session is marked as temporary from here on (also when the join then fails: the
-  /// next start throws away what the browser holds), and the link is what the join goes on with.
-  SyncLink? takeConnectedLink() {
-    final link = _connectArrived;
-    if (link == null) return null;
-    stopConnect();
+  /// Browser: a device answered the code. The session is marked as temporary from here on (also when the join then fails: the next
+  /// start throws away what the browser holds), and the join goes on (the person compares the digits). False when no device answered.
+  bool takeConnect() {
+    if (!connectAnswered) return false;
+    _connect = null;
+    _connectTimedOut?.cancel();
     markTemporary();
     _temporary = true;
     _unsynced = false;
-    return link;
+    notifyListeners();
+    return true;
   }
 
-  /// A device with a profile read the code of [code] (a browser that wants to be connected for a while): it offers a link of its
-  /// profile as usual and hands it to the browser through the room of the code, sealed with the code's secret. The person still
-  /// compares the codes and says yes, as for any device that is added.
+  /// Phone: a device with a profile read the code of a browser that wants to be connected for a while. It goes into the room of the
+  /// code (sealed with the code's secret, which is not the profile's) and waits there for the browser, as for any device that is added:
+  /// both show six digits and the person says yes here. Nothing of the profile goes to the browser before that yes; with it, the
+  /// profile's server and secret go over the proven, sealed line.
   Future<void> answerConnect(ConnectLink code) async {
-    final link = await offerLink();
-    _answeringConnect = true;
-    final room = await _openRoom(code.server, code.secret);
-    try {
-      await room.send({'t': 'link', 'l': link.toLink()});
-      await Future<void>.delayed(const Duration(seconds: 1)); // (a connection that is closed at once may lose it)
-    } finally {
-      await room.close();
-    }
+    await _readyToOffer();
+    _answer = code;
+    _offering = true;
+    _offerTimer?.cancel();
+    _offerTimer = Timer(offerFor, stopOffering);
+    notifyListeners();
+    await _applyPolicy(); // (the room of the profile is left for the room of the code)
   }
 
-  bool _answeringConnect = false;
+  /// Phone: the code of a browser it waits for in the code's room, if any.
+  ConnectLink? _answer;
+
+  /// Phone: it waits for a browser that showed a code.
+  bool get answeringConnect => _offering && _answer != null;
+
   final Map<String, int> _tempDevices = {};
   Timer? _tempTimer;
 
@@ -982,17 +1002,29 @@ class DeviceSyncService extends ChangeNotifier {
   final Map<String, DateTime> _attempts = {};
   final Map<String, int> _failures = {};
 
-  bool get _wantRoom => _loaded && (_joinLink != null || (_secret != null && (_syncWanted || _shared.isNotEmpty)));
+  bool get _wantRoom => _loaded && (_joinLink != null || _answer != null || (_secret != null && (_syncWanted || _shared.isNotEmpty)));
+
+  /// The secret of the room this device should be in: the one of the link it joins with, of the browser's code it answers, or of
+  /// the profile.
+  SyncSecret? get _wantedSecret => _joinLink?.secret ?? _answer?.secret ?? _secret;
 
   /// Whether the library is synced with the devices in the room now (a device that is only there for a note that is open is not:
   /// with the automatic sync off, the person did not ask for it).
   bool get _syncWanted => _auto || _offering || _manualUntil != null || _checkUntil != null || _joinLink != null;
 
   /// The notes that are offered to be worked on live: those that are open, unless the person switched that off.
-  Set<String> get _shared => _liveTogether && _live != null ? _openNotes : const {};
+  Set<String> get _shared => _liveTogether && _live != null && _answer == null ? _openNotes : const {};
 
   Future<void> _applyPolicy() async {
     if (_disposed) return;
+    if (_room != null && !identical(_roomSecret, _wantedSecret)) {
+      // this device is in another room than the one it should be in (it went into the room of a browser's code, or came back from it)
+      if (_active > 0) {
+        Timer(const Duration(seconds: 2), () => unawaited(_applyPolicy()));
+        return;
+      }
+      await _closeRoom();
+    }
     if (_wantRoom) {
       if (_room == null && !_opening) await _open();
     } else if (_room != null) {
@@ -1016,8 +1048,9 @@ class DeviceSyncService extends ChangeNotifier {
 
   Future<void> _open() async {
     final link = _joinLink;
-    final secret = link?.secret ?? _secret;
-    final server = link?.server ?? signalServer;
+    final answer = link == null ? _answer : null;
+    final secret = _wantedSecret;
+    final server = link?.server ?? answer?.server ?? signalServer;
     if (secret == null || server == null || server.isEmpty) return;
     _opening = true;
     final me = await _ensureIdentity();
@@ -1266,7 +1299,13 @@ class DeviceSyncService extends ChangeNotifier {
         book: book,
         profile: _profile,
         library: _library,
-        offer: _offering && link == null ? PairingOffer(_approve) : null,
+        offer: _offering && link == null
+            ? PairingOffer(
+                _approve,
+                // (only in the room of the browser's code, which came without the profile's secret)
+                handOver: _answer != null && identical(secret, _answer!.secret) && _secret != null && _server != null ? (server: _server!, secret: _secret!) : null,
+              )
+            : null,
         liveSecretFor: _liveSecretFor,
         syncsLibrary: _syncWanted,
         lazyNotes: lazyNotes,
@@ -1279,7 +1318,7 @@ class DeviceSyncService extends ChangeNotifier {
                 final c = _joinConfirm = Completer<bool>();
                 notifyListeners();
                 return c.future.timeout(const Duration(minutes: 3), onTimeout: () => false);
-              }, _profile.adopt),
+              }, _profile.adopt, received: _joinViaConnect ? (server, secret) => _handed = (server: server, secret: secret) : null),
         onProgress: (what, fraction) {
           _progress = what;
           _fraction = fraction;
@@ -1366,15 +1405,21 @@ class DeviceSyncService extends ChangeNotifier {
         await _closeRoom();
         await _applyPolicy();
       } else if (outcome.paired) {
-        if (_answeringConnect && id != null) {
+        final answered = _answer != null;
+        if (answered && id != null) {
           // the device that was let in came from a code of a browser: it is not a device of the person, only a visit
-          _answeringConnect = false;
           _tempDevices[id] = DateTime.now().millisecondsSinceEpoch;
           await _saveTemp();
         }
+        _answer = null;
         _offering = false;
         _offerTimer?.cancel();
-        _syncOnlinePeers(force: true,); // (the other devices of the profile hear of the new one now, not at their next meeting)
+        if (answered) {
+          // back to the room of the profile; the other devices there hear of the new one now, not at their next meeting
+          unawaited(_applyPolicy().then((_) => syncNow()));
+        } else {
+          _syncOnlinePeers(force: true,); // (the other devices of the profile hear of the new one now, not at their next meeting)
+        }
       }
       if (_temporary && _unsynced && !(_changeTimer?.isActive ?? false) && !_resyncAfter) {
         _unsynced = false; // (nothing changed since this sync started)
@@ -1531,6 +1576,7 @@ class DeviceSyncService extends ChangeNotifier {
     _offerTimer?.cancel();
     _joinTimer?.cancel();
     stopConnect();
+    _connectTimedOut?.cancel();
     _tempTimer?.cancel();
     _manualTimer?.cancel();
     _checkTimer?.cancel();

@@ -39,9 +39,10 @@ class SyncLink {
 }
 
 /// What the web version shows as a QR code when it is used for a while only ("Connect temporarily"): where the signalling server
-/// is and a secret made for this one visit (after the `#`, as in [SyncLink]). A device that already has a profile reads it, goes into
-/// the room of that secret and hands the browser a [SyncLink] there, sealed with it - the browser never sees the profile's secret
-/// unless the person scanned its code and then says yes to the code the two show.
+/// is and a secret made for this one visit (after the `#`, as in [SyncLink]). A device that already has a profile reads it (after
+/// asking the person, who is warned when the server is not the profile's) and goes into the room of that secret; the two pair there
+/// as usual, with six digits that come from the visit's secret. The profile's own secret goes to the browser only with the person's
+/// yes, over the proven line (see `PairingOffer.handOver`): whoever made the code learns nothing of the profile without that yes.
 ///
 /// `notation://connect?s=<server>#<secret>`
 class ConnectLink {

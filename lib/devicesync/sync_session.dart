@@ -72,7 +72,12 @@ class LiveLink {
 class PairingOffer {
   /// Asks the person; [code] is what both screens must show.
   final Future<bool> Function(String deviceName, String code) approve;
-  const PairingOffer(this.approve);
+
+  /// The profile's server and secret, handed to the new device with the yes - only when the meeting is in the room of a browser's code
+  /// ([ConnectLink]), where the other device came without them. Never sent before the person said yes.
+  final ({String server, SyncSecret secret})? handOver;
+
+  const PairingOffer(this.approve, {this.handOver});
 }
 
 /// This device came with a link: it shows the code and asks the person whether the device that offered the link shows the same
@@ -83,7 +88,12 @@ class PairingJoin {
 
   /// Takes the profile (id and name) of the device that let this one in.
   final Future<void> Function(String profileId, String profileName) adopt;
-  const PairingJoin(this.confirm, this.adopt);
+
+  /// This device came with a browser's code, not with the profile's secret: the yes must bring the profile's server and secret, which
+  /// are handed to this (and a yes without them is not a way in).
+  final void Function(String server, SyncSecret secret)? received;
+
+  const PairingJoin(this.confirm, this.adopt, {this.received});
 }
 
 /// The person this device belongs to.
@@ -523,6 +533,8 @@ class SyncSession {
         'ok': yes,
         'profile': {'id': profile.id, 'name': profile.name},
         if (yes) 'devices': [for (final d in book.all) d.toJson()],
+        if (yes && offer!.handOver != null) 'server': offer!.handOver!.server,
+        if (yes && offer!.handOver != null) 'secret': offer!.handOver!.secret.toText(),
       });
       if (!yes) throw _Stop(SyncEnd.refused, tr('You did not let the new device in'), peerId, peerName);
       return true;
@@ -534,6 +546,14 @@ class SyncSession {
       final reply = await _next('pair', timeout: const Duration(minutes: 5));
       if (reply['ok'] != true) throw _Stop(SyncEnd.refused, tr('The other device did not let this one in'), peerId, peerName);
       final p = reply['profile'] as Map;
+      final received = join!.received;
+      if (received != null) {
+        final server = reply['server'], secret = reply['secret'] is String ? SyncSecret.fromText(reply['secret'] as String) : null;
+        if (server is! String || !(server.startsWith('ws://') || server.startsWith('wss://')) || secret == null) {
+          throw _Stop(SyncEnd.refused, tr('The other device did not hand over its profile'), peerId, peerName);
+        }
+        received(server, secret);
+      }
       await book.clear(); // the devices of an earlier profile are not part of this one
       await book.merge([for (final j in (reply['devices'] as List? ?? const [])) ?PairedDevice.fromJson(j)]);
       await join!.adopt(p['id'] as String, (p['name'] as String?) ?? '');
