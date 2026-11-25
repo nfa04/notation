@@ -712,6 +712,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                   }
                   if (_erasesWith(event)) {
                     // (nothing shown depends on the pen being down but the page list's scrolling: erasing builds what it changes)
+                    _eraseLast = null;
                     return _eraseAt(pageIndex, event.localPosition);
                   }
                   if (_bucketOn && !_lassosWith(event)) {
@@ -819,7 +820,10 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                   if (event.kind == PointerDeviceKind.touch && _touchGesture) return;
                   if (event.pointer == _pickPointer) return _pickMove(event.position);
                   if (_erasesWith(event)) {
-                    _currentActiveStroke = null;
+                    if (_currentActiveStroke != null) {
+                      _currentActiveStroke = null;
+                      _inkTick.value++; // (its layer shows it no more)
+                    }
                     return _eraseAt(pageIndex, event.localPosition);
                   }
                   _travel = math.max(
@@ -1023,6 +1027,9 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     _draggingStroke = false;
                   }
                   finish();
+                  // the layer of the line being drawn is told too: with no build it would keep showing its last picture of the line,
+                  // over the finished one (a line looked doubled, and once erased it stayed until the next line was begun)
+                  _inkTick.value++;
                   if (quiet && (_infinite || _pageCount == _shownPageCount)) {
                     _inkChanged(pageIndex);
                   } else {
@@ -1053,6 +1060,7 @@ extension _EditorPageTile on _FixedPageNoteEditorState {
                     ));
                   }
                   _currentActiveStroke = null;
+                  _inkTick.value++; // (see the lifting of the pen)
                   _lassoPath = null;
                   _draggingStroke = false;
                   _stylusDown = false;

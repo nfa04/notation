@@ -2067,7 +2067,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 800), _saveNow);
     _metaSoon(); // so is what changed that is not a stroke, for the undo button
-    _ink?.changed(); // the writing that changed is read again, a moment later
+    _inkMaybeChanged(); // the writing that changed is read again, a moment later
     _refreshInkSpellingSoon();
     if (_checkOn) {
       _marksTimer?.cancel();
@@ -2076,6 +2076,25 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
       });
     }
     _live?.localChanged(); // what changed goes to the others, a moment later
+  }
+
+  int _inkSeen = 0;
+
+  /// Tells the reader only when the writing is not what it was: every setState comes here, and one that restarts the reader's idle wait
+  /// for a tool switch or a selection would keep it from ever starting (a repeating setState used to starve it).
+  void _inkMaybeChanged() {
+    final ink = _ink;
+    if (ink == null) return;
+    final stamp = Object.hash(
+      _layers.fingerprint,
+      _pdfFilePath,
+      _totalPages,
+      Object.hashAll(_nativePages),
+      Object.hashAll([for (final e in _strokesPerPage.entries) for (final s in e.value) Object.hash(e.key, s.stamp)]),
+    );
+    if (stamp == _inkSeen) return;
+    _inkSeen = stamp;
+    ink.changed();
   }
 
   NoteData _snapshot() => NoteData(
@@ -2457,6 +2476,9 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   /// Strokes rubbed out during the current stroke of the eraser, with where
   /// they were; one gesture is one step.
   final List<({int page, int index, DrawingStroke stroke})> _erased = [];
+
+  /// Where the eraser was at the event before, while it is down (see `_eraseAt`).
+  ({int page, Offset at})? _eraseLast;
 
   /// Where the drawings being moved were, to take the move back.
   ({

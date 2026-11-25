@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/note_repository.dart';
@@ -219,6 +220,47 @@ void main() {
         }
       }
       expect(near, greaterThan(100)); // (the cases where it is near were tried too)
+    });
+
+    test('a sweep of the eraser finds the lines that stepping along it in fine steps finds', () {
+      bool sampledNear(DrawingStroke s, Offset from, Offset to, double radius) {
+        final steps = math.max(1, ((to - from).distance / 0.25).ceil());
+        for (var k = 0; k <= steps; k++) {
+          if (nearBefore(s, Offset.lerp(from, to, k / steps)!, radius)) return true;
+        }
+        return false;
+      }
+
+      var near = 0, onlyBetween = 0;
+      for (var i = 0; i < 300; i++) {
+        final s = scribble();
+        for (var k = 0; k < 15; k++) {
+          final from = Offset(r.nextDouble() * 300, r.nextDouble() * 200);
+          final to = from + Offset(r.nextDouble() * 120 - 60, r.nextDouble() * 120 - 60);
+          final radius = r.nextDouble() * 12;
+          final swept = s.isNear(to, radius, from: from);
+          if (sampledNear(s, from, to, radius)) expect(swept, isTrue);
+          if (swept) {
+            expect(sampledNear(s, from, to, radius + 0.3), isTrue); // (the steps are 0.25 apart: none is further than 0.125 from the way)
+            near++;
+            if (!s.isNear(to, radius) && !s.isNear(from, radius)) onlyBetween++;
+          }
+        }
+      }
+      expect(near, greaterThan(100));
+      expect(onlyBetween, greaterThan(20)); // (lines met only between the two ends were tried)
+    });
+
+    test('the box of a line follows every change of its points', () {
+      final s = DrawingStroke(color: Colors.black, width: 2, points: const [Offset(0, 0), Offset(10, 0)]);
+      expect(s.isNear(const Offset(200, 0), 3), isFalse);
+      s.points.add(const Offset(200, 0));
+      expect(s.isNear(const Offset(200, 0), 3), isTrue);
+      s.points[2] = const Offset(10, 300);
+      expect(s.isNear(const Offset(200, 0), 3), isFalse);
+      expect(s.isNear(const Offset(10, 299), 3), isTrue);
+      s.points.clear();
+      expect(s.isNear(const Offset(0, 0), 3), isFalse);
     });
 
     test('the lasso takes the same lines as testing every sample of them', () {
@@ -506,7 +548,11 @@ void main() {
         await tester.pump();
       }
       expect(identical(tester.widget<CustomPaint>(layer.first).painter, painter), isTrue, reason: 'the page was built again while the pen moved');
+      await tester.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 10));
       await tester.sendEventToBinding(PointerUpEvent(pointer: p, position: origin + Offset(moves * 0.8, 30 * math.sin(moves / 30)), kind: PointerDeviceKind.stylus));
+      // (the layer of the line being drawn paints again: else its last picture of the line stays on the screen over the finished one,
+      // and stays there when the line is erased)
+      expect(tester.renderObject<RenderCustomPaint>(active.first).debugNeedsPaint, isTrue, reason: 'the line being drawn is still shown');
       await tester.pump();
       expect(drawn(), isNull);
       expect(identical(tester.widget(find.byType(AppBar)), bar), isTrue, reason: 'the editor was built when the pen lifted');

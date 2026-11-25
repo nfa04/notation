@@ -136,6 +136,7 @@ extension _EditorUndo on _FixedPageNoteEditorState {
   }
 
   void _commitErase() {
+    _eraseLast = null; // (the next stroke of the eraser starts where it touches)
     if (_erased.isEmpty) return;
     _pushRemoval(List.of(_erased));
     _erased.clear();
@@ -344,18 +345,23 @@ extension _EditorUndo on _FixedPageNoteEditorState {
     _metaBase = _captureMeta();
   }
 
+  /// Erases what the eraser touches at [position] on [pageIndex], and on its way there from where it was at the event before (a quick
+  /// sweep moves further than the eraser's size between two events, and would jump over a thin line).
   void _eraseAt(int pageIndex, Offset position) {
+    final last = _eraseLast;
+    _eraseLast = (page: pageIndex, at: position);
+    final from = last != null && last.page == pageIndex ? last.at : null;
     final strokes = _strokesPerPage[pageIndex];
-    if (strokes == null ||
-        !strokes.any((s) => _layers.editable(s) && s.isNear(position, _eraserRadius))) {
-      return;
-    }
+    if (strokes == null) return;
+    var erased = false;
     for (var i = strokes.length - 1; i >= 0; i--) {
-      if (_layers.editable(strokes[i]) && strokes[i].isNear(position, _eraserRadius)) {
+      if (strokes[i].isNear(position, _eraserRadius, from: from) && _layers.editable(strokes[i])) {
         _erased.add((page: pageIndex, index: i, stroke: strokes[i]));
         strokes.removeAt(i);
+        erased = true;
       }
     }
+    if (!erased) return;
     // (only the lines of the page are built again, not the editor, unless more than they changed)
     if (_erasesQuietly(pageIndex)) {
       _inkChanged(pageIndex);

@@ -76,6 +76,29 @@ class StrokePoints extends ListBase<Offset> {
 
   void _changed() => _revision++;
 
+  int _boxRevision = -1;
+  Rect _box = Rect.zero;
+
+  /// The box around the points (none for no points), measured again only after a change: the eraser asks it of every line at every move.
+  Rect get box {
+    if (_boxRevision != _revision) {
+      _boxRevision = _revision;
+      if (_points.isEmpty) {
+        _box = Rect.zero;
+      } else {
+        var l = double.infinity, t = double.infinity, r = double.negativeInfinity, b = double.negativeInfinity;
+        for (final o in _points) {
+          if (o.dx < l) l = o.dx;
+          if (o.dx > r) r = o.dx;
+          if (o.dy < t) t = o.dy;
+          if (o.dy > b) b = o.dy;
+        }
+        _box = Rect.fromLTRB(l, t, r, b);
+      }
+    }
+    return _box;
+  }
+
   @override
   int get length => _points.length;
 
@@ -445,24 +468,49 @@ class DrawingStroke {
   }
 
   /// Whether the stroke passes within [radius] of [p] (its own thickness
-  /// counts too), measured to the line segments between the points.
-  bool isNear(Offset p, double radius) {
+  /// counts too), measured to the line segments between the points. With [from], of the whole way from [from] to [p]: the eraser
+  /// moved there between two events, and a quick sweep of the pen can be further than its size from one event to the next.
+  bool isNear(Offset p, double radius, {Offset? from}) {
+    if (points.isEmpty) return false;
     final reach = radius + width / 2, reach2 = reach * reach;
     final px = p.dx, py = p.dy;
+    final q = from ?? p, qx = q.dx, qy = q.dy;
+    final minX = math.min(px, qx) - reach, maxX = math.max(px, qx) + reach;
+    final minY = math.min(py, qy) - reach, maxY = math.max(py, qy) + reach;
+    // (the eraser asks this of every line at every move: a line whose box is out of reach is not read at all)
+    final box = points.box;
+    if (maxX < box.left || minX > box.right || maxY < box.top || minY > box.bottom) return false;
+    final swept = qx != px || qy != py;
     for (var i = 0; i < points.length; i++) {
       final a = points[i];
       final b = i + 1 < points.length ? points[i + 1] : a;
       final ax = a.dx, ay = a.dy, bx = b.dx, by = b.dy;
-      // (the eraser asks this of every line at every move: a segment whose box is out of reach is not measured)
-      if (px < math.min(ax, bx) - reach || px > math.max(ax, bx) + reach || py < math.min(ay, by) - reach || py > math.max(ay, by) + reach) continue;
-      final abx = bx - ax, aby = by - ay;
-      final len2 = abx * abx + aby * aby;
-      final t = len2 == 0 ? 0.0 : (((px - ax) * abx + (py - ay) * aby) / len2).clamp(0.0, 1.0);
-      final dx = px - (ax + abx * t), dy = py - (ay + aby * t);
-      if (dx * dx + dy * dy <= reach2) return true;
+      // (nor is a segment whose box is out of reach)
+      if (maxX < math.min(ax, bx) || minX > math.max(ax, bx) || maxY < math.min(ay, by) || minY > math.max(ay, by)) continue;
+      if (_gap2(px, py, ax, ay, bx, by) <= reach2) return true;
+      if (!swept) continue;
+      if (_gap2(qx, qy, ax, ay, bx, by) <= reach2 || _gap2(ax, ay, qx, qy, px, py) <= reach2 || _gap2(bx, by, qx, qy, px, py) <= reach2) return true;
+      if (_cross(ax, ay, bx, by, qx, qy, px, py)) return true;
     }
     return false;
   }
+}
+
+/// The square of the distance from (px, py) to the segment from (ax, ay) to (bx, by).
+double _gap2(double px, double py, double ax, double ay, double bx, double by) {
+  final abx = bx - ax, aby = by - ay;
+  final len2 = abx * abx + aby * aby;
+  final t = len2 == 0 ? 0.0 : (((px - ax) * abx + (py - ay) * aby) / len2).clamp(0.0, 1.0);
+  final dx = px - (ax + abx * t), dy = py - (ay + aby * t);
+  return dx * dx + dy * dy;
+}
+
+/// Whether the segments a-b and c-d cross (touching at an end is found by [_gap2] already).
+bool _cross(double ax, double ay, double bx, double by, double cx, double cy, double dx, double dy) {
+  double side(double ox, double oy, double px, double py, double qx, double qy) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
+  final d1 = side(cx, cy, dx, dy, ax, ay), d2 = side(cx, cy, dx, dy, bx, by);
+  final d3 = side(ax, ay, bx, by, cx, cy), d4 = side(ax, ay, bx, by, dx, dy);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
 /// Whether [p] lies inside the closed shape [polygon] (even-odd rule).
