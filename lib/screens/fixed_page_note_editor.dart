@@ -1,5 +1,6 @@
 import 'package:material_symbols_icons/symbols.dart';
 import '../widgets/bounded_image.dart';
+import '../widgets/save_state_label.dart';
 import '../pdf/open_pdf.dart';
 import '../web/picked_file.dart';
 import 'dart:async';
@@ -1667,6 +1668,18 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
   Object? _loadError;
   String? _pdfSha256;
   Timer? _saveTimer;
+
+  /// Whether what is on screen is written (the word beside the title); [_changes] counts the changes, so that a save that
+  /// finishes after a newer change does not say "Saved".
+  final _saveState = ValueNotifier(NoteSaveState.saved);
+  int _changes = 0;
+
+  /// The newest change known to be in what is written (or being written), and the saves under way.
+  int _confirmedChanges = 0, _writing = 0;
+
+  void _settleSaveState() {
+    if (_writing == 0 && _saveFailures == 0 && _confirmedChanges == _changes) _saveState.value = NoteSaveState.saved;
+  }
   Future<void> _saveChain = Future.value();
   int? _lastSavedSignature;
 
@@ -2064,6 +2077,7 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
 
   void _scheduleSave() {
     if (!_loaded) return;
+    _changes++; // (the word changes only when something is really written: opening a note asks for saves that find nothing new)
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 800), _saveNow);
     _metaSoon(); // so is what changed that is not a stroke, for the undo button
@@ -2174,14 +2188,27 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
     // (the mode a note was left in is a setting, kept even when the note itself has nothing new to write, or is encrypted)
     if (_loaded && _modeSettingsChanged && (_sealedAway || sig == _lastSavedSignature)) unawaited(_writeModeSettings());
     if (_sealedAway) return _saveChain; // (an encrypted note is not written back)
-    if (!_loaded || sig == _lastSavedSignature) return _saveChain;
+    final changes = _changes;
+    if (!_loaded || sig == _lastSavedSignature) {
+      // (nothing new to write: once what is being written is through, it is all saved; no step is added to the chain)
+      if (_loaded) {
+        _confirmedChanges = changes;
+        _settleSaveState();
+      }
+      return _saveChain;
+    }
+    _writing++;
+    _saveState.value = NoteSaveState.saving;
     _lastSavedSignature = sig;
     final note = _snapshot();
     // one save at a time, in order
     return _saveChain = _saveChain
         .then((_) => widget.repository.saveNote(note))
         .then((_) async {
+          _writing--;
+          if (changes > _confirmedChanges) _confirmedChanges = changes;
           _savedNow();
+          _settleSaveState();
           _dbStamp = (await widget.repository.noteTimes(widget.noteId))?.edited;
           // (only when there is something to write: one more step in this chain is one more the tests' fake clock has to turn)
           if (_modeSettingsChanged) await _writeModeSettings();
@@ -2189,6 +2216,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
         .catchError((Object e) {
           _lastSavedSignature = null; // try again on the next change
           debugPrint('saving note failed: $e');
+          _writing--;
+          _saveState.value = NoteSaveState.failed;
           _saveFailed(e);
         });
   }
@@ -2415,6 +2444,8 @@ class _FixedPageNoteEditorState extends State<FixedPageNoteEditor> with WidgetsB
             ),
           )),
          // (the tools follow the title directly and scroll sideways when they are too many)
+         // (whether it is saved: a quiet icon, the word in its tooltip)
+         Padding(padding: const EdgeInsets.only(left: 8), child: SaveStateLabel(state: _saveState, compact: true)),
          if (!phone) Expanded(child: Padding(padding: const EdgeInsets.only(left: 12), child: _topLine(buttons))),
         ]),
         actions: [

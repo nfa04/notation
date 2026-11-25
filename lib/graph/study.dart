@@ -1,6 +1,5 @@
 import '../ai/ai_prompt.dart';
 import '../ai/flashcards.dart';
-import '../ai/document_index.dart';
 
 /// The study tools of the graph view, after the ones of OpenKnowledgeBase: flashcards and quiz questions made from the facts of a
 /// topic, a grade for the answer a student wrote, and answers that rest on the facts alone. Every prompt asks for lines, not JSON
@@ -78,32 +77,6 @@ Grade? parseGrade(String text) {
   final correct = RegExp(r'(?:correct|richtig)\s*[:=]?\s*\**\s*(yes|no|true|false|ja|nein)', caseSensitive: false).firstMatch(text)?.group(1)?.toLowerCase();
   final feedback = RegExp(r'^\s*\**(?:feedback|r(?:ü|u)ckmeldung)\**\s*[:=]?\s*(.*(?:\n(?!\s*\**(?:score|correct|richtig)\b).*)*)', caseSensitive: false, multiLine: true).firstMatch(text)?.group(1)?.trim() ?? '';
   return Grade(n, correct == null ? n >= 7 : const {'yes', 'true', 'ja'}.contains(correct), n >= 10 ? '' : feedback);
-}
-
-/// The prompt that answers a question from the facts and from nothing else (OpenKnowledgeBase's search prompt): it explains and
-/// connects the facts, and says so when they do not contain the answer.
-AiPrompt askFactsPrompt(String question, List<StudyFact> facts) => AiPrompt(
-      system: 'You are a study assistant that explains concepts clearly. Answer the student\'s question using only the facts you are given.\n'
-          '- Rely exclusively on the facts: not on your training data or general knowledge, even if you know something to be true.\n'
-          '- If the facts do not contain enough to answer fully, say plainly that you cannot answer this question from the facts, and explain what '
-          'information is missing.\n'
-          '- This is for studying, so do not give a bare answer: synthesize the facts, explain the mechanism or concept, and walk the student through '
-          'how the facts lead to the answer. You may combine facts logically, but never invent facts, dates, names or mechanisms.\n'
-          '- Answer in the language of the question. Name the numbers of the facts you used in brackets, like (2, 5).',
-      user: 'Facts:\n${factList(facts)}\n\nQuestion: $question',
-    );
-
-/// The [count] facts of [all] that fit [question] best by their words (the facts of a whole graph are too many for one request).
-List<StudyFact> closestFacts(String question, List<StudyFact> all, {int count = studyBatch}) {
-  final terms = searchTerms(question).toSet();
-  if (terms.isEmpty || all.length <= count) return all.take(count).toList();
-  double score(StudyFact f) {
-    final has = searchTerms(f.line).toSet();
-    return terms.where(has.contains).length / terms.length;
-  }
-
-  final scored = [for (final f in all) (fact: f, score: score(f))]..sort((a, b) => b.score.compareTo(a.score));
-  return [for (final s in scored.take(count)) if (s.score > 0) s.fact];
 }
 
 /// A question of a quiz, with how well it is known.

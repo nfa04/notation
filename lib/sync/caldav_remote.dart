@@ -143,6 +143,9 @@ class DayEvent {
   final String calendarKey;
   final String uid;
 
+  /// Where the event is on the server (empty for a phone event, or when unknown): what deleting it needs.
+  final String href;
+
   const DayEvent({
     required this.title,
     required this.start,
@@ -153,6 +156,7 @@ class DayEvent {
     this.repeats = false,
     this.calendarKey = '',
     this.uid = '',
+    this.href = '',
   });
 
   Map<String, Object?> toJson() => {
@@ -165,6 +169,7 @@ class DayEvent {
         'r': repeats,
         'k': calendarKey,
         'u': uid,
+        'h': href,
       };
 
   static DayEvent fromJson(Map<String, Object?> j) => DayEvent(
@@ -177,6 +182,7 @@ class DayEvent {
         repeats: j['r'] as bool,
         calendarKey: j['k'] as String,
         uid: j['u'] as String,
+        href: j['h'] as String? ?? '', // (not in events kept by an older version)
       );
 
   static DayEvent from(CalendarEvent e, Calendar calendar) {
@@ -192,6 +198,7 @@ class DayEvent {
       repeats: e.rrule != null,
       calendarKey: calendar.href.toString(),
       uid: e.uid,
+      href: e.href?.toString() ?? '',
     );
   }
 

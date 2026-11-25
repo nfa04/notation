@@ -115,10 +115,10 @@ void main() {
       expect(ticked(tester, 'handwriting'), isTrue);
       expect(ticked(tester, 'maths'), isTrue);
       expect(ticked(tester, 'assistant'), isFalse, reason: 'too big to start without asking');
-      expect(find.textContaining('Pressing Start downloads 361 MB'), findsOneWidget);
+      expect(find.textContaining('The download of 361 MB'), findsOneWidget);
 
       await tap(tester, 'intro-model-maths'); // not that one
-      expect(find.textContaining('Pressing Start downloads 61 MB'), findsOneWidget);
+      expect(find.textContaining('The download of 61 MB'), findsOneWidget);
       await tap(tester, 'intro-next'); // Start
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       expect(profile.introDone, isTrue);
@@ -128,11 +128,14 @@ void main() {
       expect(chat.installs, 0);
     });
 
-    testWidgets('on mobile data the step warns about the size, until nothing is left to download', (tester) async {
+    testWidgets('on mobile data nothing is ticked, and the step warns about the size of what is ticked', (tester) async {
       await start(tester, mobile: true);
       await toSmartStep(tester, area: 'maths');
+      expect(ticked(tester, 'handwriting'), isFalse);
+      expect(ticked(tester, 'maths'), isFalse);
+      expect(find.byKey(const ValueKey('intro-mobile-hint')), findsNothing);
+      await tap(tester, 'intro-model-maths');
       expect(find.byKey(const ValueKey('intro-mobile-hint')), findsOneWidget);
-      await tap(tester, 'intro-model-handwriting');
       await tap(tester, 'intro-model-maths'); // nothing left to download: nothing to warn about
       expect(find.byKey(const ValueKey('intro-mobile-hint')), findsNothing);
     });

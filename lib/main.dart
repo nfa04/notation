@@ -100,6 +100,7 @@ import 'speech/speech_to_text.dart';
 import 'sync/device_calendar_service.dart';
 import 'sync/ics_service.dart';
 import 'app_services.dart';
+import 'screens/dashboard_view.dart' show welcomeNoteKey;
 import 'screens/main_shell.dart';
 import 'screens/share_storage_settings.dart' show storageAccountSection;
 import 'history/note_history.dart';
@@ -628,6 +629,7 @@ Future<bool> _onMobileData() async {
 IntroSmart? _introSmart(AppServices services) {
   final aiSwitch = services.aiSwitch;
   if (aiSwitch == null) return null;
+  final chat = services.ai?.providers.whereType<OnnxChatProvider>().firstOrNull;
   return IntroSmart(aiSwitch: aiSwitch, onMobileData: _onMobileData, models: [
     if (services.handwriting != null)
       IntroModel(
@@ -647,13 +649,14 @@ IntroSmart? _introSmart(AppServices services) {
         service: services.math!,
         wantedFor: const {Feature.mathInk, Feature.checkMaths},
       ),
-    if (services.llm != null)
+    // (the model the assistant really uses: the chat model on the device, not the small one that titles tasks)
+    if (chat != null)
       IntroModel(
         id: 'assistant',
         title: 'Assistant',
         description: 'Answers questions about a note and summarises it. A big download, so it is only on if you tick it.',
         icon: Symbols.auto_awesome,
-        service: services.llm!,
+        service: chat,
       ),
   ]);
 }
@@ -667,4 +670,5 @@ Future<void> _welcomeNote(AppServices services, Set<Feature> tools, {bool firstS
   final note = (await repository.loadNote(id))!;
   fillWelcomeNote(note, tools);
   await repository.saveNote(note);
+  await repository.settings.set(welcomeNoteKey, id); // (the dashboard greets a first visit, not a "welcome back", while it is the only note)
 }

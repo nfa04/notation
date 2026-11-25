@@ -81,7 +81,8 @@ class _IntroScreenState extends State<IntroScreen> {
   /// Whether to make the note that shows the tools.
   bool _welcomeNote = true;
   Set<String>? _download;
-  Set<String> get _downloads => _download ??= widget.smart?.defaultsFor(_tools) ?? {};
+  // (on mobile data nothing is ticked to begin with: the person ticks what is worth it on their plan)
+  Set<String> get _downloads => _download ??= _mobile ? {} : widget.smart?.defaultsFor(_tools) ?? {};
 
   /// Whether to make a toolbar profile for each use (offered when the uses are of different kinds).
   bool _profiles = false;
@@ -241,7 +242,7 @@ class _IntroScreenState extends State<IntroScreen> {
           const SizedBox(height: 12),
           Text('Notes you write and draw, PDFs you annotate, and notes you work on together with others.', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
-          Text('Three quick questions make it fit you: what to call you, what you use it for, and which tools you want to see. You can change all of it later in the settings.', style: hint),
+          Text('A few quick steps make it fit you: what to call you, what you use it for, and which tools you want to see. You can change all of it later in the settings.', style: hint),
           if (widget.sync != null) ...[
             const SizedBox(height: 24),
             Container(
@@ -524,7 +525,7 @@ class _IntroScreenState extends State<IntroScreen> {
           ),
         const SizedBox(height: 8),
         Text(
-          mb == 0 ? 'Nothing will be downloaded.' : tr('Pressing Start downloads {size} MB in the background; the settings show how far it is.', {'size': '$mb'}),
+          mb == 0 ? 'Nothing will be downloaded.' : tr('The download of {size} MB starts when you leave this step and runs in the background; the settings show how far it is.', {'size': '$mb'}),
           key: const ValueKey('intro-download-note'),
           style: hint,
         ),

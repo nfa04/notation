@@ -65,7 +65,7 @@ import 'collab_ui.dart';
 import 'assistant_panel.dart';
 import 'dashboard_view.dart';
 import 'graph_study.dart';
-import 'study_plan_screen.dart';
+import 'learning_hub.dart';
 import 'study_session_screen.dart';
 import '../review/study_material_reader.dart' show readPageTexts;
 import '../review/study_generate.dart';
@@ -74,7 +74,7 @@ import '../reminders/reminder.dart' show ReminderKind;
 import '../widgets/notation_logo.dart';
 import '../widgets/notation_sidebar.dart';
 import 'folder_view.dart';
-import '../data/note_data.dart' show NoteSummary;
+import '../data/note_data.dart' show NoteSummary, isUntitled;
 import '../data/debounced_changes.dart';
 import 'bulk_note_actions.dart' show selectionBarsShowing;
 import 'fixed_page_note_editor.dart';
@@ -128,10 +128,16 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// The places of the menu on the left, by the index the rest of the shell goes by (the calendar and the
   /// automations go when they are off; the graph and the assistant go with the AI).
   /// (3, the open note, is not among them: notes open as tabs, and on a phone from the dashboard, so it has no place of its own in the menu)
-  List<int> get _navItems => [0, 1, 6, if (_assistantOn) 9, if (_aiOn) 8, if (_f(Feature.calendar)) 2, if (_studyOn) 10, if (_f(Feature.automations)) 4, 5];
+  List<int> get _navItems => [0, 1, 6, if (_assistantOn) 9, if (_aiOn) 8, if (_f(Feature.calendar)) 2, if (_learnOn) 10, if (_f(Feature.automations)) 4, 5];
 
-  /// Whether the study plans are offered (their own place in the menu; they go by the calendar).
+  /// Whether the study plans are offered (they go by the calendar).
   bool get _studyOn => _app.planner != null && _f(Feature.calendar);
+
+  /// Whether the cards kept for review are offered (reviewing needs no AI; making them does).
+  bool get _cardsOn => _app.cards != null && _f(Feature.flashcards);
+
+  /// Whether the learning hub has a place in the menu: it holds the study plans and the cards.
+  bool get _learnOn => _studyOn || _cardsOn;
 
   /// Whether the assistant that answers from all notes is offered (its own place in the menu).
   bool get _assistantOn => _app.ai != null && _aiOn && _f(Feature.assistant);
@@ -139,12 +145,15 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   /// The conversation about all notes; kept while the app runs, so that leaving the page and coming back loses nothing.
   AssistantChat? _notesChat;
 
+  /// A question for the assistant about all notes, put in its field from the graph ("Ask the assistant" on a topic).
+  final _notesDraft = ValueNotifier<String?>(null);
+
   static const _destinations = {
     9: NavigationRailDestination(icon: Icon(Symbols.auto_awesome), selectedIcon: Icon(Symbols.auto_awesome), label: Text('Assistant')),
     0: NavigationRailDestination(icon: Icon(Symbols.home), selectedIcon: Icon(Symbols.home), label: Text('Dashboard')),
     1: NavigationRailDestination(icon: Icon(Symbols.folder), selectedIcon: Icon(Symbols.folder), label: Text('Folders')),
     2: NavigationRailDestination(icon: Icon(Symbols.calendar_month), selectedIcon: Icon(Symbols.calendar_month), label: Text('Calendar')),
-    10: NavigationRailDestination(icon: Icon(Symbols.school), selectedIcon: Icon(Symbols.school), label: Text('Study plans')),
+    10: NavigationRailDestination(icon: Icon(Symbols.school), selectedIcon: Icon(Symbols.school), label: Text('Learning hub')),
     3: NavigationRailDestination(icon: Icon(Symbols.note_alt), selectedIcon: Icon(Symbols.note_alt), label: Text('Note')),
     4: NavigationRailDestination(icon: Icon(Symbols.bolt), selectedIcon: Icon(Symbols.bolt), label: Text('Automations')),
     6: NavigationRailDestination(icon: Icon(Symbols.search), selectedIcon: Icon(Symbols.search), label: Text('Search')),
@@ -341,7 +350,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
               onTap: () => _go(index: 3, note: n.id),
               child: Padding(
                 padding: const EdgeInsets.only(left: 42, right: 8),
-                child: Align(alignment: Alignment.centerLeft, child: Text.verbatim(n.title.isEmpty ? tr('Untitled Note') : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: _focused == n.id ? scheme.onSurface : quiet, fontWeight: _focused == n.id ? FontWeight.w500 : FontWeight.w400))),
+                child: Align(alignment: Alignment.centerLeft, child: Text.verbatim(isUntitled(n.title) ? tr('Untitled') : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: _focused == n.id ? scheme.onSurface : quiet, fontWeight: _focused == n.id ? FontWeight.w500 : FontWeight.w400))),
               ),
             ),
           ),
@@ -738,7 +747,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     final id = a.noteId;
     final info = id == null ? null : await _app.repository.noteInfo(id);
     if (!mounted) return;
-    final title = info == null ? null : (info.title.isEmpty ? tr('Untitled') : info.title);
+    final title = info == null ? null : (isUntitled(info.title) ? tr('Untitled') : info.title);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
@@ -753,7 +762,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   void _showNotice(ShareNotice n) {
     if (!mounted) return;
     final who = n.who ?? tr('Someone');
-    final title = n.title.isEmpty ? tr('Untitled') : n.title;
+    final title = isUntitled(n.title) ? tr('Untitled') : n.title;
     final text = switch (n.kind) {
       ShareNoticeKind.opened => tr('Someone opened your shared note "{title}". A live session was started.', {'title': title}),
       ShareNoticeKind.joined => tr('{who} joined "{title}".', {'who': who, 'title': title}),
@@ -1056,6 +1065,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     _favouritesLive?.cancel();
     _showFavourites.dispose();
     _notesChat?.dispose();
+    _notesDraft.dispose();
     _lockTimer?.cancel();
     _keptTimer?.cancel();
     _app.automations?.openEditor = null;
@@ -1115,7 +1125,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           _go(index: 2); // (a session that is not in a plan any more: its to-do)
         } else {
           openStudySession(context, _app.planner!, found.plan.id, found.session.key,
-              cards: _f(Feature.flashcards) ? _app.cards : null, onOpenNoteAt: (note, page) => _openAtPage(note, page));
+              cards: _cardsOn ? _app.cards : null, onOpenNoteAt: (note, page) => _openAtPage(note, page));
         }
       } else if (kind == ReminderKind.review && _app.review != null) {
         // the review is offered on the dashboard, where its button is
@@ -1443,6 +1453,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
             invitation: tr('Ask anything: the notes that fit your question are found first, then the passages in them that answer it.'),
             suggestions: [tr('What did I write about deadlines?'), tr('Summarize my latest notes'), tr('Where did I note something about exams?')],
             onOpenSource: _openAtPage,
+            draft: _notesDraft,
           ),
         );
       case 8:
@@ -1461,9 +1472,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
       case 2:
         return CalendarView(reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style, refresh: _pageRefresh);
       case 10:
-        final planner = _app.planner;
-        if (planner == null) return const SizedBox.shrink();
-        return StudyPlanScreen(planner: planner, repository: _app.repository, cards: _f(Feature.flashcards) ? _app.cards : null, onOpenNoteAt: (id, page) => _openAtPage(id, page));
+        if (!_learnOn) return const SizedBox.shrink();
+        return LearningHub(repository: _app.repository, planner: _studyOn ? _app.planner : null, cards: _cardsOn ? _app.cards : null, onOpenNoteAt: (id, page) => _openAtPage(id, page));
       case 3:
         return const Center(child: Text('Open a note from the dashboard or create a new one.'));
       case 4:
@@ -1485,7 +1495,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           templates: _templates,
           previews: _previews,
           speech: _app.speech,
-          cards: _f(Feature.flashcards) ? _app.cards : null,
+          cards: _cardsOn ? _app.cards : null,
+          onOpenLearning: _learnOn ? () => _go(index: 10) : null,
           reminders: _app.reminders,
           audio: _app.audio,
           capture: _app.capture,
@@ -1636,6 +1647,12 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         graphId: _graphIdOf(key),
         pinned: true,
         onOpenGraph: (id) => _showGraph(id, from: key),
+        onAsk: _assistantOn
+            ? (topic) {
+                _notesDraft.value = tr('What do my notes say about {topic}? ', {'topic': topic});
+                _go(index: 9);
+              }
+            : null,
       );
 
   String _graphName(String key) {

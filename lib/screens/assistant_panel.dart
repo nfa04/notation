@@ -59,6 +59,10 @@ class AssistantPanel extends StatefulWidget {
   final String? invitation;
   final List<String>? suggestions;
 
+  /// A question put in the field from elsewhere (the graph's "Ask the assistant"), to finish and send; it is taken (set back to
+  /// null) as soon as it is in the field.
+  final ValueNotifier<String?>? draft;
+
   const AssistantPanel({
     super.key,
     required this.ai,
@@ -74,6 +78,7 @@ class AssistantPanel extends StatefulWidget {
     this.title,
     this.invitation,
     this.suggestions,
+    this.draft,
   });
 
   @override
@@ -101,11 +106,21 @@ class _AssistantPanelState extends State<AssistantPanel> {
     super.initState();
     widget.chat.addListener(_followAnswer);
     _input.addListener(_typed);
+    widget.draft?.addListener(_takeDraft);
+    _takeDraft();
+  }
+
+  void _takeDraft() {
+    final text = widget.draft?.value;
+    if (text == null) return;
+    _input.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+    widget.draft!.value = null;
   }
 
   @override
   void dispose() {
     widget.chat.removeListener(_followAnswer);
+    widget.draft?.removeListener(_takeDraft);
     _input.dispose();
     _scroll.dispose();
     super.dispose();

@@ -670,7 +670,7 @@ class _SearchViewState extends State<SearchView> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               ListTile(
                 leading: Icon(note?.isPdf ?? false ? Symbols.picture_as_pdf : Symbols.note_alt),
-                title: Text.verbatim(n.title.isEmpty ? tr('Untitled') : n.title),
+                title: Text.verbatim(isUntitled(n.title) ? tr('Untitled') : n.title),
                 subtitle: _where(note).isEmpty ? null : Text.verbatim(_where(note)),
                 onTap: () {
                   _remember();
@@ -739,7 +739,7 @@ class _SearchViewState extends State<SearchView> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         ListTile(
           leading: Icon(note?.isPdf ?? false ? Symbols.picture_as_pdf : Symbols.note_alt),
-          title: Text.verbatim(note?.title.isEmpty ?? true ? tr('Untitled Note') : note!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text.verbatim(isUntitled(note?.title ?? '') ? tr('Untitled') : note!.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: where.isEmpty ? null : Text.verbatim(where, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Text.verbatim('$count'),
           onTap: () {

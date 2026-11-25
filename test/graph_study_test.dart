@@ -66,14 +66,8 @@ void main() {
       expect(quiz.overall, 1);
     });
 
-    test('the facts that fit a question are the ones with its words', () {
-      final all = [for (var i = 0; i < 30; i++) StudyFact('T$i', 'Filler sentence number $i about something else.'), const StudyFact('Heaps', 'The swim function restores the heap property.')];
-      expect(closestFacts('how does the swim function work', all, count: 3).map((f) => f.title), ['Heaps']);
-    });
-
     test('the prompts carry the facts and the rules', () {
       expect(quizPrompt(facts, 4).user, allOf(contains('1. Cell: Mitochondria: Mitochondria make ATP'), contains('4 questions')));
-      expect(askFactsPrompt('why?', facts).system, contains('using only the facts'));
       expect(gradePrompt('q', 'e', 'a').user, allOf(contains('Question: q'), contains('Expected answer: e'), contains('Student answer: a')));
     });
   });
@@ -110,14 +104,5 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('quiz-next')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('quiz-feedback')), findsNothing);
-
-    // ask
-    await tester.tap(find.text('Ask'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('ask-question')), 'Who discovered the nucleus?');
-    await tester.tap(find.byKey(const ValueKey('ask-send')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('cannot answer'), findsOneWidget);
-    expect(service.prompts.last.user, contains('Question: Who discovered the nucleus?'));
   });
 }

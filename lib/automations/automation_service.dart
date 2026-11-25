@@ -917,7 +917,7 @@ class AutomationService extends ChangeNotifier {
         final now = _now();
         await svc.ensurePermission();
         await svc.reminders.add(
-            kind: ReminderKind.note, refId: noteId, title: info?.title.isEmpty ?? true ? tr('Untitled Note') : info!.title, at: DateTime(now.year, now.month, now.day + 7, 9));
+            kind: ReminderKind.note, refId: noteId, title: info?.title.isEmpty ?? true ? tr('Untitled') : info!.title, at: DateTime(now.year, now.month, now.day + 7, 9));
         await _notes.markOpened(noteId, at: now);
         return tr('You will be reminded in a week');
       case AskAnswer.cards:

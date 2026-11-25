@@ -34,7 +34,7 @@ mixin ManageNotesApi on ExtensionApi {
   Future<String> createNote(String title, String text, {String? folder}) async {
     final repo = managedNotes;
     final folderId = folder == null ? null : (await folderNamed(folder)).id;
-    final id = await repo.createNote(title: title.trim().isEmpty ? 'Untitled Note' : title.trim(), folderId: folderId);
+    final id = await repo.createNote(title: title.trim(), folderId: folderId);
     if (text.trim().isNotEmpty) {
       final note = await repo.loadNote(id);
       if (note != null) await repo.saveNote(note..documentText = text);

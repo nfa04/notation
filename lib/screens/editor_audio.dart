@@ -82,6 +82,6 @@ extension _EditorAudio on _FixedPageNoteEditorState {
     if (cancel.cancelled) return;
     if (wav == null) throw StateError(tr('This device cannot save a voice as a file.'));
     final title = _titleController.text.trim();
-    await audio.add(widget.noteId, wav, kind: AudioKind.speech, title: tr('{title} read aloud', {'title': title.isEmpty ? tr('Untitled Note') : title}));
+    await audio.add(widget.noteId, wav, kind: AudioKind.speech, title: tr('{title} read aloud', {'title': title.isEmpty ? tr('Untitled') : title}));
   }
 }

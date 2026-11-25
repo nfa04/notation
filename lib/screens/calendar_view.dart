@@ -812,8 +812,6 @@ class _CalendarViewState extends State<CalendarView> {
   }
 
   Widget _eventTile(DayEvent e) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    final time = e.allDay ? tr('All day') : '${two(e.start.hour)}:${two(e.start.minute)}';
     final st = _style.resolveEvent(e);
     return _stylable(
       () => _styleEvent(e),
@@ -821,15 +819,93 @@ class _CalendarViewState extends State<CalendarView> {
         padding: const EdgeInsets.only(bottom: 6),
         child: StyledBox(
           style: st,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text.verbatim(st.label(e.title), style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text.verbatim('$time  -  ${e.calendarName}${e.repeats ? '  -  ${tr('repeats')}' : ''}',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ]),
+          padding: EdgeInsets.zero,
+          child: InkWell(
+            key: ValueKey('event-${e.uid}'),
+            borderRadius: BorderRadius.circular(st.radius),
+            onTap: () => _eventDetails(e),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text.verbatim(st.label(e.title), style: const TextStyle(fontWeight: FontWeight.w500)),
+                Text.verbatim('${_eventTime(e)}  -  ${e.calendarName}${e.repeats ? '  -  ${tr('repeats')}' : ''}',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ]),
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  String _eventTime(DayEvent e) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    if (e.allDay) return tr('All day');
+    final end = e.end;
+    return '${two(e.start.hour)}:${two(e.start.minute)}${end == null ? '' : ' - ${two(end.hour)}:${two(end.minute)}'}';
+  }
+
+  /// Whether the event can be deleted from here: it is in a calendar this app may write to, it is not one of a series (deleting
+  /// would take all of them: that is for the calendar app), and it is known where it is.
+  bool _canDelete(DayEvent e) {
+    if (e.repeats || !_writable.any((c) => c.key == e.calendarKey)) return false;
+    return e.calendarKey.startsWith('phone:') ? widget.device != null && e.uid.isNotEmpty : _caldav != null && e.href.isNotEmpty;
+  }
+
+  /// What an event is (tapped in the list of the day), with a way to delete it.
+  Future<void> _eventDetails(DayEvent e) async {
+    final canDelete = _canDelete(e);
+    final delete = await showDialog<bool>(
+      context: context,
+      builder: (context) => PlatformAlertDialog(
+        title: Text.verbatim(e.title.isEmpty ? tr('Event') : e.title),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text.verbatim(_eventTime(e)),
+          const SizedBox(height: 4),
+          Text.verbatim(e.calendarName, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          if (e.repeats) ...[
+            const SizedBox(height: 12),
+            Text('This event repeats: change or delete it in your calendar app.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ],
+        ]),
+        actions: [
+          if (canDelete)
+            TextButton(
+              key: const ValueKey('event-delete'),
+              style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete event'),
+            ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Close')),
+        ],
+      ),
+    );
+    if (delete != true || !mounted) return;
+    // (gone from the calendar for everyone who shares it, and nothing here can bring it back: asked once more)
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => PlatformAlertDialog(
+        title: Text.verbatim(tr('Delete "{title}"?', {'title': e.title})),
+        content: Text.verbatim(tr('It is deleted from the calendar {calendar}, on every device that shows it.', {'calendar': e.calendarName})),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('event-delete-sure'), onPressed: () => Navigator.pop(context, true), child: const Text('Delete event')),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (e.calendarKey.startsWith('phone:')) {
+        await widget.device!.deleteEvent(e.uid);
+      } else {
+        await _caldav!.deleteEvent(e.calendarKey, e.href);
+      }
+      if (mounted) setState(() => _events = [for (final x in _events) if (!identical(x, e)) x]);
+      _loadEvents(revalidate: true);
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text.verbatim(tr('The event could not be deleted. Check the connection and try again.'))));
+    }
   }
 
   Widget _sectionTitle(String text, {Color? color}) => Padding(

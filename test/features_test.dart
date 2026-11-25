@@ -118,13 +118,10 @@ void main() {
       expect(again.areas, isEmpty);
     });
 
-    test('flashcards need the assistant', () async {
-      expect(features.on(Feature.flashcards), isTrue);
+    test('flashcards stay on without the assistant: reviewing cards needs no AI', () async {
       await features.set(Feature.assistant, false);
-      expect(features.on(Feature.flashcards), isFalse, reason: 'the switch is on but there is no assistant to make them');
-      expect(features.enabled, contains(Feature.flashcards));
-      await features.set(Feature.assistant, true);
-      expect(features.on(Feature.flashcards), isTrue);
+      expect(features.on(Feature.flashcards), isTrue, reason: 'cards from Anki and from maths mistakes are reviewed without AI');
+      expect(features.on(Feature.assistant), isFalse);
     });
 
     test('a saved tool this version does not know is ignored, and a damaged saving means everything is on', () async {

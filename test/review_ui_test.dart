@@ -157,25 +157,4 @@ void main() {
       await db.close();
     });
   });
-
-  testWidgets('the dashboard button shows how many are due and hides when nothing is kept', (tester) async {
-    await tester.runAsync(() async {
-      final db = await AppDatabase.open(path: inMemoryDatabasePath);
-      final cards = CardRepository(db);
-      await tester.pumpWidget(MaterialApp(home: Scaffold(appBar: AppBar(actions: [ReviewButton(cards: cards)]))));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      await tester.pump();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-cards')), findsNothing);
-      await cards.addAll('n1', const [Flashcard('Q', 'A')]);
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      await tester.pump();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('review-cards')), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
-      await db.close();
-    });
-  });
 }

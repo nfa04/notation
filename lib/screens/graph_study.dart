@@ -48,10 +48,10 @@ class GraphStudyFacts implements StudyFactSource {
 }
 
 /// Which study tool opens first.
-enum StudyTool { cards, quiz, ask }
+enum StudyTool { cards, quiz }
 
-/// The study tools for the facts of a topic (or of the whole graph): flashcards, a quiz that grades the answers, and questions that
-/// are answered from the facts alone.
+/// The study tools for the facts of a topic (or of the whole graph): flashcards and a quiz that grades the answers. (Questions about
+/// a topic go to the assistant, which answers from the notes themselves.)
 Future<void> showGraphStudy(BuildContext context, {required GraphService service, required String title, required List<StudyFact> facts, StudyTool tool = StudyTool.cards, CardRepository? cards}) =>
     showDialog<void>(
       context: context,
@@ -77,7 +77,7 @@ class GraphStudy extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: 3,
+      length: 2,
       initialIndex: initial.index,
       child: Column(children: [
         Padding(
@@ -90,7 +90,7 @@ class GraphStudy extends StatelessWidget {
             IconButton(tooltip: tr('Close'), icon: const Icon(Symbols.close), onPressed: () => Navigator.pop(context)),
           ]),
         ),
-        TabBar(tabs: [Tab(text: tr('Flashcards')), Tab(text: tr('Quiz')), Tab(text: tr('Ask'))]),
+        TabBar(tabs: [Tab(text: tr('Flashcards')), Tab(text: tr('Quiz'))]),
         Expanded(
           child: facts.isEmpty
               ? Center(child: Text('There are no facts here to study.'))
@@ -99,7 +99,6 @@ class GraphStudy extends StatelessWidget {
                   : TabBarView(physics: const NeverScrollableScrollPhysics(), children: [
                       _CardsTab(service: service, facts: facts, cards: cards),
                       _QuizTab(service: service, facts: facts),
-                      _AskTab(service: service, facts: facts),
                     ]),
         ),
       ]),
@@ -383,79 +382,6 @@ class _QuizTabState extends State<_QuizTab> with AutomaticKeepAliveClientMixin {
       if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text.verbatim(_error!, key: const ValueKey('study-error'), style: TextStyle(color: scheme.error))),
       const SizedBox(height: 14),
       TextButton.icon(onPressed: () => setState(() => _quiz = null), icon: const Icon(Symbols.refresh, size: 18), label: const Text('Make a new quiz')),
-    ]);
-  }
-}
-
-class _AskTab extends StatefulWidget {
-  final GraphService service;
-  final List<StudyFact> facts;
-  const _AskTab({required this.service, required this.facts});
-
-  @override
-  State<_AskTab> createState() => _AskTabState();
-}
-
-class _AskTabState extends State<_AskTab> with AutomaticKeepAliveClientMixin {
-  final _question = TextEditingController();
-  String? _reply;
-  String? _error;
-  bool _busy = false;
-
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  void dispose() {
-    _question.dispose();
-    super.dispose();
-  }
-
-  Future<void> _ask() async {
-    final q = _question.text.trim();
-    if (q.isEmpty) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final facts = closestFacts(q, widget.facts);
-      final answer = await widget.service.studyComplete(askFactsPrompt(q, facts.isEmpty ? widget.facts.take(studyBatch).toList() : facts), maxTokens: 700);
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _reply = answer.trim();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = '$e'.replaceFirst('Bad state: ', '');
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    final scheme = Theme.of(context).colorScheme;
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      Text('Ask something about these facts. The answer rests on the facts alone; when they do not say, the AI tells you so.', style: TextStyle(color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 12),
-      TextField(
-        key: const ValueKey('ask-question'),
-        controller: _question,
-        minLines: 1,
-        maxLines: 4,
-        onSubmitted: (_) => _ask(),
-        decoration: InputDecoration(border: const OutlineInputBorder(), hintText: tr('Your question')),
-      ),
-      const SizedBox(height: 10),
-      Align(alignment: Alignment.centerLeft, child: FilledButton(key: const ValueKey('ask-send'), onPressed: _busy ? null : _ask, child: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator.adaptive(strokeWidth: 2)) : const Text('Ask'))),
-      if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text.verbatim(_error!, key: const ValueKey('study-error'), style: TextStyle(color: scheme.error))),
-      if (_reply != null) Padding(padding: const EdgeInsets.only(top: 14), child: SelectableText(_reply!, key: const ValueKey('ask-reply'))),
     ]);
   }
 }

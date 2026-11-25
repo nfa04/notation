@@ -42,7 +42,10 @@ class GraphView extends StatefulWidget {
   final int? graphId;
   final void Function(int graphId)? onOpenGraph;
 
-  const GraphView({super.key, required this.service, required this.onOpen, this.cards, this.pinned = false, this.graphId, this.onOpenGraph});
+  /// Asks the assistant about a topic (its name); null: no Ask button (the assistant is off).
+  final void Function(String topic)? onAsk;
+
+  const GraphView({super.key, required this.service, required this.onOpen, this.cards, this.pinned = false, this.graphId, this.onOpenGraph, this.onAsk});
 
   @override
   State<GraphView> createState() => _GraphViewState();
@@ -1281,13 +1284,20 @@ _graphMenu(g),
         for (final (tool, icon, label) in [
           (StudyTool.cards, Symbols.style, 'Flashcards'),
           (StudyTool.quiz, Symbols.quiz, 'Quiz'),
-          (StudyTool.ask, Symbols.question_answer, 'Ask'),
         ])
           OutlinedButton.icon(
             key: ValueKey('graph-study-${tool.name}'),
             onPressed: () => showGraphStudy(context, service: widget.service, cards: widget.cards, title: title, facts: facts, tool: tool),
             icon: Icon(icon, size: 16),
             label: Text(label),
+          ),
+        // (a question about the topic goes to the assistant, which answers from the notes and shows where)
+        if (widget.onAsk != null)
+          OutlinedButton.icon(
+            key: const ValueKey('graph-study-ask'),
+            onPressed: () => widget.onAsk!(title),
+            icon: const Icon(Symbols.auto_awesome, size: 16),
+            label: const Text('Ask the assistant'),
           ),
       ],
     );

@@ -71,7 +71,7 @@ enum Feature {
 
   handwriting(FeatureGroup.ai, 'Handwriting to text', 'Turn handwriting into text (needs the model from the settings).', Symbols.text_snippet),
   assistant(FeatureGroup.ai, 'Assistant', 'Ask questions about a document and have it summarised.', Symbols.auto_awesome),
-  flashcards(FeatureGroup.ai, 'Flashcards', 'Make flashcards from a document with the assistant, and learn them. Needs the assistant.', Symbols.style),
+  flashcards(FeatureGroup.ai, 'Flashcards', 'Learn flashcards in the learning hub: your maths mistakes, decks from Anki, and cards the assistant makes from a document (that part needs the assistant).', Symbols.style),
 
   calendar(FeatureGroup.organising, 'Calendar and tasks', 'The calendar, the week view, tasks and syncing them.', Symbols.calendar_month),
   automations(FeatureGroup.organising, 'Automations', 'Rules that sort, title and file notes by themselves.', Symbols.bolt),
@@ -199,8 +199,9 @@ class FeatureSettings extends ChangeNotifier {
   bool get chosen => _chosen;
   bool _chosen = false;
 
-  /// Whether this tool is on. A tool that needs another is on only if that is too (flashcards need the assistant).
-  bool on(Feature f) => _enabled.contains(f) && (f != Feature.flashcards || _enabled.contains(Feature.assistant));
+  /// Whether this tool is on. (Flashcards are on without the assistant: cards from Anki and from maths mistakes are reviewed
+  /// without AI; only making cards from a note needs the assistant, and is offered only where it is.)
+  bool on(Feature f) => _enabled.contains(f);
 
   /// Whether every tool is on.
   bool get allOn => _enabled.length == Feature.values.length;

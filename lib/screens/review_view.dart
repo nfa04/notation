@@ -12,64 +12,6 @@ import 'review_export.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 
-/// The button on the dashboard that opens the review of the cards that are due, with their number on it.
-class ReviewButton extends StatefulWidget {
-  final CardRepository cards;
-
-  /// The plans for exams (a button in the review); null: not offered. [repository] gives the names of the notes the cards are from.
-  final StudyPlanner? planner;
-  final NoteRepository? repository;
-
-  const ReviewButton({super.key, required this.cards, this.planner, this.repository});
-
-  @override
-  State<ReviewButton> createState() => _ReviewButtonState();
-}
-
-class _ReviewButtonState extends State<ReviewButton> {
-  var _due = 0, _total = 0;
-  StreamSubscription<void>? _sub;
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = widget.cards.changes.listen((_) => _load());
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final due = await widget.cards.dueCount(), total = await widget.cards.count();
-    if (mounted) {
-      setState(() {
-        _due = due;
-        _total = total;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // nothing kept yet: nothing to review, so no button
-    if (_total == 0) return const SizedBox.shrink();
-    return IconButton(
-      key: const ValueKey('review-cards'),
-      tooltip: _due == 0 ? tr('Review cards: none are due') : trCount(_due, 'Review cards: {n} is due', 'Review cards: {n} are due'),
-      icon: Badge(
-        isLabelVisible: _due > 0,
-        label: Text.verbatim('$_due'),
-        child: const Icon(Symbols.event_repeat),
-      ),
-      onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReviewScreen(cards: widget.cards, planner: widget.planner, repository: widget.repository))),
-    );
-  }
-}
-
 /// A round of review: the cards that are due, one at a time. After the answer is shown the person says how well it was
 /// remembered, and the card comes back when its schedule says. A card answered "again" comes back in this round too.
 class ReviewScreen extends StatefulWidget {

@@ -1,4 +1,5 @@
 import 'package:material_symbols_icons/symbols.dart';
+import '../data/note_data.dart' show isUntitled;
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart' show HardwareKeyboard;
@@ -108,7 +109,7 @@ class WorkspaceTabStrip extends StatelessWidget {
   Widget _tab(BuildContext context, WorkspaceTab t, int index) {
     final scheme = Theme.of(context).colorScheme;
     final on = shown.contains(t.key), hasKeys = focused == t.key;
-    final title = t.title.trim().isEmpty ? tr('Untitled') : t.title.trim();
+    final title = isUntitled(t.title) ? tr('Untitled') : t.title.trim();
     Future<void> menu(Offset at) async {
       final box = Overlay.of(context).context.findRenderObject() as RenderBox;
       final choice = await showMenu<String>(

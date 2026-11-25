@@ -124,7 +124,7 @@ extension _EditorLookup on _FixedPageNoteEditorState {
                         key: ValueKey('mention-${n.id}'),
                         dense: true,
                         leading: Icon(n.isPdf ? Symbols.picture_as_pdf : Symbols.description, size: 20),
-                        title: Text.verbatim(n.title.isEmpty ? tr('Untitled') : n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        title: Text.verbatim(isUntitled(n.title) ? tr('Untitled') : n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                         onTap: () {
                           controller.value = withNoteLink(controller.value, mention, n.id, n.title);
                           _choicesLoaded = false; // read again next time

@@ -236,7 +236,7 @@ class NoteRepository {
     if (written) _changed(noteId);
   }
 
-  Future<String> createNote({String title = 'Untitled Note', String? folderId, String? id}) async {
+  Future<String> createNote({String title = '', String? folderId, String? id}) async {
     id ??= newId();
     final now = _now();
     await _db.insert('notes', {

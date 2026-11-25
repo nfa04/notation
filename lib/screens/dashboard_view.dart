@@ -19,7 +19,6 @@ import '../cloudsync/cloud_sync_service.dart';
 import '../automations/automation_service.dart';
 import '../data/note_data.dart';
 import '../review/study_planner.dart';
-import 'study_session_screen.dart';
 import 'ask_card.dart';
 import '../data/note_file_service.dart';
 import '../data/note_repository.dart';
@@ -27,7 +26,8 @@ import '../collab/collab_service.dart';
 import '../collab/shared_notes.dart';
 import '../data/debounced_changes.dart';
 import 'bulk_note_actions.dart';
-import 'review_view.dart';
+import 'learning_hub.dart';
+import 'study_session_screen.dart' show OpenNoteAt;
 import 'reminders_screen.dart';
 import '../reminders/reminder.dart';
 import '../reminders/reminder_service.dart';
@@ -75,7 +75,7 @@ class DashboardView extends StatefulWidget {
   /// Writes down what is said (a meeting is recorded into a note); null hides the button.
   final SpeechToText? speech;
 
-  /// Flashcards kept for spaced repetition; null hides the review button.
+  /// Flashcards kept for spaced repetition; null: the "Learn today" row says nothing of cards.
   final CardRepository? cards;
 
   /// Reminders: a button on top and "Remind me" in a note's menu; null hides them.
@@ -93,8 +93,11 @@ class DashboardView extends StatefulWidget {
   /// The automations: notes that a rule asks about are listed on top; null: none.
   final AutomationService? automations;
 
-  /// The plans for exams (a button in the review of the cards); null: none.
+  /// The plans for exams (today's session in the "Learn today" row); null: none.
   final StudyPlanner? planner;
+
+  /// Opens the learning hub (a tap on the "Learn today" row); null: not offered.
+  final VoidCallback? onOpenLearning;
 
   /// Opens a note at a page (an item of a study session).
   final OpenNoteAt? onOpenNoteAt;
@@ -102,14 +105,20 @@ class DashboardView extends StatefulWidget {
   /// The tags notes can have (the tags of imported notes are set through it); null: none are set.
   final TagRepository? tags;
 
-  const DashboardView({super.key, this.tags, this.planner, this.onOpenNoteAt, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh});
+  const DashboardView({super.key, this.tags, this.planner, this.onOpenNoteAt, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh, this.onOpenLearning});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
 }
 
+/// The settings key that holds the id of the note the intro made to show the tools.
+const welcomeNoteKey = 'welcome_note';
+
 class _DashboardViewState extends State<DashboardView> {
   late Future<List<NoteSummary>> _notes = widget.repository.listNotes();
+
+  /// The note the intro made (null: none, or not known yet): while it is the only note, this is a first visit.
+  String? _welcomeId;
 
   /// Loads the notes again when they change under the list (an agent, a sync, another window of the app).
   StreamSubscription<void>? _live;
@@ -180,6 +189,9 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void initState() {
     super.initState();
+    widget.repository.settings.get(welcomeNoteKey).then((id) {
+      if (mounted && id != null) setState(() => _welcomeId = id);
+    }, onError: (Object _) {});
     widget.refresh?.addListener(_reload);
     widget.sync?.addListener(_syncChanged);
     widget.collab?.nativeShares?.addListener(_syncChanged); // (what is shared with people changes notes too)
@@ -349,8 +361,6 @@ class _DashboardViewState extends State<DashboardView> {
           onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => RemindersScreen(service: widget.reminders!))),
           widget: RemindersButton(service: widget.reminders!),
         ),
-      if (widget.cards != null)
-        (key: 'review-cards', icon: Symbols.event_repeat, label: tr('Review cards'), onTap: () {}, widget: ReviewButton(cards: widget.cards!, planner: widget.planner, repository: widget.repository)),
       if (widget.speech != null) (key: 'record-meeting', icon: Symbols.mic_none, label: tr('Record a meeting'), onTap: _meeting, widget: null),
       if (widget.templates != null) (key: 'new-from-template', icon: Symbols.dashboard_customize, label: tr('New note from a template'), onTap: _fromTemplate, widget: null),
       if (widget.onJoinSession != null)
@@ -398,16 +408,16 @@ class _DashboardViewState extends State<DashboardView> {
         title: const Text('Dashboard'),
         actions: [
           if (widget.sync != null) SyncNowButton(sync: widget.sync!, shares: widget.collab?.nativeShares),
-          // the two with a badge keep their place on a wide screen; a phone has room for the review only
+          // the one with a badge keeps its place on a wide screen; on a phone it goes in the menu
           for (final t in about)
-            if (t.widget != null && (!phone || t.key == 'review-cards')) t.widget!,
+            if (t.widget != null && !phone) t.widget!,
           PopupMenuButton<String>(
             key: const ValueKey('dashboard-more'),
             tooltip: tr('More'),
             onSelected: (key) => about.firstWhere((t) => t.key == key).onTap(),
             itemBuilder: (_) => [
               for (final t in about)
-                if (t.widget == null || (phone && t.key != 'review-cards')) PopupMenuItem(key: ValueKey('menu-${t.key}'), value: t.key, child: ListTile(leading: Icon(t.icon), title: Text.verbatim(t.label), contentPadding: EdgeInsets.zero)),
+                if (t.widget == null || phone) PopupMenuItem(key: ValueKey('menu-${t.key}'), value: t.key, child: ListTile(leading: Icon(t.icon), title: Text.verbatim(t.label), contentPadding: EdgeInsets.zero)),
             ],
           ),
           const SizedBox(width: 8),
@@ -420,6 +430,7 @@ class _DashboardViewState extends State<DashboardView> {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator.adaptive());
           final notes = snapshot.data!;
           _shown = notes;
+          final firstVisit = notes.length == 1 && notes.single.id == _welcomeId;
           final favourites = [for (final n in notes) if (n.favorite) n];
           final others = [for (final n in notes) if (!n.favorite) n];
           // (the cards are made as they come into view: a library of thousands of notes must not make all of them to show a few)
@@ -436,17 +447,18 @@ class _DashboardViewState extends State<DashboardView> {
                         children: [
                           if (widget.collab?.nativeShares != null) ShareInvitations(service: widget.collab!.nativeShares!),
                           if (widget.automations != null) AskCard(service: widget.automations!, repository: widget.repository, onOpenNote: widget.onOpenNote),
-                          if (widget.planner != null) StudySessionCard(planner: widget.planner!, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt),
+                          if (widget.planner != null || widget.cards != null)
+                            LearnTodayRow(planner: widget.planner, cards: widget.cards, repository: widget.repository, onOpenNoteAt: widget.onOpenNoteAt, onOpenHub: widget.onOpenLearning),
                           if (notes.isEmpty)
                             _emptyState(context)
                           else ...[
                             Text(
-                              'Welcome back',
+                              firstVisit ? 'Welcome' : 'Welcome back',
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w300),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Here are your recent notes:',
+                              firstVisit ? 'Open the note below for a short tour, or start your own with New Note.' : 'Here are your recent notes:',
                               style: TextStyle(color: Theme.of(context,).colorScheme.onSurfaceVariant),
                             ),
                             const SizedBox(height: 24),

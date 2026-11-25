@@ -795,24 +795,43 @@ extension _EditorSelection on _FixedPageNoteEditorState {
         ),
       );
       if (ok != true || !mounted) return;
+      // the person can send the download to the background (it goes on, the settings show it) instead of being held here
+      var hidden = false;
       showDialog<void>(
         context: context,
-        barrierDismissible: false,
-        builder: (_) => PopScope(
-          canPop: false,
-          child: ListenableBuilder(
-            listenable: hw,
-            builder: (context, _) => PlatformAlertDialog(
-              title: const Text('Downloading the model'),
-              content: LinearProgressIndicator(
-                value: hw.progress > 0 ? hw.progress : null,
-              ),
+        builder: (dialogContext) => ListenableBuilder(
+          listenable: hw,
+          builder: (context, _) => PlatformAlertDialog(
+            title: const Text('Downloading the model'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LinearProgressIndicator(value: hw.progress > 0 ? hw.progress : null),
+                const SizedBox(height: 8),
+                Text.verbatim(hw.progress > 0 ? '${(hw.progress * 100).round()} %' : tr('Starting...')),
+              ],
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Keep downloading in the background'),
+              ),
+            ],
           ),
         ),
-      );
+      ).then((_) => hidden = true);
       await hw.install();
-      navigator.pop();
+      if (!hidden) navigator.pop();
+      if (hidden) {
+        // (closed while it ran: say when it is ready instead of starting the reading out of the blue)
+        messenger.showSnackBar(SnackBar(
+          content: Text.verbatim(hw.status == HandwritingStatus.installed
+              ? tr('The {what} model is ready. Select the writing again to convert it.', {'what': tr(what)})
+              : tr('Could not download the model: {error}', {'error': hw.error})),
+        ));
+        return;
+      }
       if (hw.status != HandwritingStatus.installed) {
         messenger.showSnackBar(
           SnackBar(content: Text.verbatim(tr('Could not download the model: {error}', {'error': hw.error}))),

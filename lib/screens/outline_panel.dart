@@ -1,4 +1,5 @@
 import 'package:material_symbols_icons/symbols.dart';
+import '../data/note_data.dart' show isUntitled;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart' hide Text;
 
@@ -285,7 +286,7 @@ class _LinksTabState extends State<_LinksTab> {
               key: ValueKey(key),
               dense: true,
               leading: Icon(b.linked ? Symbols.link : Symbols.text_snippet, size: 20),
-              title: Text.verbatim(b.title.trim().isEmpty ? tr('Untitled Note') : b.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text.verbatim(isUntitled(b.title) ? tr('Untitled') : b.title, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text.verbatim(b.page == null ? b.snippet : '${tr('Page {n}', {'n': b.page! + 1})}: ${b.snippet}', maxLines: 3, overflow: TextOverflow.ellipsis),
               onTap: () => widget.onOpen(b.noteId, b.page),
             );

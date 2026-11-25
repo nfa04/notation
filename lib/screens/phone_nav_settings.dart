@@ -13,7 +13,7 @@ const phoneNavChoices = <int, ({IconData icon, String label})>{
   6: (icon: Symbols.search, label: 'Search'),
   9: (icon: Symbols.auto_awesome, label: 'Assistant'),
   2: (icon: Symbols.calendar_month, label: 'Calendar'),
-  10: (icon: Symbols.school, label: 'Study plans'),
+  10: (icon: Symbols.school, label: 'Learning hub'),
   8: (icon: Symbols.hub, label: 'Graph'),
   4: (icon: Symbols.bolt, label: 'Automations'),
 };

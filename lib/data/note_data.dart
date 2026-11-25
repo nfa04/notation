@@ -9,6 +9,13 @@ import '../models/page_format.dart';
 import '../models/pdf_models.dart';
 import '../models/rich_text.dart';
 
+/// Whether a title says nothing: empty, or the English "Untitled Note" that notes were given before (stored, so it is not
+/// translated: it is shown as "Untitled" in the language of the app).
+bool isUntitled(String title) {
+  final t = title.trim();
+  return t.isEmpty || t == 'Untitled Note';
+}
+
 /// Row of the dashboard list.
 class NoteSummary {
   final String id;
@@ -29,7 +36,7 @@ class NoteSummary {
   bool get locked => lockMode != 0;
 
   /// What the lists call the note: its title, or that it is locked (a locked note shows nothing of itself).
-  String get shownTitle => locked ? tr('Locked note') : (title.isEmpty ? tr('Untitled') : title);
+  String get shownTitle => locked ? tr('Locked note') : (isUntitled(title) ? tr('Untitled') : title);
 
   const NoteSummary({
     required this.id,
@@ -88,7 +95,7 @@ class TrashedNote {
   final bool isPdf;
   final int lockMode;
   const TrashedNote({required this.id, required this.title, required this.deletedAt, required this.isPdf, this.lockMode = 0});
-  String get shownTitle => lockMode != 0 ? tr('Locked note') : (title.isEmpty ? tr('Untitled') : title);
+  String get shownTitle => lockMode != 0 ? tr('Locked note') : (isUntitled(title) ? tr('Untitled') : title);
 }
 
 /// A template the person saved.

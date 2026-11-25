@@ -78,7 +78,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
     setState(() => _favorite = !_favorite);
   }
 
-  Future<void> _remindAboutNote() => showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: widget.noteId, title: _titleController.text.trim().isEmpty ? tr('Untitled Note') : _titleController.text.trim());
+  Future<void> _remindAboutNote() => showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: widget.noteId, title: _titleController.text.trim().isEmpty ? tr('Untitled') : _titleController.text.trim());
 
   /// The buttons of the top bar, left to right: the view, undo, the mode, what can be put on the page, the page itself,
   /// speech and the assistant, history and live work, and the files.
