@@ -35,6 +35,9 @@ class ReminderService extends ChangeNotifier {
   /// the session's start rather than in the morning of its day.
   DateTime? Function(String taskId)? studyStart;
 
+  /// The alarms of the events of the app's own calendars that go off between two moments (null: there are none to announce).
+  Future<List<EventAlarm>> Function(DateTime from, DateTime to)? eventAlarms;
+
   ReminderService({
     required this.reminders,
     this.tasks,
@@ -214,8 +217,33 @@ class ReminderService extends ChangeNotifier {
     } while (_again && !_disposed);
   }
 
+  /// Makes a reminder for each alarm of an event that is coming up (within the horizon), and takes away those of alarms that were
+  /// taken out, or of events that were moved or deleted.
+  Future<void> _syncEvents() async {
+    final source = eventAlarms;
+    if (source == null) return;
+    final now = _now();
+    // (a day back: an alarm that has just gone off is still wanted, until it was announced and its day is over)
+    final wanted = {for (final a in await source(now.subtract(const Duration(days: 1)), now.add(_horizon))) a.key: a};
+    final existing = {for (final r in await reminders.all()) if (r.kind == ReminderKind.event && r.auto) r.refId: r};
+    for (final e in existing.entries) {
+      if (!wanted.containsKey(e.key)) await reminders.remove(e.value.id);
+    }
+    for (final a in wanted.values) {
+      final have = existing[a.key];
+      if (have == null) {
+        // (an alarm that went off long ago, while the app was closed, is not announced now that the event was made or the app opened)
+        if (a.at.isBefore(now.subtract(const Duration(minutes: 5)))) continue;
+        await reminders.add(kind: ReminderKind.event, refId: a.key, title: a.title, at: a.at, auto: true);
+      } else if (have.at != a.at || have.title != a.title) {
+        await reminders.update(have.id, title: a.title, at: a.at);
+      }
+    }
+  }
+
   Future<void> _reconcileOnce() async {
     await _syncTasks();
+    await _syncEvents();
     final now = _now();
     var all = await reminders.all();
     for (final r in all) {
@@ -245,6 +273,7 @@ class ReminderService extends ChangeNotifier {
         ReminderKind.task => tr('A task is due'),
         ReminderKind.review => tr('Time for your weekly review'),
         ReminderKind.study => tr('Your study session starts now'),
+        ReminderKind.event => tr('An event is coming up'),
         ReminderKind.custom => tr('Reminder'),
       };
 

@@ -35,6 +35,9 @@ abstract class PhoneCalendarApi {
   /// Adds an event to the calendar and returns its id.
   Future<String> createEvent(String calendarId, NewEvent event);
 
+  /// Changes title, times and all-day of an event (not its notes, which are not read here); [event] is in the form [createEvent] takes.
+  Future<void> updateEvent(String eventId, NewEvent event);
+
   /// Removes an event (one that is gone already is fine).
   Future<void> deleteEvent(String eventId);
 
@@ -52,6 +55,12 @@ class PhoneEvent {
   final bool repeats;
   final String id;
 
+  /// Notes, place, link and the minutes before the start of each reminder, where the phone has them.
+  final String? description;
+  final String? location;
+  final String? url;
+  final List<int> reminders;
+
   const PhoneEvent({
     required this.title,
     required this.start,
@@ -60,6 +69,10 @@ class PhoneEvent {
     required this.calendarId,
     this.repeats = false,
     this.id = '',
+    this.description,
+    this.location,
+    this.url,
+    this.reminders = const [],
   });
 }
 
@@ -90,6 +103,10 @@ class PluginPhoneCalendarApi implements PhoneCalendarApi {
             calendarId: e.calendarId,
             repeats: e.isRecurring,
             id: e.eventId,
+            description: e.description,
+            location: e.location,
+            url: e.url,
+            reminders: [for (final r in e.reminders ?? const <Duration>[]) r.inMinutes],
           ),
       ];
 
@@ -101,11 +118,31 @@ class PluginPhoneCalendarApi implements PhoneCalendarApi {
       title: event.title,
       description: event.description.isEmpty ? null : event.description,
       isAllDay: event.allDay,
+      location: event.location == null || event.location!.isEmpty ? null : event.location,
+      url: event.url == null || event.url!.isEmpty ? null : event.url,
+      reminders: event.alarms == null || event.alarms!.isEmpty ? null : [for (final m in event.alarms!) Duration(minutes: m)],
       // an all-day event ends at the start of the day after its last
       startDate: event.allDay ? day(event.start) : event.start,
       endDate: event.allDay
           ? DateTime(day(event.end ?? event.start).year, day(event.end ?? event.start).month, day(event.end ?? event.start).day + 1)
           : (event.end ?? event.start.add(const Duration(hours: 1))),
+    );
+  }
+
+  @override
+  Future<void> updateEvent(String eventId, NewEvent event) {
+    DateTime day(DateTime d) => DateTime(d.year, d.month, d.day);
+    final last = day(event.end ?? event.start);
+    return _p.updateEvent(
+      instanceId: eventId,
+      title: event.title,
+      description: event.keepNotes ? null : (event.description.isEmpty ? const plugin.Patch<String>.clear() : plugin.Patch.set(event.description)),
+      location: event.location == null ? null : (event.location!.isEmpty ? const plugin.Patch<String>.clear() : plugin.Patch.set(event.location!)),
+      url: event.url == null ? null : (event.url!.isEmpty ? const plugin.Patch<String>.clear() : plugin.Patch.set(event.url!)),
+      reminders: event.alarms == null ? null : (event.alarms!.isEmpty ? const plugin.Patch<List<Duration>>.clear() : plugin.Patch.set([for (final m in event.alarms!) Duration(minutes: m)])),
+      isAllDay: event.allDay,
+      startDate: event.allDay ? day(event.start) : event.start,
+      endDate: event.allDay ? DateTime(last.year, last.month, last.day + 1) : (event.end ?? event.start.add(const Duration(hours: 1))),
     );
   }
 
@@ -218,6 +255,15 @@ class DeviceCalendarService extends ChangeNotifier {
     return CalendarInfo('phone:$id', name, color);
   }
 
+  /// Changes an event of a phone calendar (see [PhoneCalendarApi.updateEvent]).
+  Future<void> updateEvent(String eventId, NewEvent event) async {
+    final api = _api;
+    if (api == null) throw StateError(tr('This device has no calendars to write to.'));
+    await api.updateEvent(eventId, event);
+    _cache.clear();
+    notifyListeners();
+  }
+
   Future<void> deleteEvent(String eventId) async {
     await _api?.deleteEvent(eventId);
     _cache.clear();
@@ -292,6 +338,10 @@ class DeviceCalendarService extends ChangeNotifier {
       repeats: e.repeats,
       calendarKey: 'phone:${e.calendarId}',
       uid: e.id,
+      notes: e.description ?? '',
+      location: e.location ?? '',
+      url: e.url ?? '',
+      alarms: e.reminders,
     );
   }
 }

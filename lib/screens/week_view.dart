@@ -23,6 +23,9 @@ class WeekView extends StatefulWidget {
   final void Function(Task task, bool done) onToggleTask;
   final ValueChanged<Task> onEditTask;
 
+  /// A tap on an event (its details, with edit and delete); null: a tap on an event only selects its day.
+  final ValueChanged<DayEvent>? onOpenEvent;
+
   /// Colours, borders and emoji; long press / right click styles an item.
   final StyleService style;
   final ValueChanged<DayEvent> onStyleEvent;
@@ -39,6 +42,7 @@ class WeekView extends StatefulWidget {
     required this.onSelectDay,
     required this.onToggleTask,
     required this.onEditTask,
+    this.onOpenEvent,
     required this.style,
     required this.onStyleEvent,
     required this.onStyleTask,
@@ -191,10 +195,14 @@ class _WeekViewState extends State<WeekView> {
               message: '${e.title}\n${e.calendarName}',
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 2),
-                child: StyledBox(
-                  style: widget.style.resolveEvent(e),
-                  child: Text.verbatim(widget.style.resolveEvent(e).label(e.title),
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                child: GestureDetector(
+                  key: ValueKey('week-event-${e.uid}-${e.title}'),
+                  onTap: widget.onOpenEvent == null ? null : () => widget.onOpenEvent!(e),
+                  child: StyledBox(
+                    style: widget.style.resolveEvent(e),
+                    child: Text.verbatim(widget.style.resolveEvent(e).label(e.title),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                  ),
                 ),
               ),
             ),
@@ -276,7 +284,14 @@ class _WeekViewState extends State<WeekView> {
                       '${two(p.event.start.hour)}:${two(p.event.start.minute)}'
                       '${p.event.end == null ? '' : ' - ${two(p.event.end!.hour)}:${two(p.event.end!.minute)}'}\n'
                       '${p.event.calendarName}',
-                  child: _stylable(() => widget.onStyleEvent(p.event), _eventBlock(p, scheme)),
+                  child: _stylable(
+                    () => widget.onStyleEvent(p.event),
+                    GestureDetector(
+                      key: ValueKey('week-event-${p.event.uid}-${p.event.title}'),
+                      onTap: widget.onOpenEvent == null ? null : () => widget.onOpenEvent!(p.event),
+                      child: _eventBlock(p, scheme),
+                    ),
+                  ),
                 ),
               ),
             if (day == widget.today)

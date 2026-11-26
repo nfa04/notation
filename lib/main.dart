@@ -58,6 +58,8 @@ import 'collab/s3_storage.dart';
 import 'data/note_file_service.dart';
 import 'data/note_repository.dart';
 import 'data/settings_repository.dart';
+import 'data/event_repository.dart';
+import 'sync/local_events.dart';
 import 'data/task_repository.dart';
 import 'data/style_repository.dart';
 import 'automations/automation.dart' show AutomationEvent;
@@ -415,8 +417,11 @@ Future<void> _start() async {
       await events.emit(AppEvent(AutomationEvent.captureReceived.name,
           noteId: c.noteId, title: c.title, folderId: info?.folderId, data: eventVars({'kind': c.kind, 'url': c.url, 'site': c.site})));
     };
+  final eventRepository = EventRepository(db);
   final reminders = ReminderService(reminders: ReminderRepository(db), tasks: tasks, sink: LocalNotificationSink(), read: settings.get, write: settings.set)
-    ..studyStart = planner.startOfTask; // (a session's to-do is announced at the session's start)
+    ..studyStart = planner.startOfTask // (a session's to-do is announced at the session's start)
+    ..eventAlarms = ((from, to) => localEventAlarms(eventRepository, from, to));
+  eventRepository.changes.listen((_) => unawaited(reminders.reconcile())); // (an event with alarms was made, moved or deleted)
   planner.addListener(() => unawaited(reminders.reconcile())); // (the plans' sessions change after their to-dos are made)
   final ai = AiService(settings: settings, providers: [summaryModel, cloudModel]);
   await ai.load();
@@ -491,6 +496,7 @@ Future<void> _start() async {
     services: AppServices(
       repository: repository,
       tasks: tasks,
+      events: eventRepository,
       caldav: caldav,
       device: device,
       ics: ics,

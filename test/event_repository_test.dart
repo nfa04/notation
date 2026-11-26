@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/data/app_database.dart';
 import 'package:notes/data/event_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  migrationTests();
   setUpAll(AppDatabase.initFfi);
 
   late EventRepository repo;
@@ -106,4 +109,35 @@ void main() {
     expect(fired, 1);
     await sub.cancel();
   });
+}
+
+void migrationTests() {
+  Future<Set<String>> columns(Database db) async => {for (final r in await db.rawQuery('PRAGMA table_info(local_events)')) r['name'] as String};
+
+  for (final from in [59, 60]) {
+    test('a database at version $from gets the attendees column when it is opened', () async {
+      final dir = await Directory.systemTemp.createTemp('events_migration');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = '${dir.path}/notes.db';
+      var db = await AppDatabase.open(path: path);
+      // (put the file back the way a build of that version left it)
+      if (from == 59) {
+        await db.execute('DROP TABLE local_events');
+        await db.execute('DROP TABLE local_calendars');
+      } else {
+        await db.execute('ALTER TABLE local_events DROP COLUMN attendees');
+      }
+      await db.execute('PRAGMA user_version = $from');
+      await db.close();
+
+      db = await AppDatabase.open(path: path);
+      expect(await columns(db), containsAll(['alarms', 'attendees', 'location']));
+      final repo = EventRepository(db);
+      await repo.calendars();
+      final id = await repo.createEvent(LocalEvent(
+        id: '', calendarId: EventRepository.defaultCalendarId, title: 'x', start: DateTime(2026, 12, 1, 9), end: DateTime(2026, 12, 1, 10), attendees: const ['a@b.c']));
+      expect((await repo.event(id))!.attendees, ['a@b.c']);
+      await db.close();
+    });
+  }
 }
