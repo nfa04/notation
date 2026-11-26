@@ -23,7 +23,8 @@ Files are read in pieces, so a video of many gigabytes needs memory for about a 
 | MP3 in MP3 files, MP4 or Matroska (MPEG-1/2/2.5 Layer III) | works, checked against ffmpeg (> 115 dB SNR); intensity stereo is not applied |
 | Matroska / WebM / MKA with AAC or MP3 | works |
 | FLAC, WAV (8/16/24/32 bit PCM, float, A-law, mu-law) | works, exact |
-| Opus, Vorbis (Ogg, WebM) | not yet |
+| Opus (Ogg `.opus`/`.ogg`, WebM, Matroska, MP4): CELT, SILK and hybrid, mono and stereo, all frame sizes | works, checked against libopus (speech modes are bit-exact, music within 16 bit rounding, > 75 dB); no repair of lost packets, no cross fade at a change of mode, more than two channels not supported |
+| Vorbis I (Ogg, Matroska/WebM), floor type 1 | works, checked against ffmpeg (> 75 dB); floor type 0 (very old files) is not supported |
 | Layers I and II, AAC Main/LTP/SSR, 5.1 channels, fragmented MP4 | not supported (an `AudioFormatException` says so in a plain sentence) |
 
 There are no encoders.
@@ -35,6 +36,11 @@ of ffmpeg next to it (`*.ref.gz`, 16 bit samples) and the tests demand a signal 
 delay.
 
 ## Licence
+
+The Opus decoder (`lib/src/opus/`) is a port of [libopus](https://opus-codec.org) 1.5.2 (BSD-3-Clause: Copyright Xiph.Org Foundation,
+Skype Limited, Octasic, Jean-Marc Valin, Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mozilla, Amazon and others) and carries its
+tables; the licence text of libopus applies to those files.
+
 
 The AAC and MP3 decoders are written after the decoders of the [Symphonia](https://github.com/pdeljanov/Symphonia) project
 (MPL-2.0, which in turn follows NihAV), and the code tables in `aac_tables.dart` and `mp3_tables.dart` are taken from it. Files

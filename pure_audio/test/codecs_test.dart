@@ -24,4 +24,21 @@ void main() {
     }
     expectMatchesReference('t_mulaw.wav', minSnr: 75);
   });
+  group('Opus', () {
+    // (libopus is the reference: speech modes are exact, CELT within the rounding to 16 bit)
+    for (final f in ['o_celt_stereo.opus', 'o_hybrid_mono.opus', 'o_hybrid_stereo.opus']) {
+      expectMatchesReference(f, minSnr: 70);
+    }
+    for (final f in ['o_silk_nb.opus', 'o_silk_mb_60ms.opus', 'o_silk_wb_40ms.opus', 'o_silk_wb_stereo.opus']) {
+      expectMatchesReference(f, minSnr: 90);
+    }
+    for (final f in ['o_in_webm.webm', 'o_in_mp4.mp4', 'o_in_mkv.mka']) {
+      expectMatchesReference(f, minSnr: 70);
+    }
+  });
+  group('Vorbis', () {
+    for (final f in ['v_mono.ogg', 'v_stereo.ogg', 'v_stereo_in.mkv']) {
+      expectMatchesReference(f, minSnr: 70);
+    }
+  });
 }

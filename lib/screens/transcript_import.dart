@@ -116,7 +116,7 @@ class _TranscriptDialogState extends State<_TranscriptDialog> {
     });
   }
 
-  static const _mediaExtensions = ['mp4', 'm4a', 'm4v', 'mov', 'mp3', 'wav', 'flac', 'aac', 'mkv', 'mka', 'webm'];
+  static const _mediaExtensions = ['mp4', 'm4a', 'm4v', 'mov', 'mp3', 'wav', 'flac', 'aac', 'mkv', 'mka', 'webm', 'ogg', 'oga', 'opus'];
 
   /// Writes down what is said in an audio or video file, with Whisper on this device.
   Future<void> _listen() async {

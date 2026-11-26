@@ -21,7 +21,29 @@ ffmpeg -loglevel error -y -i mono22.wav -c:a aac -b:a 48k k_aac.mkv
 ffmpeg -loglevel error -y -i mono22.wav -c:a libmp3lame -b:a 48k k_mp3.mkv
 ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a aac -b:a 96k k_aac_stereo.mka
 ffmpeg -loglevel error -y -i aac_stereo_44k.m4a -c:a copy -f adts raw_stereo_44k.aac
-for f in *.aac *.m4a *.mp4 *.mp3 *.flac t_*.wav *.mkv *.mka *.ogg *.opus *.webm; do
+# Opus (the reference is libopus itself)
+ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libopus -application audio -b:a 96k o_celt_stereo.opus
+ffmpeg -loglevel error -y -i mono22.wav -c:a libopus -application audio -b:a 32k -frame_duration 20 o_hybrid_mono.opus
+ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libopus -application voip -b:a 48k -cutoff 12000 o_hybrid_stereo.opus
+ffmpeg -loglevel error -y -i mono22.wav -c:a libopus -application voip -b:a 8k -cutoff 4000 o_silk_nb.opus
+ffmpeg -loglevel error -y -i mono22.wav -c:a libopus -application voip -b:a 12k -cutoff 6000 -frame_duration 60 o_silk_mb_60ms.opus
+ffmpeg -loglevel error -y -i mono22.wav -c:a libopus -application voip -b:a 16k -cutoff 8000 -frame_duration 40 o_silk_wb_40ms.opus
+ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libopus -application voip -b:a 40k -cutoff 8000 o_silk_wb_stereo.opus
+ffmpeg -loglevel error -y -i o_silk_wb_stereo.opus -c:a copy o_in_webm.webm
+ffmpeg -loglevel error -y -i o_hybrid_mono.opus -c:a copy o_in_mp4.mp4
+ffmpeg -loglevel error -y -i o_celt_stereo.opus -c:a copy o_in_mkv.mka
+ffmpeg -loglevel error -y -i mono22.wav -c:a libvorbis -q:a 3 v_mono.ogg
+ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libvorbis -q:a 5 v_stereo.ogg
+ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libvorbis -b:a 64k v_stereo_in.mkv
+for f in v_*; do
+  case "$f" in *.ref.gz) continue;; esac
+  ffmpeg -loglevel error -y -i "$f" -f s16le - | gzip -9 > "${f%.*}.ref.gz"
+done
+for f in o_*; do
+  case "$f" in *.ref.gz) continue;; esac
+  ffmpeg -loglevel error -y -c:a libopus -i "$f" -f s16le - | gzip -9 > "${f%.*}.ref.gz"
+done
+for f in *.aac *.m4a *.mp4 *.mp3 *.flac t_*.wav *.mkv *.mka *.ogg; do
   [ -f "$f" ] || continue
   ffmpeg -loglevel error -y -i "$f" -f s16le - | gzip -9 > "${f%.*}.ref.gz"
 done
