@@ -61,6 +61,8 @@ void main() {
       expect(find.text('1 card · none due'), findsOneWidget, reason: 'the Anki card is due in three days');
       expect(find.text('3 cards to review'), findsOneWidget, reason: 'today: every card that is due');
       expect(find.text('Exams'), findsNothing, reason: 'no calendar, no plans');
+      expect(find.byKey(const ValueKey('hub-tabs')), findsNothing, reason: 'only the cards: a heading, no tabs');
+      expect(find.text('Cards'), findsOneWidget);
 
       final lecture = (await tester.runAsync(() => notes.listNotes()))!.single.id;
       await tester.tap(find.byKey(ValueKey('deck-$lecture')));
@@ -81,6 +83,13 @@ void main() {
       await settle(tester);
       expect(find.byKey(const ValueKey('hub-no-cards')), findsOneWidget);
       expect(find.byKey(const ValueKey('hub-nothing-due')), findsOneWidget);
+      expect(find.byKey(const ValueKey('hub-tabs')), findsOneWidget, reason: 'cards and exams: two tabs under Today');
+      expect(find.byKey(const ValueKey('study-plans-empty')), findsNothing, reason: 'the cards tab is shown first');
+
+      await tester.tap(find.byKey(const ValueKey('hub-tab-exams')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('hub-nothing-due')), findsOneWidget, reason: 'Today stays on top');
+      expect(find.byKey(const ValueKey('hub-no-cards')), findsNothing);
       expect(find.byKey(const ValueKey('study-plans-empty')), findsOneWidget);
       expect(find.byKey(const ValueKey('new-study-plan')), findsOneWidget);
     });

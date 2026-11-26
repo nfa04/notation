@@ -21,6 +21,9 @@ String cardSourceName(String source, Map<String, String> titles) {
   return titles[source] ?? tr('A deleted note');
 }
 
+/// The tabs under "Today" in the hub.
+enum _HubTab { cards, exams }
+
 /// One source of cards in the hub: how many it has and how many are due.
 typedef _Deck = ({String source, String name, int count, int due});
 
@@ -45,6 +48,8 @@ class _LearningHubState extends State<LearningHub> {
   String? _open;
   List<_Deck>? _decks;
   StreamSubscription<void>? _sub;
+  /// The tab shown under Today (the first one there is when this one is off).
+  _HubTab _tab = _HubTab.cards;
 
   @override
   void initState() {
@@ -89,6 +94,9 @@ class _LearningHubState extends State<LearningHub> {
     if (planner != null && open != null && planner.plans.any((p) => p.id == open)) {
       return StudyPlanDetail(planner: planner, planId: open, clock: widget.clock, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt, onBack: () => setState(() => _open = null));
     }
+    // Today stays on top; the cards and the exams are two tabs under it (a plain heading when only one of them is on).
+    final sections = [if (widget.cards != null) _HubTab.cards, if (planner != null) _HubTab.exams];
+    final shown = sections.contains(_tab) ? _tab : (sections.isEmpty ? null : sections.first);
     Widget page(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Learning hub')),
       body: ListView(
@@ -97,28 +105,44 @@ class _LearningHubState extends State<LearningHub> {
         children: [
           _heading(context, tr('Today')),
           ..._today(context),
-          if (widget.cards != null) ...[
-            _heading(context, tr('Cards'), actions: [
-              IconButton(
+          if (sections.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 16, bottom: 8),
+              child: DefaultTabController(
+                key: const ValueKey('hub-tabs'),
+                length: sections.length,
+                initialIndex: sections.indexOf(shown!),
+                child: TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  onTap: (i) => setState(() => _tab = sections[i]),
+                  tabs: [for (final s in sections) Tab(key: ValueKey('hub-tab-${s.name}'), text: s == _HubTab.cards ? tr('Cards') : tr('Exams'))],
+                ),
+              ),
+            )
+          else if (shown != null)
+            _heading(context, shown == _HubTab.cards ? tr('Cards') : tr('Exams')),
+          if (shown == _HubTab.cards) ...[
+            Wrap(spacing: 8, children: [
+              TextButton.icon(
                 key: const ValueKey('hub-import-anki'),
-                tooltip: tr('Import from Anki'),
                 icon: const Icon(Symbols.file_download),
+                label: const Text('Import from Anki'),
                 onPressed: () async {
                   if (await importCardsFromAnki(context, widget.cards!) != null) _load();
                 },
               ),
               if (_decks?.isNotEmpty ?? false)
-                IconButton(
+                TextButton.icon(
                   key: const ValueKey('hub-export-anki'),
-                  tooltip: tr('Export to Anki'),
                   icon: const Icon(Symbols.ios_share),
+                  label: const Text('Export to Anki'),
                   onPressed: () => exportCardsToAnki(context, widget.cards!, repository: widget.repository),
                 ),
             ]),
             ..._deckRows(context),
           ],
-          if (planner != null) ...[
-            _heading(context, tr('Exams')),
+          if (shown == _HubTab.exams && planner != null) ...[
             if (planner.plans.isEmpty)
               _quiet(context, tr('Say what the exam is, when it is and what to study for it. The app cuts the material into parts, finds free times in your calendar and shows you the sessions. Nothing goes in your calendar until you approve it.'),
                   key: const ValueKey('study-plans-empty')),

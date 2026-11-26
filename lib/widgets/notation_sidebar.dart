@@ -27,6 +27,12 @@ class NotationSidebar extends StatelessWidget {
   /// The id that is pinned at the foot, away from the groups.
   final int? pinned;
   final Set<int> groupStarts;
+
+  /// The order the person gave (ids); a place keeps to its group, only the order inside a group follows this. With [onReorder] the rows can be dragged.
+  final List<int> order;
+
+  /// Told the new order of all places after a row was dragged to another spot in its group.
+  final ValueChanged<List<int>>? onReorder;
   final Widget? header;
   final Widget? footer;
 
@@ -42,6 +48,8 @@ class NotationSidebar extends StatelessWidget {
     this.roomy = false,
     this.pinned,
     this.groupStarts = const {9, 2, 4},
+    this.order = const [],
+    this.onReorder,
     this.header,
     this.footer,
     this.fill,
@@ -58,10 +66,56 @@ class NotationSidebar extends StatelessWidget {
     final rule = scheme.outlineVariant;
     final grouped = [for (final i in items) if (i.id != pinned) i];
     final foot = [for (final i in items) if (i.id == pinned) i];
-    final children = <Widget>[];
+    // the groups first (cut where one starts), then each one in the order the person gave
+    final groups = <List<SidebarItem>>[];
     for (final i in grouped) {
-      if (children.isNotEmpty && groupStarts.contains(i.id)) children.add(Padding(padding: EdgeInsets.symmetric(vertical: roomy ? 10 : 8, horizontal: wide ? 8 : 4), child: Divider(height: 1, thickness: 1, color: rule)));
-      children.add(_row(context, i));
+      if (groups.isEmpty || groupStarts.contains(i.id)) groups.add([]);
+      groups.last.add(i);
+    }
+    int rank(SidebarItem i) {
+      final at = order.indexOf(i.id);
+      return at < 0 ? order.length : at;
+    }
+    for (final g in groups) {
+      final base = {for (var k = 0; k < g.length; k++) g[k].id: k};
+      g.sort((a, b) => rank(a) != rank(b) ? rank(a).compareTo(rank(b)) : base[a.id]!.compareTo(base[b.id]!));
+    }
+    final children = <Widget>[];
+    for (var gi = 0; gi < groups.length; gi++) {
+      final g = groups[gi];
+      if (gi > 0) children.add(Padding(padding: EdgeInsets.symmetric(vertical: roomy ? 10 : 8, horizontal: wide ? 8 : 4), child: Divider(height: 1, thickness: 1, color: rule)));
+      if (onReorder == null) {
+        for (final i in g) {
+          children.add(_row(context, i));
+        }
+      } else {
+        children.add(ReorderableListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          buildDefaultDragHandles: false,
+          // (no lift shadow: the paper look is flat)
+          proxyDecorator: (child, _, _) => Material(type: MaterialType.transparency, child: child),
+          onReorderItem: (from, to) {
+            if (from == to) return;
+            final ids = [for (final i in g) i.id];
+            ids.insert(to, ids.removeAt(from));
+            onReorder!([
+              for (var k = 0; k < groups.length; k++)
+                ...(k == gi ? ids : [for (final i in groups[k]) i.id]),
+              for (final i in foot) i.id,
+            ]);
+          },
+          children: [
+            for (var k = 0; k < g.length; k++)
+              // a pointer drags at once; a finger holds the row a moment first (a swipe along the list still scrolls it)
+              if (roomy)
+                ReorderableDelayedDragStartListener(key: ValueKey('drag-nav-${g[k].id}'), index: k, child: _row(context, g[k]))
+              else
+                ReorderableDragStartListener(key: ValueKey('drag-nav-${g[k].id}'), index: k, child: _row(context, g[k])),
+          ],
+        ));
+      }
     }
     return Material(
       color: groundOf(context),
