@@ -3475,6 +3475,7 @@ const germanTexts = <String, String>{
   'This device has no accelerator the app can use: models always run on the processor.': 'Dieses Gerät hat keinen Beschleuniger, den die App nutzen kann: Modelle laufen immer auf dem Prozessor.',
   'Accelerator when available': 'Beschleuniger, wenn vorhanden',
   'Processor only': 'Nur Prozessor',
+  'Recommended on this device: {size}. It is used until you choose another.': 'Für dieses Gerät empfohlen: {size}. Es wird verwendet, bis du etwas anderes wählst.',
   'Graphics card ({mb} MB)': 'Grafikkarte ({mb} MB)',
   'Small ({mb} MB)': 'Klein ({mb} MB)',
   'Full ({mb} MB)': 'Voll ({mb} MB)',

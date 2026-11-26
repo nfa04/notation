@@ -32,13 +32,16 @@ class HandwritingService extends InkRecognizer {
   final PaddleVlService? paddle;
   final Future<String?> Function(String key)? _readSetting;
   final Future<void> Function(String key, String value)? _writeSetting;
+  final Future<bool> Function()? _prefersFp16;
 
   HandwritingService({
     GlmOcrService? glm,
     this.paddle,
     Future<String?> Function(String key)? readSetting,
     Future<void> Function(String key, String value)? writeSetting,
+    Future<bool> Function()? prefersFp16,
   })  : glm = glm ?? GlmOcrService(),
+        _prefersFp16 = prefersFp16,
         _readSetting = readSetting,
         _writeSetting = writeSetting {
     this.glm.addListener(notifyListeners);
@@ -84,6 +87,11 @@ class HandwritingService extends InkRecognizer {
 
   GlmWeights get weights => glm.weights;
 
+  GlmWeights _recommended = GlmWeights.platformDefault;
+
+  /// The vision network that suits this device (see [GlmWeights.deviceDefault]): used while nobody chose, and marked in the settings.
+  GlmWeights get recommendedWeights => _recommended;
+
   /// Switches the vision network; the new file is fetched with the install button (the other two files stay).
   Future<void> setWeights(GlmWeights w) async {
     if (w == glm.weights) return;
@@ -115,13 +123,25 @@ class HandwritingService extends InkRecognizer {
     // (nobody, or a reader that is not offered any more, gets GLM-OCR)
     _reader = HandwritingReader.values.where((r) => r.name == wanted).firstOrNull ?? HandwritingReader.glm;
     final w = await _readSetting?.call(weightsKey);
-    await glm.useWeights(GlmWeights.values.where((v) => v.name == w).firstOrNull ?? GlmWeights.platformDefault);
+    _recommended = await GlmWeights.deviceDefault(prefersFp16: _prefersFp16);
+    await glm.useWeights(GlmWeights.values.where((v) => v.name == w).firstOrNull ?? await _unchosenWeights());
     final q = await _readSetting?.call(qualityKey);
     _quality = GlmQuality.values.where((v) => v.name == q).firstOrNull ?? GlmQuality.standard;
     _uncertainty = (double.tryParse(await _readSetting?.call(uncertaintyKey) ?? '') ?? 0.5).clamp(0.0, 1.0);
     glm.unsureLimit = limitFor(_uncertainty);
     await _current.load();
     notifyListeners();
+  }
+
+  /// The vision network while nobody chose: the one recommended for this device, unless only another one is downloaded (someone who
+  /// installed the reader before the recommendation changed, or before a graphics card runtime was picked, keeps reading without a
+  /// new download; the settings offer the recommended one).
+  Future<GlmWeights> _unchosenWeights() async {
+    if (await glm.hasFilesOf(_recommended)) return _recommended;
+    for (final w in GlmWeights.values) {
+      if (w != _recommended && await glm.hasFilesOf(w)) return w;
+    }
+    return _recommended;
   }
 
   @override

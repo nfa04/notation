@@ -604,6 +604,18 @@ class _SpeechSettings extends StatelessWidget {
       );
 }
 
+String _glmWeightsLabel(GlmWeights w) => switch (w) {
+      GlmWeights.standard => tr('Exact ({mb} MB)', {'mb': w.megabytes}),
+      GlmWeights.compact => tr('Compact ({mb} MB)', {'mb': w.megabytes}),
+      GlmWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
+    };
+
+String _tellerWeightsLabel(TellerWeights w) => switch (w) {
+      TellerWeights.standard => tr('Small ({mb} MB)', {'mb': w.megabytes}),
+      TellerWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
+      TellerWeights.full => tr('Full ({mb} MB)', {'mb': w.megabytes}),
+    };
+
 class _HandwritingSettings extends StatelessWidget {
   final HandwritingService service;
   final NoteRepository? repository;
@@ -723,20 +735,23 @@ class _HandwritingSettings extends StatelessWidget {
                     for (final w in GlmWeights.values.where((w) =>
                         w != GlmWeights.gpu ||
                         service.weights == w ||
+                        service.recommendedWeights == w ||
                         (defaultTargetPlatform == TargetPlatform.android ? (snap.data?.contains(OrtProvider.QNN) ?? false) : (snap.data?.isNotEmpty ?? false))))
                       ChoiceChip(
                         key: ValueKey('handwriting-weights-${w.name}'),
-                        label: Text(switch (w) {
-                          GlmWeights.standard => tr('Exact ({mb} MB)', {'mb': w.megabytes}),
-                          GlmWeights.compact => tr('Compact ({mb} MB)', {'mb': w.megabytes}),
-                          GlmWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
-                        }),
+                        label: Text(_glmWeightsLabel(w)),
                         selected: service.weights == w,
                         onSelected: busy ? null : (_) => service.setWeights(w),
                       ),
                   ]),
                 ),
                 const SizedBox(height: 8),
+                Text(
+                  tr('Recommended on this device: {size}. It is used until you choose another.', {'size': _glmWeightsLabel(service.recommendedWeights)}),
+                  key: const ValueKey('handwriting-weights-recommended'),
+                  style: muted,
+                ),
+                const SizedBox(height: 6),
                 Text(
                   tr('Compact is a third smaller and reads about two points less exactly. In a browser it is the one the graphics card can run (WebGPU), and much faster there. Changing it downloads the other file.'),
                   style: muted,
@@ -908,20 +923,22 @@ class _MathSettings extends StatelessWidget {
                 future: onnxAvailableAccelerators(),
                 builder: (context, snap) => Wrap(spacing: 8, runSpacing: 8, children: [
                   // (the 16-bit encoder is for a graphics card: offered where the runtime found one, and when it is the one in use)
-                  for (final w in TellerWeights.values.where((w) => w != TellerWeights.gpu || service.weights == w || (snap.data?.isNotEmpty ?? false)))
+                  for (final w in TellerWeights.values.where((w) => w != TellerWeights.gpu || service.weights == w || service.recommendedWeights == w || (snap.data?.isNotEmpty ?? false)))
                     ChoiceChip(
                       key: ValueKey('math-weights-${w.name}'),
-                      label: Text(switch (w) {
-                        TellerWeights.standard => tr('Small ({mb} MB)', {'mb': w.megabytes}),
-                        TellerWeights.gpu => tr('Graphics card ({mb} MB)', {'mb': w.megabytes}),
-                        TellerWeights.full => tr('Full ({mb} MB)', {'mb': w.megabytes}),
-                      }),
+                      label: Text(_tellerWeightsLabel(w)),
                       selected: service.weights == w,
                       onSelected: busy ? null : (_) => service.setWeights(w),
                     ),
                 ]),
               ),
               const SizedBox(height: 8),
+              Text(
+                tr('Recommended on this device: {size}. It is used until you choose another.', {'size': _tellerWeightsLabel(service.recommendedWeights)}),
+                key: const ValueKey('math-weights-recommended'),
+                style: muted,
+              ),
+              const SizedBox(height: 6),
               Text(
                 tr('Graphics card is the encoder in 16 bits, for a graphics card runtime (AMD\'s cannot run the 8-bit one): twice the size, much quicker there, reads about as well. Changing it downloads the encoder. Full is the published encoder unchanged, in 32 bits: the largest, reads like the original, and the form a phone\'s accelerator can take most of.'),
                 style: muted,
