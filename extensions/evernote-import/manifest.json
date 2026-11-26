@@ -1,0 +1,14 @@
+{
+  "id": "evernote-import",
+  "name": "Evernote import",
+  "version": "1.0.0",
+  "description": "Brings in notes from Evernote .enex files (File, Export notes in Evernote): text with its formatting, checklists, links, tags and pictures. Notebooks you export one by one become folders by their file names.",
+  "author": "Notation",
+  "main": "main.js",
+  "modules": ["lib/bytes.js"],
+  "apiVersion": 2,
+  "permissions": ["notes.import"],
+  "importers": [
+    { "id": "enex", "title": "Evernote", "accepts": [".enex", "zip"], "description": "Pick one or more .enex files (one for each notebook), or a zip of them." }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "standard-notes-import",
+  "name": "Standard Notes import",
+  "version": "1.0.0",
+  "description": "Brings in an unencrypted backup of Standard Notes (the .txt/.json file the app saves): titles, text and tags. Trashed notes are left out; an encrypted backup is explained, not guessed at.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["notes.import"],
+  "importers": [
+    { "id": "backup", "title": "Standard Notes", "accepts": [".json", ".txt", "zip"], "description": "In Standard Notes: Account, Data Backups, Download a backup (without encryption)." }
+  ]
+}

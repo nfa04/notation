@@ -165,9 +165,12 @@ class TemplateService {
   final NoteFileService files;
   final DateTime Function() now;
 
-  TemplateService(this.repository, this.files, {DateTime Function()? now}) : now = now ?? DateTime.now;
+  /// More templates that come and go (the ones extensions bring).
+  final List<BuiltInTemplate> Function()? extra;
 
-  List<BuiltInTemplate> get builtIn => builtInTemplates();
+  TemplateService(this.repository, this.files, {DateTime Function()? now, this.extra}) : now = now ?? DateTime.now;
+
+  List<BuiltInTemplate> get builtIn => [...builtInTemplates(), ...?extra?.call()];
 
   Future<List<SavedTemplate>> saved() => repository.templates.list();
 

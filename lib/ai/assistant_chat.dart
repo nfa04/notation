@@ -476,14 +476,14 @@ class AssistantChat extends ChangeNotifier {
     // (the assistant of all notes has no open note: none of the tools that work inside one)
     final knowledge = this.knowledge;
     final allNotes = knowledge != null;
-    final all = allNotes ? [for (final t in agent.tools) if (notesAgentTools.contains(t.name)) t] : [...agent.tools, if (index != null) ..._noteTools()];
+    final all = allNotes ? [for (final t in agent.allTools) if (notesAgentTools.contains(t.name) || t.name.startsWith('ext_')) t] : [...agent.allTools, if (index != null) ..._noteTools()];
     final names = {for (final t in all) t.name};
     String? groupOf(String name) => allNotes && notesAgentCore.contains(name) ? null : agentGroupOf(name);
     final open = <String>{};
     bool closed(String group) => !open.contains(group) && agentToolGroups[group]!.$2.any(names.contains);
     final more = _moreTool(all, open);
     // (only reading: the tools that need no more than what the assistant reads anyway)
-    bool reads(AgentTool t) => !t.changesNote && (t.permission == null || t.permission == ExtensionPermission.noteRead || granted.contains(t.permission));
+    bool reads(AgentTool t) => !t.changesNote && t.permission != ExtensionPermission.assistantTool && (t.permission == null || t.permission == ExtensionPermission.noteRead || granted.contains(t.permission));
     List<AgentTool> usable() => readOnly
         ? [for (final t in all) if (reads(t) && groupOf(t.name) == null) t]
         : [for (final t in all) if (groupOf(t.name) == null || open.contains(groupOf(t.name))) t, if (agentToolGroups.keys.any(closed)) more];

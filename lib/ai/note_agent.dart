@@ -960,6 +960,7 @@ String agentQuestion(ExtensionPermission permission) => switch (permission) {
       ExtensionPermission.notesDelete => tr('The assistant asks to move notes to the trash or bring them back.'),
       ExtensionPermission.drawPage => tr('The assistant asks to draw on a page of this note.'),
       ExtensionPermission.pagesEdit => tr('The assistant asks to add, delete or move pages of this note.'),
+      ExtensionPermission.assistantTool => tr('The assistant asks to run a tool that an extension offers it.'),
       ExtensionPermission.tasksManage => tr('The assistant asks to look at or change your tasks.'),
       _ => tr('The assistant asks for: {what}', {'what': permission.description}),
     };
@@ -968,6 +969,12 @@ String agentQuestion(ExtensionPermission permission) => switch (permission) {
 class NoteAgent {
   final ExtensionApi api;
   final List<AgentTool> tools;
+
+  /// Tools that come and go while the app runs (the ones extensions offer); asked for each time they are needed.
+  final List<AgentTool> Function()? more;
+
+  /// The tools of the assistant and the ones extensions bring now.
+  List<AgentTool> get allTools => [...tools, ...?more?.call()];
 
   /// The text selected right now, if any.
   final String? Function()? selected;
@@ -978,7 +985,7 @@ class NoteAgent {
   /// Called with what it is about to do before the assistant changes the note, and with what it did after it did (to keep versions).
   final Future<void> Function(String summary)? beforeChange, afterChange;
 
-  NoteAgent({required this.api, List<AgentTool>? tools, this.selected, this.copies, this.beforeChange, this.afterChange}) : tools = tools ?? agentTools;
+  NoteAgent({required this.api, List<AgentTool>? tools, this.more, this.selected, this.copies, this.beforeChange, this.afterChange}) : tools = tools ?? agentTools;
 }
 
 enum AgentChoice { once, always, deny }

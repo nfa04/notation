@@ -27,16 +27,51 @@ class ShortcutService extends ChangeNotifier {
   static final ShortcutService fallback = ShortcutService.inMemory();
 
   final SettingsRepository? _settings;
-  final List<ShortcutAction> actions;
-  late final Map<String, ShortcutAction> _byId = {for (final a in actions) a.id: a};
+  final List<ShortcutAction> _builtIn;
+  List<ShortcutAction> _extra = const [];
 
-  ShortcutService(SettingsRepository this._settings, {bool? mac}) : actions = shortcutActions(mac: mac ?? defaultTargetPlatform == TargetPlatform.macOS) {
+  /// Every action: the app's own, then the commands extensions bring (see [setExtraActions]).
+  List<ShortcutAction> get actions => [..._builtIn, ..._extra];
+  late Map<String, ShortcutAction> _byId = {for (final a in _builtIn) a.id: a};
+
+  ShortcutService(SettingsRepository this._settings, {bool? mac}) : _builtIn = shortcutActions(mac: mac ?? defaultTargetPlatform == TargetPlatform.macOS) {
     _reindex();
   }
 
   /// Remembers nothing: for tests and previews.
-  ShortcutService.inMemory({bool? mac}) : _settings = null, actions = shortcutActions(mac: mac ?? defaultTargetPlatform == TargetPlatform.macOS) {
+  ShortcutService.inMemory({bool? mac}) : _settings = null, _builtIn = shortcutActions(mac: mac ?? defaultTargetPlatform == TargetPlatform.macOS) {
     _reindex();
+  }
+
+  /// What was saved, as it was read (also the keys of actions that are not here now: an extension that is off keeps its keys).
+  Map<String, dynamic> _saved = {};
+
+  /// Makes [extra] (the commands of the extensions that are on) known as actions, so they can be given keys; the keys saved for
+  /// them before are given back.
+  void setExtraActions(List<ShortcutAction> extra) {
+    final same = extra.length == _extra.length && [for (var i = 0; i < extra.length; i++) extra[i].id == _extra[i].id && extra[i].label == _extra[i].label].every((x) => x);
+    if (same) return;
+    _extra = extra;
+    _byId = {for (final a in actions) a.id: a};
+    _applySaved();
+    _reindex();
+    notifyListeners();
+  }
+
+  void _applySaved() {
+    _custom.removeWhere((id, _) => !_byId.containsKey(id));
+    for (final e in _saved.entries) {
+      final action = _byId[e.key];
+      if (action == null) continue;
+      try {
+        final combos = [for (final c in (e.value as List)) ?KeyCombo.decode(c as String)];
+        if (!listEquals(combos, action.defaults)) {
+          _custom[e.key] = combos;
+        } else {
+          _custom.remove(e.key);
+        }
+      } catch (_) {}
+    }
   }
 
   /// What differs from the defaults: the combinations of the actions that were changed (none at all: the action was unbound).
@@ -62,15 +97,14 @@ class ShortcutService extends ChangeNotifier {
   Future<void> load() async {
     final saved = await _settings?.get(_key);
     _custom.clear();
+    _saved = {};
     if (saved != null) {
       try {
-        for (final e in (jsonDecode(saved) as Map<String, dynamic>).entries) {
-          if (!_byId.containsKey(e.key)) continue; // (an action of another version)
-          final combos = [for (final c in (e.value as List)) ?KeyCombo.decode(c as String)];
-          if (!listEquals(combos, _byId[e.key]!.defaults)) _custom[e.key] = combos;
-        }
+        _saved = (jsonDecode(saved) as Map<String, dynamic>);
+        _applySaved();
       } catch (_) {
         _custom.clear(); // unreadable: the defaults
+        _saved = {};
       }
     }
     _reindex();
@@ -116,11 +150,14 @@ class ShortcutService extends ChangeNotifier {
     _reindex();
     notifyListeners();
     final s = _settings;
+    // (what was saved for an action that is not here now stays, as long as nothing of it was changed)
+    final mine = {for (final e in _custom.entries) e.key: [for (final c in e.value) c.encode()]};
+    _saved = {for (final e in _saved.entries) if (!_byId.containsKey(e.key)) e.key: e.value, ...mine};
     if (s == null) return;
-    if (_custom.isEmpty) {
+    if (_saved.isEmpty) {
       await s.remove(_key);
     } else {
-      await s.set(_key, jsonEncode({for (final e in _custom.entries) e.key: [for (final c in e.value) c.encode()]}));
+      await s.set(_key, jsonEncode(_saved));
     }
   }
 

@@ -13,6 +13,12 @@ import '../l10n/language.dart';
 import '../l10n/text.dart';
 import 'extension_docs_dialog.dart';
 import 'extension_review.dart';
+import 'extension_gallery_dialog.dart';
+import '../extensions/extension_gallery.dart';
+import 'dart:io' show Directory, Platform;
+import 'extension_store.dart';
+import 'extension_store_source_settings.dart';
+import 'extension_setting_fields.dart';
 import 'magic_extension_dialog.dart';
 import '../style/platform_dialog.dart';
 
@@ -49,6 +55,18 @@ class ExtensionSettings extends StatefulWidget {
   State<ExtensionSettings> createState() => _ExtensionSettingsState();
 }
 
+/// What an extension adds besides tools and actions, as lines for its card (and the review before installing it).
+List<Widget> _doors(ExtensionManifest m) => [
+      if (m.importers.isNotEmpty) Text.verbatim('${tr('Importers')}: ${m.importers.map((x) => x.title).join(', ')}'),
+      if (m.exporters.isNotEmpty) Text.verbatim('${tr('Exports')}: ${m.exporters.map((x) => x.title).join(', ')}'),
+      if (m.commands.isNotEmpty) Text.verbatim('${tr('Commands')}: ${m.commands.map((x) => x.title).join(', ')}'),
+      if (m.blocks.isNotEmpty) Text.verbatim('${tr('Code blocks')}: ${m.blocks.map((x) => x.language).join(', ')}'),
+      if (m.agentTools.isNotEmpty) Text.verbatim('${tr('Tools for the assistant')}: ${m.agentTools.map((x) => x.title).join(', ')}'),
+      if (m.templates.isNotEmpty) Text.verbatim('${tr('Templates')}: ${m.templates.map((x) => x.title).join(', ')}'),
+      if (m.capture.isNotEmpty) Text.verbatim('${tr('Kept pages')}: ${m.capture.expand((x) => x.sites).join(', ')}'),
+      if (m.on.isNotEmpty) Text.verbatim('${tr('Reacts to')}: ${m.on.keys.join(', ')}'),
+    ];
+
 class _ExtensionSettingsState extends State<ExtensionSettings> {
   Future<void> _guard(Future<void> Function() job) async {
     try {
@@ -78,7 +96,7 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
         final bytes = await file.readAsBytes();
         final package = widget.service.inspectZip(bytes);
         if (!await _confirm(package)) return;
-        _installed(await widget.service.installSource(package.manifestText, package.script));
+        _installed(await widget.service.installSource(package.manifestText, package.script, files: package.files));
       });
 
   /// Shows what the extension asks for; true when the person wants it installed.
@@ -86,6 +104,19 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
     if (!mounted) return false;
     return confirmInstall(context, package.manifest, before: widget.service.byId(package.manifest.id)?.manifest);
   }
+
+  Future<void> _gallery() async {
+    final saved = await widget.service.settingValue('extension_gallery_url');
+    if (!mounted) return;
+    await showExtensionGallery(context, service: widget.service, gallery: ExtensionGallery(indexUrl: saved));
+  }
+
+  /// Developing: the extension in a folder is loaded and loaded again whenever a file there changes.
+  Future<void> _linkFolder() => _guard(() async {
+        final dir = await FilePicker.getDirectoryPath(dialogTitle: tr('Pick the folder of the extension'));
+        if (dir == null) return;
+        _installed(await widget.service.linkFolder(Directory(dir)));
+      });
 
   Future<void> _magic() async {
     final made = await showMagicExtension(context, ai: widget.ai!, extensions: widget.service, automations: widget.automations);
@@ -98,7 +129,7 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
     await _guard(() async {
       final package = widget.service.inspectSource(written.$1, written.$2);
       if (!await _confirm(package)) return;
-      _installed(await widget.service.installSource(package.manifestText, package.script));
+      _installed(await widget.service.installSource(package.manifestText, package.script, files: package.files));
     });
   }
 
@@ -124,14 +155,19 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
           ],
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
+            if (!kIsWeb) FilledButton.icon(key: const ValueKey('extension-store'), onPressed: () => showExtensionStore(context, widget.service), icon: const Icon(Symbols.storefront, size: 18), label: const Text('Browse the store')),
             FilledButton.tonalIcon(key: const ValueKey('extension-install-file'), onPressed: _installFile, icon: const Icon(Symbols.upload_file, size: 18), label: const Text('Install from a file (.zip)')),
             if (widget.ai != null && widget.ai!.provider != null)
               FilledButton.icon(key: const ValueKey('extension-magic'), onPressed: _magic, icon: const Icon(Symbols.auto_fix_high, size: 18), label: const Text('Create with AI')),
             OutlinedButton.icon(key: const ValueKey('extension-write'), onPressed: _write, icon: const Icon(Symbols.code, size: 18), label: const Text('Write one')),
+            if (!kIsWeb) OutlinedButton.icon(key: const ValueKey('extension-gallery'), onPressed: _gallery, icon: const Icon(Symbols.storefront, size: 18), label: const Text('Gallery')),
+            if (!kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows))
+              OutlinedButton.icon(key: const ValueKey('extension-link-folder'), onPressed: _linkFolder, icon: const Icon(Symbols.folder_code, size: 18), label: const Text('Load from a folder')),
           ]),
           const SizedBox(height: 8),
           if (service.installed.isEmpty) Text(tr('No extensions yet.'), style: TextStyle(color: scheme.onSurfaceVariant)),
           for (final e in service.installed) _card(context, service, e),
+          if (!kIsWeb) ...[const SizedBox(height: 8), const ExtensionStoreSourceSettings()],
         ]);
       },
     );
@@ -151,6 +187,26 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
         children: [
           if (m.tools.isNotEmpty) Text.verbatim('${tr('Tools')}: ${m.tools.map((t) => t.title).join(', ')}'),
           if (m.actions.isNotEmpty) Text.verbatim('${tr('Actions')}: ${m.actions.map((a) => a.title).join(', ')}'),
+          ..._doors(m),
+          ExtensionSettingFields(service: service, extension: e),
+          if (service.devFolders[m.id] != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(children: [
+                Expanded(child: Text.verbatim('${tr('Loaded from')} ${service.devFolders[m.id]}${service.devStatusOf(m.id) == null ? '' : '\n${service.devStatusOf(m.id)}'}', style: const TextStyle(fontSize: 12))),
+                TextButton(key: ValueKey('extension-unlink-${m.id}'), onPressed: () => service.unlinkFolder(m.id), child: const Text('Stop')),
+              ]),
+            ),
+          if (service.consoleOf(m.id).isNotEmpty)
+            ExpansionTile(
+              key: ValueKey('extension-console-${m.id}'),
+              tilePadding: EdgeInsets.zero,
+              title: Text.verbatim('${tr('Console')} (${service.consoleOf(m.id).length})'),
+              children: [
+                Align(alignment: Alignment.centerLeft, child: SelectableText(service.consoleOf(m.id).join('\n'), style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
+                Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => service.clearConsole(m.id), child: const Text('Clear'))),
+              ],
+            ),
           const SizedBox(height: 8),
           Text(tr('It asks to be allowed to:'), style: Theme.of(context).textTheme.labelLarge),
           if (m.permissions.isEmpty) Text(tr('Nothing: it only works on the text it is given.')),
@@ -163,6 +219,8 @@ class _ExtensionSettingsState extends State<ExtensionSettings> {
               subtitle: switch (p) {
                 ExtensionPermission.network => Text.verbatim(m.hosts.join(', ')),
                 ExtensionPermission.eventsEmit => Text.verbatim(m.events.map((e) => e.title).join(', ')),
+                ExtensionPermission.notesImport => Text.verbatim(m.importers.map((i) => i.title).join(', ')),
+                ExtensionPermission.aiUse => Text(tr('What it asks goes to the AI you chose in the settings.')),
                 _ => null,
               },
               value: e.granted.contains(p),

@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "name": "titles from the first line, tags, trash left out, a note twice",
+      "kind": "importer", "id": "export",
+      "files": {
+        "source/notes.json": "{\"activeNotes\":[{\"id\":\"a\",\"content\":\"# Plan\\nstep one\",\"tags\":[\"Work Stuff\"],\"creationDate\":\"2020-01-01T10:00:00.000Z\"},{\"id\":\"b\",\"content\":\"\\n\\nShopping\\n- milk\"},{\"id\":\"a\",\"content\":\"again\"},{\"id\":\"c\",\"content\":\"  \"}],\"trashedNotes\":[{\"id\":\"d\",\"content\":\"gone\"}]}"
+      },
+      "expect": {
+        "value": {
+          "notes": [
+            { "title": "Plan", "markdown": "# Plan\nstep one", "tags": ["work-stuff"], "sourceId": "simplenote:a" },
+            { "title": "Shopping", "markdown": "\n\nShopping\n- milk", "sourceId": "simplenote:b" }
+          ],
+          "notices": ["1 note in the trash was left out."]
+        }
+      }
+    }
+  ]
+}

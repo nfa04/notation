@@ -7,6 +7,65 @@ extension _EditorExtensions on _FixedPageNoteEditorState {
   /// the name the extension has in the settings.
   static String toolLabel(InstalledExtension e, ExtensionTool t) => t.title.toLowerCase().contains(e.manifest.name.toLowerCase()) ? t.title : '${e.manifest.name}: ${t.title}';
 
+  /// The button with what extensions add for this note: their commands and their ways to export it. Null when there is none.
+  Widget? _extensionsMenu() {
+    final service = widget.extensions;
+    if (service == null) return null;
+    final commands = service.commands(CommandPlace.noteMenu);
+    final exporters = service.exporters;
+    if (commands.isEmpty && exporters.isEmpty) return null;
+    return PopupMenuButton<Object>(
+      key: const ValueKey('extensions-menu'),
+      tooltip: tr('Commands and exports of your extensions'),
+      icon: const Icon(Symbols.extension, size: 20),
+      onSelected: (choice) {
+        if (choice is CommandEntry) {
+          unawaited(runExtensionCommand(context, service, choice, _EditorCommandApi(this, choice.extension.manifest.name), extra: {
+            'note': {'id': widget.noteId, 'title': _titleController.text},
+          }));
+        } else if (choice is ({InstalledExtension extension, ExtensionExporter exporter})) {
+          unawaited(_exportWithExtension(service, choice));
+        }
+      },
+      itemBuilder: (context) => [
+        for (final c in commands) PopupMenuItem<Object>(key: ValueKey('extension-command-${c.extension.id}-${c.command.id}'), value: c, child: Text.verbatim('${c.extension.manifest.name}: ${c.command.title}')),
+        if (commands.isNotEmpty && exporters.isNotEmpty) const PopupMenuDivider(),
+        for (final x in exporters)
+          PopupMenuItem<Object>(key: ValueKey('extension-export-${x.extension.id}-${x.exporter.id}'), value: x, child: Text.verbatim(tr('Export: {name}', {'name': '${x.extension.manifest.name}: ${x.exporter.title}'}))),
+      ],
+    );
+  }
+
+  /// Makes the file an exporter of an extension makes of this note (its Markdown, its title and tags) and asks where to keep it.
+  Future<void> _exportWithExtension(ExtensionService service, ({InstalledExtension extension, ExtensionExporter exporter}) choice) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _saveNow();
+      final note = await widget.repository.loadNote(widget.noteId);
+      if (note == null || !mounted) return;
+      final text = widget.repository.text;
+      final made = await noteToMarkdown(
+        note,
+        handwriting: await text.inkTexts(widget.noteId),
+        formulas: await text.inkFormulas(widget.noteId),
+        document: _hasDocument ? _documentController.text : null,
+      );
+      final tags = await (widget.tags?.tagsOf(widget.noteId) ?? Future.value(const <String>[]));
+      if (!mounted) return;
+      final file = await service.runExporter(
+        choice.extension,
+        choice.exporter,
+        {'id': widget.noteId, 'title': _titleController.text, 'markdown': made.markdown, 'tags': tags},
+        api: interactiveApiFor(context, choice.extension.manifest.name),
+      );
+      if (!mounted) return;
+      final path = await saveWithDialog(dialogTitle: tr('Export'), fileName: file.name, extension: choice.exporter.extension, bytes: file.bytes);
+      if (path != null && mounted) messenger.showSnackBar(SnackBar(content: Text.verbatim(tr('Successfully exported to {path}', {'path': path}))));
+    } catch (e) {
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text.verbatim(tr('{name}: {error}', {'name': choice.extension.manifest.name, 'error': e}))));
+    }
+  }
+
   /// One entry for each tool of an extension that is on.
   List<ContextMenuButtonItem> _extensionItems(TextEditingController controller, TextSelection selection, VoidCallback hide) {
     final service = widget.extensions;
@@ -109,7 +168,7 @@ extension _EditorExtensions on _FixedPageNoteEditorState {
   Future<void> _runExtensionTool(ExtensionService service, InstalledExtension extension, ExtensionTool tool, TextEditingController controller, TextSelection selection) async {
     final messenger = ScaffoldMessenger.of(context);
     final text = selection.textInside(controller.text);
-    final api = _EditorExtensionApi(service, this, controller, selection);
+    final api = _EditorExtensionApi(service, this, controller, selection, extension.manifest.name);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(SnackBar(content: Text.verbatim('${extension.manifest.name}: ${tool.title}...'), duration: const Duration(seconds: 20)));
     final outcome = await service.runTool(extension, tool, text: text, api: api);
@@ -148,7 +207,7 @@ extension _EditorExtensions on _FixedPageNoteEditorState {
 }
 
 /// What an extension can do from the text of the editor: read the note, change the selection and the title.
-class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadApi, ManageNotesApi, _EditorWideApi {
+class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadApi, ManageNotesApi, MoreApi, _EditorWideApi {
   @override
   final _FixedPageNoteEditorState _editor;
   final TextEditingController _controller;
@@ -156,7 +215,29 @@ class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadA
   /// Where the selected text is now (it moves as text is put in before it).
   TextSelection selection;
 
-  _EditorExtensionApi(super.service, this._editor, this._controller, this.selection);
+  _EditorExtensionApi(super.service, this._editor, this._controller, this.selection, [this._extensionName = '']);
+
+  /// Who is asking, for the questions that are put to the person.
+  final String _extensionName;
+
+  @override
+  NoteRepository? get moreNotes => _editor.widget.repository;
+  @override
+  LinkRepository? get moreLinks => _editor.widget.links;
+  @override
+  TagRepository? get moreTags => _editor.widget.tags;
+  @override
+  CardRepository? get moreCards => _editor.widget.cards;
+  @override
+  AiService? get moreAi => _editor.widget.ai;
+  @override
+  String? get moreNoteId => _editor.widget.noteId;
+
+  @override
+  Future<Object?> askPerson(String kind, Map<String, Object?> args) async {
+    if (!_editor.mounted) return null;
+    return askPersonDialog(_editor.context, _extensionName, kind, args);
+  }
 
   @override
   Future<Map<String, Object?>> note() async {
@@ -208,5 +289,33 @@ class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadA
   @override
   void message(String text) {
     if (_editor.mounted) ScaffoldMessenger.of(_editor.context,).showSnackBar(SnackBar(content: Text.verbatim(text)));
+  }
+}
+
+/// What a command of an extension can do inside the open note: all that the assistant can do with it (read, write, format, pages,
+/// text boxes, drawing), the rest of the library, and the questions to the person.
+class _EditorCommandApi extends _EditorAgentApi with MoreApi {
+  final String _name;
+  _EditorCommandApi(super.editor, this._name);
+
+  @override
+  NoteRepository? get moreNotes => _editor.widget.repository;
+  @override
+  LinkRepository? get moreLinks => _editor.widget.links;
+  @override
+  TagRepository? get moreTags => _editor.widget.tags;
+  @override
+  CardRepository? get moreCards => _editor.widget.cards;
+  @override
+  AiService? get moreAi => _editor.widget.ai;
+  @override
+  String? get moreNoteId => _editor.widget.noteId;
+
+  @override
+  Future<Object?> askPerson(String kind, Map<String, Object?> args) async => _editor.mounted ? askPersonDialog(_editor.context, _name, kind, args) : null;
+
+  @override
+  void message(String text) {
+    if (_editor.mounted) ScaffoldMessenger.of(_editor.context).showSnackBar(SnackBar(content: Text.verbatim(text)));
   }
 }

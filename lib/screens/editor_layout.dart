@@ -156,6 +156,7 @@ extension _EditorLayout on _FixedPageNoteEditorState {
           onPressed: _remindAboutNote,
         ),
       if (widget.locks != null && _on(Feature.lock)) _lockButton(),
+      ?_extensionsMenu(),
       if (_on(Feature.favorites))
       IconButton(
         key: const ValueKey('favorite-note'),

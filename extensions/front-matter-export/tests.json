@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "name": "yaml by default, the title heading is not repeated",
+      "kind": "exporter", "id": "page",
+      "settings": { "format": "yaml", "draft": false, "author": "Ann \"A\"" },
+      "context": { "date": "2026-01-02", "note": { "id": "n", "title": "Café Notes!", "markdown": "# Café Notes!\n\nHello", "tags": ["a", "b c"] } },
+      "expect": { "value": { "name": "cafe-notes.md", "text": "---\ntitle: \"Café Notes!\"\ndate: 2026-01-02\ndraft: false\nauthor: \"Ann \\\"A\\\"\"\ntags: [\"a\", \"b c\"]\n---\n\nHello\n" } }
+    },
+    {
+      "name": "toml",
+      "kind": "exporter", "id": "page",
+      "settings": { "format": "toml", "draft": true },
+      "context": { "date": "2026-01-02", "note": { "id": "n", "title": "T", "markdown": "text", "tags": [] } },
+      "expect": { "value": { "name": "t.md", "text": "+++\ntitle = \"T\"\ndate = 2026-01-02\ndraft = true\n+++\n\ntext\n" } }
+    }
+  ]
+}

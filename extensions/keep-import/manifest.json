@@ -1,0 +1,13 @@
+{
+  "id": "keep-import",
+  "name": "Google Keep import",
+  "version": "1.0.0",
+  "description": "Brings in notes from a Google Takeout of Keep (the zip, or the Keep folder): text notes, checklists, labels as tags, pictures. Trashed notes are left out.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["notes.import"],
+  "importers": [
+    { "id": "takeout", "title": "Google Keep", "accepts": ["zip", "folder", ".json"], "description": "In Google Takeout pick only Keep, and choose the zip you get." }
+  ]
+}

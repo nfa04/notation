@@ -1,0 +1,12 @@
+{
+  "id": "chess-block",
+  "name": "Chess boards",
+  "version": "1.0.0",
+  "description": "A code block written with the language chess (a position in FEN) is drawn as a chess board in the document. Click into it to change the position.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "blocks": [
+    { "id": "board", "title": "Chess board", "language": "chess" }
+  ]
+}

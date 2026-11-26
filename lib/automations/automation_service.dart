@@ -1,6 +1,9 @@
 import '../extensions/extension_service.dart';
+import '../extensions/extension_doors.dart' show FieldType;
 import '../extensions/extension_host.dart';
 import '../extensions/shared_api.dart';
+import '../extensions/more_api.dart';
+import '../citations/citation_repository.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -491,6 +494,7 @@ class AutomationService extends ChangeNotifier {
     final type = bus.type(e.type);
     if (type == null) return; // nobody said what this is
     final event = AutomationEvent.of(type);
+    unawaited(_reactExtensions(e));
     await run(event,
         noteId: e.noteId,
         title: e.title,
@@ -500,6 +504,33 @@ class AutomationService extends ChangeNotifier {
         todo: e.data['todo'] as TodoItem?,
         data: e.data);
     if (event == AutomationEvent.noteClosed && e.noteId != null) await scanTodos(e.noteId!, title: e.title, folderId: e.folderId);
+  }
+
+  /// The extensions that ask in their manifest to hear about an event (`on`) and the capture handlers for a page that was kept run for
+  /// it, without a rule of the person's; a failure of one of them is its own business and holds up nothing.
+  Future<void> _reactExtensions(AppEvent e) async {
+    final svc = _extensions;
+    if (svc == null || e.type.startsWith('ext:')) return; // (an extension's own events are for rules: no loops)
+    try {
+      final data = {...e.data}..remove('found')..remove('todo');
+      final context = {'event': e.type, 'note': {'id': e.noteId, 'title': e.title}, if (data.isNotEmpty) 'data': data};
+      ExtensionApi api() => _AutomationApi(svc, _notes, e.noteId, e.title, tags: _tags, cards: _cards, ai: _ai, citations: _citations?.repository);
+      for (final r in svc.reactingTo(e.type)) {
+        if (!svc.allowReaction(r.extension.id)) continue;
+        await svc.runAction(r.extension, r.action, event: context, api: api());
+      }
+      final url = e.data['url'];
+      if (e.type == AutomationEvent.captureReceived.name && url is String && e.noteId != null) {
+        final host = Uri.tryParse(url)?.host ?? '';
+        for (final h in svc.captureFor(host)) {
+          if (!svc.allowReaction(h.extension.id)) continue;
+          final text = await _notes.text.noteText(e.noteId!, limit: 20000);
+          await svc.runCapture(h.extension, h.handler, {'url': url, 'site': host, 'title': e.title, 'text': text, 'note': context['note']}, api());
+        }
+      }
+    } catch (err) {
+      debugPrint('[extensions] reaction to ${e.type}: $err');
+    }
   }
 
   /// Reads the words and the handwriting (as far as it was read for the search) of note [noteId] for lines that ask for something to
@@ -1628,7 +1659,19 @@ class AutomationService extends ChangeNotifier {
         final def = ext?.manifest.actions.where((x) => x.id == parts[1]).firstOrNull;
         if (ext == null || def == null) return tr('The extension action is not installed any more');
         if (!ext.enabled) return tr('The extension is switched off (see Settings)');
-        return svc.runAction(ext, def, event: {'event': event?.name, 'note': {'id': noteId, 'title': title}, if (data.isNotEmpty) 'data': {...data}..remove('found')..remove('todo')}, api: _AutomationApi(svc, _notes, noteId, title));
+        final params = <String, Object?>{
+          for (final f in def.fields)
+            f.id: () {
+              final raw = a.params['p.${f.id}'];
+              if (raw == null) return f.initial;
+              return switch (f.type) {
+                FieldType.number => num.tryParse(raw) ?? f.initial,
+                FieldType.boolean => raw == 'true',
+                _ => raw,
+              };
+            }(),
+        };
+        return svc.runAction(ext, def, params: params, event: {'event': event?.name, 'note': {'id': noteId, 'title': title}, if (data.isNotEmpty) 'data': {...data}..remove('found')..remove('todo')}, api: _AutomationApi(svc, _notes, noteId, title, tags: _tags, cards: _cards, ai: _ai, citations: _citations?.repository));
       case AutomationAction.saveNoteFile:
         final dir = a.params['dir'];
         if (dir == null || dir.trim().isEmpty) return tr('No folder chosen for the file');
@@ -1695,12 +1738,29 @@ String inkFingerprint(List<DrawingStroke> strokes) {
 }
 
 /// What an extension can do in an automation: read the note the event is about, and add tasks.
-class _AutomationApi extends SharedExtensionApi {
+class _AutomationApi extends SharedExtensionApi with MoreApi {
   final NoteRepository _notes;
   final String? _noteId;
   final String? _title;
+  final TagRepository? tags;
+  final CardRepository? cards;
+  final AiService? ai;
+  final CitationRepository? citations;
 
-  _AutomationApi(super.service, this._notes, this._noteId, this._title);
+  _AutomationApi(super.service, this._notes, this._noteId, this._title, {this.tags, this.cards, this.ai, this.citations});
+
+  @override
+  NoteRepository? get moreNotes => _notes;
+  @override
+  TagRepository? get moreTags => tags;
+  @override
+  CardRepository? get moreCards => cards;
+  @override
+  AiService? get moreAi => ai;
+  @override
+  CitationRepository? get moreCitations => citations;
+  @override
+  String? get moreNoteId => _noteId;
 
   @override
   Future<Map<String, Object?>> note() async {

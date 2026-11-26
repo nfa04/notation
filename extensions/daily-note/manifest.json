@@ -1,0 +1,18 @@
+{
+  "id": "daily-note",
+  "name": "Daily note",
+  "version": "1.0.0",
+  "description": "A command that makes today's note (or tells you it is there): from the template you write in its settings, tagged daily. Bind it to a key in Settings, Keyboard shortcuts.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["notes.readAll", "notes.manage"],
+  "commands": [
+    { "id": "today", "title": "Open or make today's note", "where": ["dashboard", "palette"] }
+  ],
+  "settings": [
+    { "id": "template", "title": "Template ({date} is today)", "type": "text", "default": "# {date}\n\n## To do\n\n## Notes\n" },
+    { "id": "folder", "title": "Folder (optional)", "type": "text" },
+    { "id": "ask", "title": "Ask before making it", "type": "boolean", "default": false }
+  ]
+}

@@ -11,6 +11,18 @@ reference, shortened, is what the *Create with AI* button gives the AI assistant
 - [The `notation` API](#the-notation-api)
 - [Brushes](#brushes-no-code)
 - [Drawing tools](#drawing-tools-drawadd)
+- [Transcript sources](#transcript-sources)
+- [Importers](#importers-notesimport)
+- [Exports](#exports)
+- [Commands](#commands)
+- [Settings, secrets and options of actions](#settings-secrets-and-options-of-actions)
+- [Asking the person](#asking-the-person)
+- [Code blocks](#code-blocks)
+- [Reacting to events and kept pages](#reacting-to-events-and-kept-pages)
+- [Tools for the assistant](#tools-for-the-assistant)
+- [Packages: modules, templates, versions](#packages-modules-templates-versions)
+- [The gallery](#the-gallery)
+- [Developing an extension](#developing-an-extension)
 - [Where tools and actions run](#where-tools-and-actions-run)
 - [Automations](#automations)
 - [Limits](#limits)
@@ -67,6 +79,19 @@ An extension is **off** when it is installed and has **no permission** until the
 | `actions` | no | the same shape, up to 20. |
 | `brushes` | no | up to 20 entries: pens that draw with a look the numbers describe, with no code and no permission. See [Brushes](#brushes-no-code). |
 | `drawTools` | with `draw.add` | up to 20 entries `{ "id", "title", "preview" }`: tools of the drawing bar that hand a drag of the pen to the script. See [Drawing tools](#drawing-tools-drawadd). |
+| `transcriptSources` | no | up to 20 entries `{ "id", "title", "hint" }` (`hint`: one line, up to 120 characters, saying what it takes): sources of [transcripts](#transcript-sources) for *New note from a transcript*. No permission of its own. |
+| `importers` | with `notes.import` | up to 20 entries `{ "id", "title", "accepts", "description" }`: `accepts` is a list of file endings (`".enex"`), `"folder"`, `"zip"` or `"account"` (no files: the script fetches). See [Importers](#importers-notesimport). |
+| `exporters` | with `note.read` | up to 20 entries `{ "id", "title", "extension" }` (`"tex"`, no dot): ways to save the open note as a file. See [Exports](#exports). |
+| `commands` | no | up to 20 entries `{ "id", "title", "where" }`; `where` is a list of `noteMenu`, `dashboard`, `palette`. See [Commands](#commands). |
+| `settings` | no | up to 30 fields `{ "id", "title", "type", "default", "choices" }` (`type`: `text`, `number`, `boolean`, `choice`, `secret`, `date`) the person sets in Settings. See [Settings](#settings-secrets-and-options-of-actions). |
+| `actions[].fields` | no | up to 8 fields of the same kind (not `secret`) that the rule of an automation asks for; the script reads them as `ctx.params`. |
+| `on` | no | an object of event name to the id of one of its actions, `{ "noteClosed": "tidy" }`: that action runs for the event by itself. See [Reacting](#reacting-to-events-and-kept-pages). |
+| `capture` | no | up to 20 entries `{ "id", "title", "sites" }` (`["arxiv.org"]`): handlers for pages that were kept from those websites. |
+| `blocks` | no | up to 20 entries `{ "id", "title", "language" }`: a code block of that language is drawn by the extension. See [Code blocks](#code-blocks). |
+| `agentTools` | not with `network` | up to 10 entries `{ "id", "title", "description", "args" }`: tools the assistant may call. See [Tools for the assistant](#tools-for-the-assistant). |
+| `templates` | no | up to 30 entries `{ "id", "title", "file" }`: a `.md` file of the package that becomes a template for new notes. |
+| `modules` | no | up to 10 more `.js` files of the package that run before `main`, in this order. |
+| `apiVersion` | no | the version of this API the extension was written for (now `2`); one written for a newer version is refused with a reason. |
 | `events` | with `events.emit` | the same shape, up to 20: the events the extension [announces](#events-an-extension-announces). Only with the permission `events.emit` (and `events.emit` needs at least one). |
 
 A manifest that is wrong is refused with the reason, and nothing is installed.
@@ -79,10 +104,10 @@ error the script can catch (`This extension did not ask for the permission "…"
 | permission | lets the script | calls |
 |---|---|---|
 | *(none)* | work on the text it is given, show a message, keep a little data of its own | `ctx`, `notation.ui.message`, `notation.storage.*` |
-| `note.read` | read the text and the title of the note it is used on, how it is formatted, which pages it has and what is on them | `notation.note.get`, `notation.note.inspect`, `notation.pdf.read`, `notation.pdf.search`, `notation.pages.list`, `notation.textBoxes.list`, `notation.images.list` |
+| `note.read` | read the text and the title of the note it is used on, how it is formatted, which pages it has and what is on them | `notation.note.get`, `notation.note.inspect`, `notation.pdf.read`, `notation.pdf.search`, `notation.pages.list`, `notation.textBoxes.list`, `notation.images.list`, `notation.ink.read`, `notation.ink.strokes` |
 | `note.write` | insert text into the note, replace the selection or other text, format text, set the title, and place, move and delete text boxes and pictures | `notation.note.insertText`, `notation.note.setTitle`, `notation.selection.replace`, `notation.note.replaceText`, `notation.note.format`, `notation.note.resolveChanges`, `notation.textBoxes.add`, `notation.textBoxes.move`, `notation.textBoxes.delete`, `notation.images.move`, `notation.images.delete` |
 | `notes.readAll` | search, list and read **all** of the person's notes, not only the one it is used on, and see the folders | `notation.notes.search`, `notation.notes.read`, `notation.notes.list`, `notation.folders.list` |
-| `notes.manage` | create notes and folders, rename folders, and file notes in folders and give them tags | `notation.notes.create`, `notation.note.addTags`, `notation.note.moveToFolder`, `notation.notes.move`, `notation.notes.tag`, `notation.notes.favorite`, `notation.folders.create`, `notation.folders.rename` |
+| `notes.manage` | create notes and folders, rename folders, and file notes in folders and give them tags | `notation.notes.create`, `notation.note.addTags`, `notation.note.moveToFolder`, `notation.notes.move`, `notation.notes.tag`, `notation.notes.favorite`, `notation.folders.create`, `notation.folders.rename`, `notation.citations.add` |
 | `notes.delete` | put notes in the trash and bring them back (nothing is deleted for good) | `notation.notes.trash`, `notation.notes.restore` |
 | `pages.edit` | add, delete and move the pages of the note it is used on, and set up their paper | `notation.pages.add`, `notation.pages.delete`, `notation.pages.move`, `notation.pages.setup` |
 | `draw.page` | draw lines and shapes on the pages of the note it is used on (directly, not through a drawing tool) | `notation.draw.shape`, `notation.draw.strokes` |
@@ -94,6 +119,9 @@ error the script can catch (`This extension did not ask for the permission "…"
 | `clipboard.write` | put text on the clipboard | `notation.clipboard.write` |
 | `network` | send https requests to the websites in `hosts` and no others | `notation.network.fetch` |
 | `draw.add` | draw lines on the page, with the drawing tools it lists in `drawTools` | `notation.drawTool` (what the handler returns) |
+| `notes.import` | bring in notes from other apps and services, with the importers it lists | the handler of an [importer](#importers-notesimport) |
+| `ai.use` | ask the AI the person chose in the settings (on the device or on a server; what is asked goes there) | `notation.ai.complete` |
+| `assistant.tool` | not for a manifest: what the assistant asks the person when it wants to call a [tool of an extension](#tools-for-the-assistant) | |
 | `events.emit` | announce the events it lists in `events`, which automations can react to | `notation.events.emit` |
 
 A tool that only returns a string (or `{ replace, insert, message }`) needs **no** permission: the app puts the result in place itself. Ask
@@ -151,6 +179,13 @@ Arguments of the wrong kind fail with a message such as `"text" has to be text.`
 |---|---|
 | `notation.tool(id, fn)` | `fn(ctx)` for the tool `id` of the manifest |
 | `notation.action(id, fn)` | `fn(ctx)` for the action `id` of the manifest |
+| `notation.transcriptSource(id, fn)` | `fn(ctx)` for the transcript source `id` of the manifest (see [Transcript sources](#transcript-sources)) |
+| `notation.importer(id, fn)` | `fn(ctx)` for the importer `id` ([Importers](#importers-notesimport)) |
+| `notation.exporter(id, fn)` | `fn(ctx)` for the exporter `id` ([Exports](#exports)) |
+| `notation.command(id, fn)` | `fn(ctx)` for the command `id` ([Commands](#commands)) |
+| `notation.block(id, fn)` | `fn(ctx)` for the block `id` ([Code blocks](#code-blocks)) |
+| `notation.agentTool(id, fn)` | `fn(ctx)` for the tool `id` of the assistant ([Tools for the assistant](#tools-for-the-assistant)) |
+| `notation.capture(id, fn)` | `fn(ctx)` for the capture handler `id` ([Reacting](#reacting-to-events-and-kept-pages)) |
 | `notation.drawTool(id, fn)` | `fn(ctx)` for the drawing tool `id` of the manifest (see [Drawing tools](#drawing-tools-drawadd)) |
 
 ### The note (`note.read`, `note.write`)
@@ -278,6 +313,7 @@ An unknown `id` fails with a message that says to look at `tasks.list` for the i
 - `url` has to be `https://` and its host has to be listed in the manifest's `hosts` (exactly: `api.example.com` does not allow `example.com`).
 - `method` defaults to `GET`; `headers` is an object of strings; `body` a string (`JSON.stringify(...)` for JSON).
 - No redirects are followed; an answer larger than 1 MB fails. Parse JSON yourself: `JSON.parse(res.body)`.
+- `responseType: "base64"` returns the body as base64 (for pictures and files); importers may fetch up to 20 MB.
 - A status of 4xx/5xx is **not** an error: look at `res.status`.
 
 ### Events an extension announces (`events.emit`)
@@ -305,6 +341,12 @@ What the extension keeps between runs: one JSON object per extension, at most 64
 | call | |
 |---|---|
 | `await notation.ui.message(text)` | shows a short message (a snack bar) in a **tool** (up to 2000 characters); in an action it does nothing, return the text instead |
+| `await notation.ui.confirm(text)` | asks yes or no; `true` or `false`. See [Asking the person](#asking-the-person) |
+| `await notation.ui.choose(title, items)` | the item chosen from a list of texts, or `null` |
+| `await notation.ui.form(title, fields)` | a form of `fields` (`{ id, title, type, default, choices }`): the values by id, or `null` when cancelled |
+| `await notation.ui.progress(text, fraction)` | shows how far a long job is (`fraction` 0 to 1, or `null` when not known) |
+| `await notation.settings.get()` | the values of the `settings` of the manifest (a `secret` is never in it) |
+| `await notation.secrets.get(key)` / `notation.secrets.set(key, value)` / `.remove(key)` | text kept in the secure storage of the device, one place for each extension, never synced and never shown again; a `secret` setting is read here under its id |
 | `console.log(...)` | goes to the app's log (at most 50 lines of 500 characters are kept) |
 
 ## Brushes (no code)
@@ -363,6 +405,178 @@ notation.drawTool('ruler', (ctx) => ({
 - Each stroke: `points` (`[x, y]` pairs, 2 to 5000), and optionally `color` (`#rgb`, `#rrggbb`, `#rrggbbaa`), `width` (0.1 to 300), `dash` (`solid`, `dashed`, `dotted`), `fill` (a colour, for a closed line) and `brush` (`pen`, `roller` or the id of a brush that is on; anything else is the pen). Colour and width left out are those of `ctx`.
 - At most 200 strokes and 20 000 points in all, and coordinates within 100 000 of the page; an answer that is not right draws nothing and the person is told why.
 - What is drawn is one step to take back, and counts as drawn by the person.
+
+## Transcript sources
+
+*New note from a transcript* (the dashboard's New Note menu) makes a note from the captions of a video: the person pastes captions or picks a caption file
+(SRT, WebVTT, YouTube's JSON and XML), or, with an extension that has a **transcript source**, types an address and has the extension fetch the
+captions. The app makes the note itself (one paragraph for about each minute, each starting with its time, a link to that point in the video when the
+source is an address); the extension only answers with the captions. It cannot read or change any note, so it needs no permission of its own; what it
+fetches goes through `network` and its `hosts`, as for any extension. Sources are not available in the browser (extensions cannot run there).
+
+```json
+"permissions": ["network"],
+"hosts": ["www.youtube.com"],
+"transcriptSources": [{ "id": "youtube", "title": "YouTube", "hint": "A YouTube link" }]
+```
+
+`notation.transcriptSource(id, async (ctx) => result)`:
+
+- `ctx.input`: the text the person typed in the address field (an address, as typed: check it yourself).
+- The **result** is an object with either
+  - `segments`: `[{ start, end, text }]`, with `start` and `end` in seconds from the start of the video (`end` is optional; `start` is not), or
+  - `captions`: `{ text }`, a caption file as text (SRT, WebVTT, YouTube JSON or XML) which the app reads, so a script that is handed a caption file
+    does not have to take it apart;
+
+  and optionally `title` (the note's title when the person gave none), `language` (a code such as `en`) and `source` (the address of the video, used for
+  the links on the times; only `http` and `https` addresses with no spaces are kept, else what was typed is used).
+- To refuse, throw an `Error` with a sentence for the person (`No captions for this video.`): it is shown in the dialog as it is.
+- At most 100 000 lines; a line of text is cut at 5000 characters; a caption file may be 8 MB. An answer that is not right is refused with the reason.
+- The usual [limits](#limits) hold: 15 seconds for the whole run, an answer of at most 1 MB per request. Use a request that returns the captions only, not a whole web page.
+
+A working source for YouTube is in [`extensions/youtube-transcripts/`](../extensions/youtube-transcripts/) (`manifest.json` and `main.js`): zip the two files
+and install the zip in *Settings → Extensions*, switch it on and give it the permission `network`. It asks YouTube's player endpoint for the list of caption
+tracks and downloads one (a track written by a person in the video's spoken language first, else the automatic one). YouTube offers this for no outside
+use and can change it at any time; when it breaks, this one script is what to fix.
+
+```js
+// the shape of a source (not a working one): the words come from an address the person typed
+notation.transcriptSource('youtube', async (ctx) => {
+  const id = (ctx.input.match(/(?:v=|youtu\.be\/)([\w-]{11})/) || [])[1];
+  if (!id) throw new Error('This is not a YouTube link.');
+  const res = await notation.network.fetch('https://www.youtube.com/api/timedtext?v=' + id + '&lang=en&fmt=json3');
+  if (res.status !== 200 || !res.body) throw new Error('No captions for this video.');
+  return { captions: { text: res.body }, source: 'https://www.youtube.com/watch?v=' + id, language: 'en' };
+});
+```
+
+## Importers (`notes.import`)
+
+An importer brings notes in from another app. It shows in *Import from other apps* as `<extension name>: <title>`. Manifest: `importers`
+(`{ id, title, accepts, description }`) and the permission `notes.import`. An importer that fetches from a website (`accepts: ["account"]`)
+also needs `network`.
+
+```js
+notation.importer('enex', async (ctx) => {
+  const notes = [];
+  for (const f of ctx.files) {                 // [{ path, name, size, read(), readBytes() }]
+    const text = await f.read();               // text; readBytes() gives base64
+    notation.ui.progress('Reading ' + f.name, notes.length / ctx.files.length);
+    notes.push({ path: 'Notebook/' + f.name, title: f.name, markdown: text, tags: ['imported'],
+                 attachments: [{ name: 'a.png', base64: '...' }], sourceId: 'id-in-the-other-app' });
+  }
+  return { notes, notices: ['2 notes had no title'] };
+});
+```
+
+- The handler **returns** notes, it does not write them. The app makes folders from `path`, turns `[[Title]]` and `[[Title|text]]` into links to
+  the notes made, turns `[text](source:<sourceId>)` into links to the note with that `sourceId`, keeps the pictures, and shows the same report as
+  the built-in importers. Nothing is made if the answer is wrong (at most 20000 notes, 2 MB of Markdown each, 60 attachments each, 400 MB in all).
+- `sourceId` (up to 200 characters, unique in the answer) makes a second run **update** the notes it made before instead of making them again.
+- Files are read when the script asks (`read()`), so a big export is not copied into the engine. A zip is opened by the app and given as files.
+- An importer runs with more room than other handlers: up to 5 minutes, 128 MB, 20 seconds for each piece of work. It can use `notation.ui.*` and `notation.ui.progress`.
+- `await notation.network.fetch(url, { responseType: "base64" })` answers with the body as base64 (pictures, PDFs); the limit is 20 MB for importers.
+
+## Exports
+
+An exporter saves the open note as a file in a format of its own. Manifest: `exporters` (`{ id, title, extension }`) and the permission `note.read`.
+It shows in the note's *Commands and exports of your extensions* menu.
+
+```js
+notation.exporter('page', async (ctx) => {
+  // ctx.note: { id, title, markdown, tags, pages }
+  return { name: ctx.note.title, text: '---\ntitle: ' + ctx.note.title + '\n---\n' + ctx.note.markdown };  // or { name, base64 }
+});
+```
+
+The name gets the extension of the exporter; the file is at most 50 MB.
+
+## Commands
+
+A command needs no selected text. Manifest: `commands` (`{ id, title, where }`; `where` is any of `noteMenu`, `dashboard`, `palette`). It shows in
+the note's extensions menu, on the dashboard (*Commands of your extensions*) and in the command list, and every command is also an action of
+*Settings → Keyboard shortcuts* (`ext.<extension id>/<command id>`) that can be bound to a key.
+
+```js
+notation.command('today', async (ctx) => {   // ctx: { noteId, selection, text } (those that exist)
+  const id = await notation.notes.create('Today', '# Today');
+  return { message: 'Made it' };
+});
+```
+
+## Settings, secrets and options of actions
+
+`settings` in the manifest are fields (`text`, `number`, `boolean`, `choice` with `choices`, `date`, `secret`) that the person fills in
+under the extension in *Settings → Extensions*. The script reads them with `notation.settings.get()`. A `secret` (an API key) goes to the
+secure storage of the device, is never synced, is not in `settings.get()` and is read with `notation.secrets.get(id)`.
+
+`actions[].fields` does the same for one action: the rule of an automation asks for them and the script reads the values as `ctx.params`.
+
+## Asking the person
+
+`notation.ui.confirm`, `notation.ui.choose`, `notation.ui.form` and `notation.ui.progress` work in tools, commands, importers and exporters,
+where the person is. In an action that runs in the background (an automation) and in the assistant they fail with a sentence, so a script
+cannot put a dialog on the screen unasked. The app draws every dialog: there is no HTML and no free layout. `form` takes fields like the
+`settings` and answers with the values by id, or `null` when the person cancels.
+
+## Code blocks
+
+Manifest: `blocks` (`{ id, title, language }`). A fenced code block with that language is drawn by the extension in the editor and the reading
+view (exports show the source). The handler gets the text and the room there is and answers with shapes, never HTML:
+
+```js
+notation.block('board', (ctx) => {   // ctx: { text, width }
+  return { width: 320, height: 320,
+           strokes: [{ points: [[0, 0], [320, 0]], color: '#000000', width: 1 }],   // as drawing tools return
+           texts: [{ x: 10, y: 10, text: 'a', size: 20, color: '#000000' }] };
+});
+```
+
+The answer is kept for the text and the width (in steps of 100), so the script runs once for each change, not once for each frame. An error
+shows as a one-line message in place of the drawing.
+
+## Reacting to events and kept pages
+
+- `on` in the manifest, `{ "noteClosed": "tidy" }`: the action `tidy` runs by itself for the event, with no rule built. The events are
+  `noteCreated`, `noteOpened`, `noteClosed`, `notePaused`, `appStarted`, `taskCompleted`, `captureReceived`, `pdfImported` and `noteLinked`; the person
+  can switch the reactions off by switching the extension off. At most 30 runs a minute for each extension.
+- `capture` (`{ id, title, sites }`): a handler for pages kept from those websites (`captureReceived`). `notation.capture(id, async (ctx) => ...)` gets
+  `{ url, site, title, text }` and may add to the new note.
+- More to read: `notation.notes.links(id?)` and `notation.notes.backlinks(id?)`, `notation.notes.byTag(tag)`, `notation.tags.list()`,
+  `notation.cards.list()` and `notation.cards.due()`, `notation.citations.search(query)` and `notation.citations.add(entry)`,
+  `notation.ink.read({ page })` (what the handwriting reader has already read, never runs it) and `notation.ink.strokes({ page })`.
+- `notation.ai.complete(prompt, { maxTokens })` (`ai.use`) asks the AI the person chose; at most 5 calls for each run.
+
+## Tools for the assistant
+
+Manifest: `agentTools` (`{ id, title, description, args }`; `args` is an object of argument name to a short description), up to 10, **not** in
+an extension with `network` (a page the assistant read must not be able to make it send a note away). `notation.agentTool(id, async (ctx) => ...)`
+gets `ctx.args` and returns text or JSON, which is what the assistant is told. In *Agent* mode the assistant sees it as `ext_<extension id>_<tool id>`
+and the person is asked each time (the permission `assistant.tool` is that question; it is not for a manifest). Ask mode never calls them.
+
+## Packages: modules, templates, versions
+
+A zip can hold more than `manifest.json` and `main.js`. `modules` lists more `.js` files that run first (one global scope, so they can share
+functions); `templates` (`{ id, title, file }`) names `.md` files that become templates for new notes (`{date}` and `{title}` are filled in);
+`apiVersion` is the version of this API the extension was written for (now `2`): a newer one is refused with a reason instead of failing
+in odd places.
+
+## The gallery
+
+*Settings → Extensions → Gallery* lists the extensions of the index at `extensions/index.json` of the project's repository (a plain file; no
+server of ours). Each entry has the name, version, permissions, the download address and the `sha256` of the zip. The app checks the hash and
+that the zip is on the same website as the index, then shows the same review as for any install (what it asks for) before it installs. A newer
+version that asks for more permissions asks again. `dart run tool/build_extensions.dart` zips every folder of `extensions/` and writes the index.
+
+## Developing an extension
+
+- *Settings → Extensions → Load from a folder* (desktop) runs the extension in a folder and loads it again when a file there changes.
+  *Stop* ends that.
+- Each extension has a console (what `console.log` wrote, at most 50 lines).
+- `docs/notation.d.ts` has the types of the whole `notation` object for an editor.
+- Tests: a `tests.json` next to the manifest holds cases (`kind`, `id`, `context`, `note`, `notes`, `settings`, `secrets`, `files`, `fetches`,
+  `answers`, `expect`; see `tool/ext_runner.dart`). Run them with
+  `EXT_DIR=extensions/my-extension LD_LIBRARY_PATH=build/linux/x64/debug/bundle/lib flutter test tool/ext_test.dart`.
 
 ## Where tools and actions run
 

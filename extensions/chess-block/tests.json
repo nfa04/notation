@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {
+      "name": "the starting position: 64 squares, 32 pieces",
+      "kind": "block", "id": "board",
+      "context": { "text": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "width": 400 },
+      "expect": { "value": { "width": 320, "height": 320, "width": 320 } }
+    },
+    { "name": "a bad row is explained", "kind": "block", "id": "board", "context": { "text": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN", "width": 400 }, "expect": { "error": "has 7 squares" } },
+    { "name": "not a FEN", "kind": "block", "id": "board", "context": { "text": "hello", "width": 400 }, "expect": { "error": "8 rows" } }
+  ]
+}

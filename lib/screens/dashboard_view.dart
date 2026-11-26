@@ -38,7 +38,9 @@ import '../review/weekly_review_service.dart';
 import 'weekly_review_dialog.dart';
 import '../data/card_repository.dart';
 import 'note_file_actions.dart';
+import '../extensions/extension_service.dart' show ExtensionService;
 import 'import_from_apps.dart';
+import 'transcript_import.dart';
 import '../data/tag_repository.dart';
 import 'template_picker.dart';
 import '../templates/templates.dart';
@@ -56,6 +58,12 @@ class DashboardView extends StatefulWidget {
   final NoteRepository repository;
   final ValueChanged<String> onOpenNote;
   final NoteFileService? noteFiles;
+
+  /// Opens the list of commands of the extensions (shown when an extension that is on has one); null: not here.
+  final VoidCallback? onCommands;
+
+  /// The extensions: their transcript sources are offered in "New note from a transcript"; null: none.
+  final ExtensionService? extensions;
 
   /// Notes from templates; null hides the buttons.
   final TemplateService? templates;
@@ -105,7 +113,7 @@ class DashboardView extends StatefulWidget {
   /// The tags notes can have (the tags of imported notes are set through it); null: none are set.
   final TagRepository? tags;
 
-  const DashboardView({super.key, this.tags, this.planner, this.onOpenNoteAt, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh, this.onOpenLearning});
+  const DashboardView({super.key, this.tags, this.planner, this.onOpenNoteAt, required this.repository, required this.onOpenNote, this.noteFiles, this.extensions, this.onCommands, this.templates, this.onJoinSession, this.collab, this.previews, this.speech, this.sync, this.cards, this.reminders, this.audio, this.capture, this.review, this.automations, this.refresh, this.onOpenLearning});
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -378,18 +386,30 @@ class _DashboardViewState extends State<DashboardView> {
         ),
       (key: 'new-from-pdf', icon: Symbols.picture_as_pdf, label: tr('New note from a PDF'), onTap: _fromPdf, widget: null),
       (
+        key: 'new-from-transcript',
+        icon: Symbols.subtitles,
+        label: tr('New note from a transcript'),
+        onTap: () async {
+          await showTranscriptImport(context, repository: widget.repository, onOpenNote: widget.onOpenNote, sources: widget.extensions?.transcriptChoices ?? const [], speech: widget.speech);
+          if (mounted) _reload();
+        },
+        widget: null,
+      ),
+      if (widget.onCommands != null && (widget.extensions?.commands().isNotEmpty ?? false))
+        (key: 'extension-commands', icon: Symbols.extension, label: tr('Commands of your extensions'), onTap: widget.onCommands!, widget: null),
+      (
         key: 'import-from-apps',
         icon: Symbols.move_to_inbox,
         label: tr('Bring your notes from another app'),
         onTap: () async {
-          await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
+          await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote, extensions: widget.extensions);
           if (mounted) _reload();
         },
         widget: null,
       ),
     ];
     // (what makes a note is in the menu of the "New Note" button; the title bar keeps what is about the notes you have)
-    const makers = {'quick-note', 'clip-page', 'record-meeting', 'new-from-template', 'open-note-file', 'new-from-pdf', 'import-from-apps'};
+    const makers = {'quick-note', 'clip-page', 'record-meeting', 'new-from-template', 'open-note-file', 'new-from-pdf', 'new-from-transcript', 'import-from-apps'};
     final makes = [for (final t in tools) if (makers.contains(t.key)) t];
     final about = [for (final t in tools) if (!makers.contains(t.key)) t];
     return Scaffold(
@@ -565,7 +585,7 @@ class _DashboardViewState extends State<DashboardView> {
           TextButton.icon(
             key: const ValueKey('empty-import'),
             onPressed: () async {
-              await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote);
+              await showImportFromApps(context, repository: widget.repository, tags: widget.tags, onOpenNote: widget.onOpenNote, extensions: widget.extensions);
               if (mounted) _reload();
             },
             icon: const Icon(Symbols.move_to_inbox),

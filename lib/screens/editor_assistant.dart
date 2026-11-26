@@ -88,7 +88,7 @@ extension _EditorAssistant on _FixedPageNoteEditorState {
           await repo.settings.set('$_chatSetting$id', json);
         }
       },
-      agent: NoteAgent(api: _EditorAgentApi(this), selected: () => _currentSelectedText, copies: () => [for (final c in _agentTexts()) scratchCopy(c)],
+      agent: NoteAgent(api: _EditorAgentApi(this), more: widget.extensions == null ? null : () => extensionAgentTools(widget.extensions!), selected: () => _currentSelectedText, copies: () => [for (final c in _agentTexts()) scratchCopy(c)],
         beforeChange: (what) => _keepVersion(VersionReason.assistantBefore, what),
         afterChange: (what) => _keepVersion(VersionReason.assistant, what),
       ),
@@ -481,6 +481,23 @@ mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi, ManageNotesApi {
           'images': (e._imagesPerPage[i] ?? const []).length,
           'width': e._paperWidth.round(),
           'height': e._heightOf(i).round(),
+        },
+    ];
+  }
+
+  @override
+  Future<List<Map<String, Object?>>> inkStrokes({int? page}) async {
+    final e = _editor;
+    if (e._infinite) throw ExtensionError('This note is an infinite canvas: it has no pages.');
+    final i = (page ?? e._visiblePage().$1 + 1) - 1;
+    if (i < 0 || i >= e._pageCount) throw ExtensionError('There is no page ${i + 1}: the note has ${e._pageCount} pages.');
+    double r(double v) => (v * 10).roundToDouble() / 10;
+    return [
+      for (final s in (e._strokesPerPage[i] ?? const []).take(300))
+        {
+          'points': [for (final p in s.points.take(500)) [r(p.dx), r(p.dy)]],
+          'color': colorToHex(s.color),
+          'width': s.width,
         },
     ];
   }

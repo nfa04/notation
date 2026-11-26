@@ -9,6 +9,7 @@ import '../citations/citation_service.dart';
 import '../models/rich_text.dart';
 import 'markdown_parser.dart';
 import 'code_highlight.dart';
+import 'extension_block.dart';
 import 'document_images.dart';
 import '../widgets/bounded_image.dart';
 import 'remote_image.dart';
@@ -232,6 +233,9 @@ class MarkdownView extends StatelessWidget {
   Widget _code(MdBlock b, List<MdBlock> blocks) {
     // (several blocks of code in one text need keys of their own; the first keeps the plain one)
     final nth = blocks.where((x) => x.type == MdBlockType.code).toList().indexOf(b);
+    if (ExtensionBlocks.handles(b.lang)) {
+      return LayoutBuilder(builder: (context, box) => ExtensionBlockView(language: b.lang, code: b.code, width: box.maxWidth.isFinite ? box.maxWidth : 600, fontSize: fontSize, textColor: textColor));
+    }
     final dark = textColor.computeLuminance() > 0.5;
     final mono = TextStyle(fontFamily: 'monospace', fontSize: fontSize * 0.9, height: 1.35, color: textColor);
     return Container(

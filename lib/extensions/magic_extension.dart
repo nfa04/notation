@@ -130,6 +130,10 @@ class MagicExtension {
     ExtensionPermission.clipboard: RegExp(r'notation\s*\.\s*clipboard\s*\.\s*write\b'),
     ExtensionPermission.network: RegExp(r'notation\s*\.\s*network\s*\.\s*fetch\b'),
     ExtensionPermission.eventsEmit: RegExp(r'notation\s*\.\s*events\s*\.\s*emit\b'),
+    ExtensionPermission.notesImport: RegExp(r'notation\s*\.\s*importer\b'),
+    ExtensionPermission.aiUse: RegExp(r'notation\s*\.\s*ai\s*\.\s*complete\b'),
+    ExtensionPermission.notesReadAll: RegExp(r'notation\s*\.\s*(?:notes\s*\.\s*(?:links|backlinks|byTag)|tags\s*\.\s*list|cards\s*\.\s*(?:list|due)|citations\s*\.\s*search)\b'),
+    ExtensionPermission.notesManage: RegExp(r'notation\s*\.\s*citations\s*\.\s*add\b'),
   };
 
   static bool _registers(String script, String kind, String id) => RegExp('notation\\s*\\.\\s*$kind\\s*\\(\\s*[\'"`]${RegExp.escape(id)}[\'"`]').hasMatch(script);
@@ -191,12 +195,27 @@ class MagicExtension {
     } on ManifestException catch (e) {
       throw MagicProblem('The manifest is wrong: ${e.message}');
     }
-    if (manifest.tools.isEmpty && manifest.actions.isEmpty) throw MagicProblem('The manifest has no "tools" and no "actions": the extension would do nothing.');
+    final adds = manifest.tools.length + manifest.actions.length + manifest.importers.length + manifest.exporters.length + manifest.commands.length +
+        manifest.blocks.length + manifest.agentTools.length + manifest.capture.length + manifest.templates.length + manifest.brushes.length +
+        manifest.drawTools.length + manifest.transcriptSources.length;
+    if (adds == 0) throw MagicProblem('The manifest adds nothing (no "tools", "actions", "importers", "commands"...): the extension would do nothing.');
     for (final t in manifest.tools) {
       if (!_registers(script, 'tool', t.id)) throw MagicProblem('The script has no handler for the tool "${t.id}": add notation.tool(\'${t.id}\', (ctx) => ...).');
     }
     for (final a in manifest.actions) {
       if (!_registers(script, 'action', a.id)) throw MagicProblem('The script has no handler for the action "${a.id}": add notation.action(\'${a.id}\', async (ctx) => ...).');
+    }
+    for (final (kind, ids) in [
+      ('importer', [for (final x in manifest.importers) x.id]),
+      ('exporter', [for (final x in manifest.exporters) x.id]),
+      ('command', [for (final x in manifest.commands) x.id]),
+      ('block', [for (final x in manifest.blocks) x.id]),
+      ('agentTool', [for (final x in manifest.agentTools) x.id]),
+      ('capture', [for (final x in manifest.capture) x.id]),
+    ]) {
+      for (final id in ids) {
+        if (!_registers(script, kind, id)) throw MagicProblem('The script has no handler for the $kind "$id": add notation.$kind(\'$id\', async (ctx) => ...).');
+      }
     }
     final syntax = extensions.checkScript(script);
     if (syntax != null) throw MagicProblem('The script has an error: $syntax');

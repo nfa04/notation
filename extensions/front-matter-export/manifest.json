@@ -1,0 +1,18 @@
+{
+  "id": "front-matter-export",
+  "name": "Blog page export",
+  "version": "1.0.0",
+  "description": "Saves the open note as a page for a static site (Hugo, Jekyll, Eleventy): Markdown with a front matter of the title, the date and the tags.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["note.read"],
+  "exporters": [
+    { "id": "page", "title": "Blog page (Markdown with front matter)", "extension": "md" }
+  ],
+  "settings": [
+    { "id": "format", "title": "Front matter", "type": "choice", "choices": ["yaml", "toml"], "default": "yaml" },
+    { "id": "draft", "title": "Mark pages as drafts", "type": "boolean", "default": true },
+    { "id": "author", "title": "Author", "type": "text" }
+  ]
+}

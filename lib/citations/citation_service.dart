@@ -13,6 +13,9 @@ import 'source.dart';
 class CitationService extends ChangeNotifier {
   final CitationRepository _repository;
 
+  /// Where the sources are kept (for the extension API).
+  CitationRepository get repository => _repository;
+
   /// The notes that cite each key, by key (those of the notes that are not locked or deleted); asked with what tells a key of the
   /// library from a name in a sentence. Null: not known here, and the library does not say where a source is cited.
   final Future<Map<String, List<NoteRef>>> Function(bool Function(String key) isSource)? _citedIn;

@@ -1,0 +1,133 @@
+{
+  "extensions": [
+    {
+      "id": "bear-import",
+      "name": "Bear import",
+      "version": "1.0.0",
+      "description": "Brings in Bear notes exported as TextBundle (Bear: File, Export Notes, TextBundle; pick the folder or a zip of it). Pictures and #tags are kept.",
+      "author": "Notation",
+      "permissions": [
+        "notes.import"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/bear-import-1.0.0.zip",
+      "sha256": "2aba812e8ecaa2a5eb944065f5cae067083a1ebd509267da1cd114d89f53f1c7",
+      "size": 1548
+    },
+    {
+      "id": "front-matter-export",
+      "name": "Blog page export",
+      "version": "1.0.0",
+      "description": "Saves the open note as a page for a static site (Hugo, Jekyll, Eleventy): Markdown with a front matter of the title, the date and the tags.",
+      "author": "Notation",
+      "permissions": [
+        "note.read"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/front-matter-export-1.0.0.zip",
+      "sha256": "3d5f818e64c2f4af223962841ca256be97031aeefcea2e8b346f3a39f372002d",
+      "size": 1169
+    },
+    {
+      "id": "chess-block",
+      "name": "Chess boards",
+      "version": "1.0.0",
+      "description": "A code block written with the language chess (a position in FEN) is drawn as a chess board in the document. Click into it to change the position.",
+      "author": "Notation",
+      "permissions": [],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/chess-block-1.0.0.zip",
+      "sha256": "2039187b28755e40e94b582c88c5ce0262ad6827d1952b1da0f5b6012397f051",
+      "size": 1293
+    },
+    {
+      "id": "daily-note",
+      "name": "Daily note",
+      "version": "1.0.0",
+      "description": "A command that makes today's note (or tells you it is there): from the template you write in its settings, tagged daily. Bind it to a key in Settings, Keyboard shortcuts.",
+      "author": "Notation",
+      "permissions": [
+        "notes.readAll",
+        "notes.manage"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/daily-note-1.0.0.zip",
+      "sha256": "d245d5f21147b5d417147062b5be215db2abc73be2cffc120fb67b6ff76c8eac",
+      "size": 1032
+    },
+    {
+      "id": "evernote-import",
+      "name": "Evernote import",
+      "version": "1.0.0",
+      "description": "Brings in notes from Evernote .enex files (File, Export notes in Evernote): text with its formatting, checklists, links, tags and pictures. Notebooks you export one by one become folders by their file names.",
+      "author": "Notation",
+      "permissions": [
+        "notes.import"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/evernote-import-1.0.0.zip",
+      "sha256": "2a46fbdee3fed10314442b8a640801cd588483e7e8a5f1c431fcd0bd0cd96ce3",
+      "size": 4637
+    },
+    {
+      "id": "keep-import",
+      "name": "Google Keep import",
+      "version": "1.0.0",
+      "description": "Brings in notes from a Google Takeout of Keep (the zip, or the Keep folder): text notes, checklists, labels as tags, pictures. Trashed notes are left out.",
+      "author": "Notation",
+      "permissions": [
+        "notes.import"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/keep-import-1.0.0.zip",
+      "sha256": "54260d35cf8fa033c454f7119071ac6b82d348944267674a5c1b9de1679493db",
+      "size": 1571
+    },
+    {
+      "id": "joplin-import",
+      "name": "Joplin import",
+      "version": "1.0.0",
+      "description": "Brings in a Joplin export: the .jex file (File, Export all, JEX) or the folder of a RAW export. Notebooks become folders, tags and pictures are kept, links between notes keep working.",
+      "author": "Notation",
+      "permissions": [
+        "notes.import"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/joplin-import-1.0.0.zip",
+      "sha256": "b92a83f91ea42a9b6718574df1553422fba78e23e404b5747672b3e1c6c895f1",
+      "size": 3094
+    },
+    {
+      "id": "simplenote-import",
+      "name": "Simplenote import",
+      "version": "1.0.0",
+      "description": "Brings in the notes of a Simplenote export (the zip, or its notes.json): the first line is the title, tags are kept, notes in the trash are left out.",
+      "author": "Notation",
+      "permissions": [
+        "notes.import"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/simplenote-import-1.0.0.zip",
+      "sha256": "dfb7b1f3fc097044dfa94844a83f1bfea97fdcc9ce74f5c660031753e4bf376b",
+      "size": 1205
+    },
+    {
+      "id": "standard-notes-import",
+      "name": "Standard Notes import",
+      "version": "1.0.0",
+      "description": "Brings in an unencrypted backup of Standard Notes (the .txt/.json file the app saves): titles, text and tags. Trashed notes are left out; an encrypted backup is explained, not guessed at.",
+      "author": "Notation",
+      "permissions": [
+        "notes.import"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/standard-notes-import-1.0.0.zip",
+      "sha256": "a95617825a2e1ede46d3db8b0c30096287ade495c401af85d3c43a31404c47ce",
+      "size": 1399
+    },
+    {
+      "id": "youtube-transcripts",
+      "name": "YouTube transcripts",
+      "version": "1.0.0",
+      "description": "Gets the captions of a YouTube video for \"New note from a transcript\". Asks YouTube for the video's caption list and downloads one track (the video's own language, written by a person if there is one, else the automatic one). Talks to www.youtube.com only. YouTube does not offer this for outside use and can change it at any time; if it stops working, an update of this extension fixes it.",
+      "author": "Notation",
+      "permissions": [
+        "network"
+      ],
+      "url": "https://raw.githubusercontent.com/nfa04/notation/main/extensions/dist/youtube-transcripts-1.0.0.zip",
+      "sha256": "9b7f20c5e8524f2480dbedcb8f6c2be2e8ee845c0cb35b465b2295c9c7a8ca86",
+      "size": 2360
+    }
+  ]
+}

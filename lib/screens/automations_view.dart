@@ -2,6 +2,7 @@ import '../widgets/paper.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../ai/ai_service.dart';
 import '../extensions/extension_service.dart';
+import '../extensions/extension_doors.dart' show ExtensionField, FieldType;
 import 'magic_extension_dialog.dart';
 import 'automation_log.dart';
 import 'rule_writer_dialog.dart';
@@ -312,6 +313,19 @@ class _AutomationDialogState extends State<AutomationDialog> {
   late String _inkWhat = const {'text', 'formulas'}.contains(widget.existing?.params['what']) ? widget.existing!.params['what']! : 'both';
   late String? _within = widget.existing?.params['within'];
   late String? _extAction = widget.existing?.params['extension'];
+
+  /// The values of the options of the extension's action (the manifest's `fields`), by field id.
+  late final Map<String, String> _extParams = {
+    for (final e in (widget.existing?.params ?? const <String, String>{}).entries)
+      if (e.key.startsWith('p.')) e.key.substring(2): e.value,
+  };
+
+  /// The options the chosen action of an extension asks for.
+  List<ExtensionField> get _extFields {
+    final parts = (_extAction ?? '').split('/');
+    if (parts.length != 2) return const [];
+    return widget.extensions?.byId(parts[0])?.manifest.actions.where((a) => a.id == parts[1]).firstOrNull?.fields ?? const [];
+  }
   late bool _unfiledOnly = widget.existing?.params['unfiledOnly'] != '0';
   late SortStrictness _strictness =
       SortStrictness.values.where((s) => s.name == widget.existing?.params['strictness']).firstOrNull ?? SortStrictness.normal;
@@ -435,7 +449,11 @@ class _AutomationDialogState extends State<AutomationDialog> {
           AutomationAction.makeFlashcards => {'count': '${int.parse(_count.text.trim()).clamp(1, 30)}'},
           AutomationAction.reviewCardsTask => {'title': _taskTitle.text.trim()},
           AutomationAction.prepareInk => {'what': _inkWhat},
-          AutomationAction.extensionAction => {'extension': _extAction!},
+          AutomationAction.extensionAction => {
+              'extension': _extAction!,
+              for (final f in _extFields)
+                if ((_extParams[f.id] ?? '').isNotEmpty) 'p.${f.id}': _extParams[f.id]!,
+            },
         }
           ..addAll(_event == AutomationEvent.noteStale ? {'weeks': '${int.parse(_weeks.text.trim())}'} : {})
           ..addAll(_event == AutomationEvent.triggerPressed ? {'trigger': _trigger} : {})
@@ -834,6 +852,34 @@ class _AutomationDialogState extends State<AutomationDialog> {
                       DropdownMenuItem(value: '${x.extension.id}/${x.action.id}', child: Text.verbatim('${x.extension.manifest.name}: ${x.action.title}')),
                   ],
                   onChanged: (v) => setState(() => _extAction = v),
+                ),
+              for (final f in _extFields)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: switch (f.type) {
+                    FieldType.boolean => SwitchListTile.adaptive(
+                        key: ValueKey('automation-extension-field-${f.id}'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text.verbatim(f.title),
+                        value: (_extParams[f.id] ?? '${f.initial ?? false}') == 'true',
+                        onChanged: (v) => setState(() => _extParams[f.id] = '$v'),
+                      ),
+                    FieldType.choice => DropdownButtonFormField<String>(
+                        key: ValueKey('automation-extension-field-${f.id}'),
+                        initialValue: f.choices.containsKey(_extParams[f.id] ?? f.initial) ? (_extParams[f.id] ?? f.initial) as String : null,
+                        decoration: InputDecoration(labelText: f.title),
+                        items: [for (final c in f.choices.entries) DropdownMenuItem(value: c.key, child: Text.verbatim(c.value))],
+                        onChanged: (v) => setState(() => _extParams[f.id] = v ?? ''),
+                      ),
+                    _ => TextFormField(
+                        key: ValueKey('automation-extension-field-${f.id}'),
+                        initialValue: _extParams[f.id] ?? (f.initial == null ? '' : '${f.initial}'),
+                        keyboardType: f.type == FieldType.number ? TextInputType.number : TextInputType.text,
+                        decoration: InputDecoration(labelText: f.title),
+                        onChanged: (v) => _extParams[f.id] = v,
+                      ),
+                  },
                 ),
             ],
             if (_action == AutomationAction.prepareInk) ...[

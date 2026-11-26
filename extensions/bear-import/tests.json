@@ -1,0 +1,24 @@
+{
+  "cases": [
+    {
+      "name": "bundles with a picture and tags; a lone file is ignored; a missing picture is said",
+      "kind": "importer", "id": "textbundle",
+      "files": {
+        "Export/Trip.textbundle/text.md": "# Trip plan\n\n#travel #big list#\n\n![](assets/map%201.png)\n![](assets/gone.png)\n\n```\n#notatag\n```\n",
+        "Export/Trip.textbundle/assets/map 1.png": { "base64": "AQID" },
+        "Export/Trip.textbundle/info.json": "{}",
+        "Export/Plain.textbundle/text.markdown": "first line\nmore",
+        "Export/readme.txt": "x"
+      },
+      "expect": {
+        "value": {
+          "notes": [
+            { "title": "Trip plan", "tags": ["travel", "big-list"], "attachments": { "assets/map 1.png": 3 }, "sourceId": "bear:Export/Trip.textbundle" },
+            { "title": "first line", "tags": [] }
+          ],
+          "notices": ["1 picture was not in the export."]
+        }
+      }
+    }
+  ]
+}

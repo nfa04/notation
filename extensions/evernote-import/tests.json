@@ -1,0 +1,75 @@
+{
+ "cases": [
+  {
+   "name": "formatting, checklist, link, picture by its hash, tags, a second note",
+   "kind": "importer",
+   "id": "enex",
+   "files": {
+    "Trips.enex": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><en-export><note><title>Trip &amp; more</title><content><![CDATA[<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\"><en-note><div><b>Hello</b> &amp; <i>world</i></div><div><br/></div><h2>Plan</h2><ul><li>one</li><li>two <a href=\"https://x.org/a?b=1&amp;c=2\">link</a></li></ul><div><en-todo checked=\"true\"/>done</div><div><en-todo/>open</div><div><en-media hash=\"36bbd90a8f515b48cafb94118844ed8f\" type=\"image/png\"/></div></en-note>]]></content><created>20200102T030405Z</created><tag>Travel Plans</tag><tag>x</tag><resource><data encoding=\"base64\">iVBORw0KGgoBAgME</data><mime>image/png</mime><resource-attributes><file-name>map.png</file-name></resource-attributes></resource></note><note><title>Second</title><content><![CDATA[<en-note><div>just text</div></en-note>]]></content></note></en-export>"
+   },
+   "expect": {
+    "value": {
+     "notes": [
+      {
+       "title": "Trip & more",
+       "markdown": "**Hello** & *world*\n\n## Plan\n\n- one\n- two [link](https://x.org/a?b=1&c=2)\n\n[x] done\n\n[ ] open\n\n![](map.png)",
+       "tags": [
+        "travel-plans",
+        "x"
+       ],
+       "attachments": {
+        "map.png": 12
+       },
+       "sourceId": "enex:Trips.enex:1"
+      },
+      {
+       "title": "Second",
+       "markdown": "just text"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "two files: the notebook name is the folder",
+   "kind": "importer",
+   "id": "enex",
+   "files": {
+    "A.enex": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><en-export><note><title>In A</title><content><![CDATA[<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\"><en-note><div><b>Hello</b> &amp; <i>world</i></div><div><br/></div><h2>Plan</h2><ul><li>one</li><li>two <a href=\"https://x.org/a?b=1&amp;c=2\">link</a></li></ul><div><en-todo checked=\"true\"/>done</div><div><en-todo/>open</div><div><en-media hash=\"36bbd90a8f515b48cafb94118844ed8f\" type=\"image/png\"/></div></en-note>]]></content><created>20200102T030405Z</created><tag>Travel Plans</tag><tag>x</tag><resource><data encoding=\"base64\">iVBORw0KGgoBAgME</data><mime>image/png</mime><resource-attributes><file-name>map.png</file-name></resource-attributes></resource></note><note><title>Second</title><content><![CDATA[<en-note><div>just text</div></en-note>]]></content></note></en-export>",
+    "B.enex": "<en-export><note><title>In B</title><content><![CDATA[<en-note>b</en-note>]]></content></note></en-export>"
+   },
+   "expect": {
+    "value": {
+     "notes": [
+      {
+       "path": "A/In A"
+      },
+      {
+       "path": "A/Second"
+      },
+      {
+       "path": "B/In B"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a picture the text does not show is put at the end",
+   "kind": "importer",
+   "id": "enex",
+   "files": {
+    "P.enex": "<en-export><note><title>P</title><content><![CDATA[<en-note>text</en-note>]]></content><resource><data>iVBORw0KGgoBAgME</data><mime>image/png</mime></resource></note></en-export>"
+   },
+   "expect": {
+    "value": {
+     "notes": [
+      {
+       "markdown": "text\n\n![](file-1.png)"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

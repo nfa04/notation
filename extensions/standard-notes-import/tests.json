@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "name": "notes with tags from the tag items; trashed and archived",
+      "kind": "importer", "id": "backup",
+      "files": {
+        "Standard Notes Backup.txt": "{\"items\":[{\"uuid\":\"n1\",\"content_type\":\"Note\",\"content\":{\"title\":\"Ideas\",\"text\":\"one\"},\"created_at\":\"2021-02-03T04:05:06.000Z\"},{\"uuid\":\"n2\",\"content_type\":\"Note\",\"content\":{\"title\":\"\",\"text\":\"two\",\"archived\":true}},{\"uuid\":\"n3\",\"content_type\":\"Note\",\"content\":{\"title\":\"Bin\",\"text\":\"x\",\"trashed\":true}},{\"uuid\":\"t1\",\"content_type\":\"Tag\",\"content\":{\"title\":\"School Work\",\"references\":[{\"uuid\":\"n1\",\"content_type\":\"Note\"}]}}]}"
+      },
+      "expect": {
+        "value": {
+          "notes": [
+            { "title": "Ideas", "markdown": "one", "tags": ["school-work"], "sourceId": "standardnotes:n1" },
+            { "title": "Untitled", "markdown": "two", "tags": ["archived"] }
+          ],
+          "notices": ["1 note in the trash was left out."]
+        }
+      }
+    },
+    {
+      "name": "an encrypted backup is explained",
+      "kind": "importer", "id": "backup",
+      "files": { "b.txt": "{\"items\":[{\"uuid\":\"n1\",\"content_type\":\"Note\",\"content\":\"004:abc\"}]}" },
+      "expect": { "value": { "notes": [], "notices": ["~without encryption"] } }
+    }
+  ]
+}

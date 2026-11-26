@@ -1,0 +1,13 @@
+{
+  "id": "youtube-transcripts",
+  "name": "YouTube transcripts",
+  "version": "1.0.0",
+  "description": "Gets the captions of a YouTube video for \"New note from a transcript\". Asks YouTube for the video's caption list and downloads one track (the video's own language, written by a person if there is one, else the automatic one). Talks to www.youtube.com only. YouTube does not offer this for outside use and can change it at any time; if it stops working, an update of this extension fixes it.",
+  "author": "Notation",
+  "main": "main.js",
+  "permissions": ["network"],
+  "hosts": ["www.youtube.com"],
+  "transcriptSources": [
+    { "id": "youtube", "title": "YouTube", "hint": "A YouTube link (watch, youtu.be, shorts) or the 11-letter video id" }
+  ]
+}

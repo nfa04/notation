@@ -6,6 +6,13 @@ import '../sync/calendar_access.dart';
 import 'capture_dialogs.dart';
 import 'weekly_review_dialog.dart';
 import '../app_services.dart';
+import '../ai/extension_agent_tools.dart';
+import '../extensions/extension_templates.dart';
+import '../markdown/extension_block.dart';
+import '../extensions/command_api.dart';
+import '../extensions/extension_doors.dart' show CommandPlace;
+import 'extension_commands.dart';
+import 'extension_dialogs.dart';
 import '../mcp/mcp_service.dart' show McpActivity;
 import 'dart:async';
 import 'dart:convert';
@@ -160,6 +167,24 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     8: NavigationRailDestination(icon: Icon(Symbols.hub), selectedIcon: Icon(Symbols.hub), label: Text('Graph')),
     5: NavigationRailDestination(icon: Icon(Symbols.settings), selectedIcon: Icon(Symbols.settings), label: Text('Settings')),
   };
+
+  static const _sidebarOrderKey = 'sidebar_order';
+
+  /// The order of the menu the person gave by dragging (a place keeps to its group).
+  List<int> _sidebarOrder = const [];
+
+  Future<void> _restoreSidebarOrder() async {
+    try {
+      final raw = await _app.repository.settings.get(_sidebarOrderKey);
+      if (raw == null || !mounted) return;
+      setState(() => _sidebarOrder = [for (final v in jsonDecode(raw) as List) v as int]);
+    } catch (_) {}
+  }
+
+  void _sidebarReordered(List<int> ids) {
+    setState(() => _sidebarOrder = ids);
+    _app.repository.settings.set(_sidebarOrderKey, jsonEncode(ids));
+  }
 
   SidebarItem _sidebarItem(int i) {
     final d = _destinations[i]!;
@@ -371,7 +396,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
   final ValueNotifier<String?> _focusedPane = ValueNotifier(_homeKey);
 
   /// New notes from templates (needs the note files, which it keeps templates in).
-  late final TemplateService? _templates = _app.noteFiles == null ? null : TemplateService(_app.repository, _app.noteFiles!);
+  late final TemplateService? _templates = _app.noteFiles == null ? null : TemplateService(_app.repository, _app.noteFiles!, extra: _app.extensions == null ? null : () => extensionTemplates(_app.extensions!));
 
   int _selectedNavIndex = 0;
 
@@ -1077,6 +1102,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     _app.aiSwitch?.removeListener(_aiSwitched);
     _app.features?.removeListener(_featuresChanged);
     _shortcuts.removeHandler(_onShortcut);
+    _app.extensions?.removeListener(_syncCommandKeys);
     _graphs.removeListener(_graphsChanged);
     _focusedPane.dispose();
     _pageRefresh.dispose();
@@ -1110,6 +1136,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     );
     WidgetsBinding.instance.addObserver(this);
     _shortcuts.addHandler(_onShortcut);
+    _app.extensions?.addListener(_syncCommandKeys);
+    _syncCommandKeys();
     _app.repository.purgeTrash().catchError((Object _) => 0); // what lay in the trash for long enough
     _app.repository.listNotes().then((all) => _previews.tidy({for (final n in all) n.id})).catchError((Object _) {}); // pictures of notes that are gone
     // a tap on a reminder's notification opens what it was about
@@ -1162,6 +1190,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     _loadSideFavourites();
     _favouritesLive = debouncedChanges([_app.repository.changes, _app.repository.created]).listen((_) => _loadSideFavourites());
     unawaited(_restoreTabs());
+    unawaited(_restoreSidebarOrder());
     _app.repository.settings.get(_railHiddenKey).then((v) {
       if (!mounted || v != '1') return;
       _railSlide.value = 0; // (hidden from the start: no sliding out at launch)
@@ -1196,8 +1225,53 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
     ));
   }
 
+  /// The commands of the extensions that are on are actions of the shortcuts, so they can be given keys.
+  void _syncCommandKeys() {
+    final service = _app.extensions;
+    if (service == null) return;
+    ExtensionBlocks.languages = {for (final l in service.blocks.keys) l.toLowerCase()};
+    ExtensionBlocks.draw = (language, code, width) => service.drawBlock(language, code, width: width);
+    _shortcuts.setExtraActions([
+      for (final c in service.commands())
+        ShortcutAction('ext.${c.extension.id}/${c.command.id}', '${c.extension.manifest.name}: ${c.command.title}', ShortcutGroup.extensions),
+    ]);
+  }
+
+  /// Where a command that is run from here can reach: all the notes by their ids, the library, the AI; no editor.
+  CommandApi _commandApi(CommandEntry entry) => CommandApi(
+        _app.repository,
+        tasks: _app.tasks,
+        tags: _app.tags,
+        reminders: _app.reminders,
+        calendar: CalendarAccess.of(caldav: _app.caldav, device: _app.device, ics: _app.ics),
+        planner: _app.planner,
+        isOpen: (id) => _tabs.contains(id),
+        noteId: _activeNoteId,
+        links: _app.links,
+        cards: _app.cards,
+        citations: _app.citations?.repository,
+        ai: _aiOn ? _app.ai : null,
+        onMessage: (text) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(text)));
+        },
+        onAsk: (kind, args) async => mounted ? askPersonDialog(context, entry.extension.manifest.name, kind, args) : null,
+      );
+
+  Future<void> _openCommands() async {
+    final service = _app.extensions;
+    if (service == null) return;
+    await showExtensionCommands(context, service: service, apiFor: _commandApi, place: CommandPlace.dashboard);
+  }
+
   bool _onShortcut(String id) {
     if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    if (id.startsWith('ext.')) {
+      final service = _app.extensions;
+      final entry = service?.commands().where((c) => 'ext.${c.extension.id}/${c.command.id}' == id).firstOrNull;
+      if (service == null || entry == null) return false;
+      unawaited(runExtensionCommand(context, service, entry, _commandApi(entry)));
+      return true;
+    }
     final trigger = RegExp(r'^automation\.trigger([123])$',).firstMatch(id)?.group(1);
     if (trigger != null) {
       unawaited(_fireTrigger(int.parse(trigger)));
@@ -1242,6 +1316,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           selected: _navItems.contains(_selectedNavIndex) ? _selectedNavIndex : null,
           wide: extended,
           pinned: 5,
+          order: _sidebarOrder,
+          onReorder: _sidebarReordered,
           fill: _favouritesFill,
           onSelect: (i) => _go(index: i),
           header: extended
@@ -1320,6 +1396,8 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         surfaceTintColor: Colors.transparent,
         child: NotationSidebar(
           roomy: true,
+          order: _sidebarOrder,
+          onReorder: _sidebarReordered,
           items: [for (final i in _navItems) _sidebarItem(i)],
           selected: _navItems.contains(_selectedNavIndex) ? _selectedNavIndex : null,
           pinned: 5,
@@ -1427,6 +1505,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           knowledge: _knowledge,
           lookup: NoteLookup.of(_app.repository),
           agent: NoteAgent(
+            more: _app.extensions == null ? null : () => extensionAgentTools(_app.extensions!),
             api: NotesAgentApi(_app.repository,
                 tasks: _app.tasks,
                 tags: _app.tags,
@@ -1492,11 +1571,13 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           collab: _app.collab,
           repository: _app.repository,
           noteFiles: _f(Feature.noteFiles) ? _app.noteFiles : null,
+          extensions: _app.extensions,
           templates: _templates,
           previews: _previews,
           speech: _app.speech,
           cards: _cardsOn ? _app.cards : null,
           onOpenLearning: _learnOn ? () => _go(index: 10) : null,
+          onCommands: _app.extensions == null ? null : _openCommands,
           reminders: _app.reminders,
           audio: _app.audio,
           capture: _app.capture,

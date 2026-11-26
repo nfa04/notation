@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "name": "text note with a label and a picture, a checklist, a trashed note, a stray file",
+      "kind": "importer", "id": "takeout",
+      "files": {
+        "Takeout/Keep/Idea.json": "{\"title\":\"Idea\",\"textContent\":\"Build a boat\",\"labels\":[{\"name\":\"Home Work\"}],\"attachments\":[{\"filePath\":\"boat.jpg\",\"mimetype\":\"image/jpeg\"}],\"userEditedTimestampUsec\":1700000000000000}",
+        "Takeout/Keep/boat.jpg": { "base64": "AQID" },
+        "Takeout/Keep/Shop.json": "{\"title\":\"\",\"listContent\":[{\"text\":\"milk\",\"isChecked\":true},{\"text\":\"eggs\",\"isChecked\":false}],\"isArchived\":true,\"userEditedTimestampUsec\":1}",
+        "Takeout/Keep/Old.json": "{\"title\":\"Old\",\"textContent\":\"x\",\"isTrashed\":true,\"userEditedTimestampUsec\":1}",
+        "Takeout/Keep/Settings.json": "{\"other\":1}",
+        "Takeout/Keep/notes.html": "<html></html>"
+      },
+      "expect": {
+        "value": {
+          "notes": [
+            { "title": "Idea", "markdown": "Build a boat\n\n![](boat.jpg)", "tags": ["home-work"], "attachments": { "boat.jpg": 3 }, "sourceId": "keep:Takeout/Keep/Idea.json" },
+            { "title": "Untitled", "markdown": "- [x] milk\n- [ ] eggs", "tags": ["archived"] }
+          ],
+          "notices": ["1 note in the trash of Keep was left out."]
+        }
+      }
+    },
+    { "name": "nothing found says so", "kind": "importer", "id": "takeout", "files": { "a.txt": "x" }, "expect": { "value": { "notes": [], "notices": ["No Keep notes were found in what you picked."] } } }
+  ]
+}

@@ -16,13 +16,15 @@ Future<String> runInIsolate({
   required Future<String> Function(String name, String? payload) host,
   required void Function(String line) onConsole,
   required Duration overall,
+  int memoryBytes = 32 * 1024 * 1024,
+  Duration pieceTimeout = const Duration(milliseconds: 1500),
 }) async {
   final inbox = ReceivePort();
   final result = Completer<String>();
   SendPort? worker;
   final isolate = await Isolate.spawn<_Job>(
     _work,
-    _Job(inbox.sendPort, prelude, script, scriptName, call, overall),
+    _Job(inbox.sendPort, prelude, script, scriptName, call, overall, memoryBytes, pieceTimeout),
     errorsAreFatal: true,
     onError: inbox.sendPort,
     onExit: inbox.sendPort,
@@ -64,8 +66,9 @@ Future<String> runInIsolate({
 class _Job {
   final SendPort out;
   final String prelude, script, scriptName, call;
-  final Duration overall;
-  const _Job(this.out, this.prelude, this.script, this.scriptName, this.call, this.overall);
+  final Duration overall, pieceTimeout;
+  final int memoryBytes;
+  const _Job(this.out, this.prelude, this.script, this.scriptName, this.call, this.overall, this.memoryBytes, this.pieceTimeout);
 }
 
 Future<void> _work(_Job job) async {
@@ -79,7 +82,7 @@ Future<void> _work(_Job job) async {
   job.out.send(replies.sendPort);
   ScriptEngine? engine;
   try {
-    engine = QuickJsEngine.make(onConsole: (line) => job.out.send(<Object?>['log', line]));
+    engine = QuickJsEngine(memoryBytes: job.memoryBytes, timeout: job.pieceTimeout, onConsole: (line) => job.out.send(<Object?>['log', line]));
     engine.register('__host', (args) {
       final id = next++;
       final c = Completer<String>();

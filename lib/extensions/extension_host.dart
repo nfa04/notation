@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'extension_doors.dart' show ExtensionField;
 import 'extension_manifest.dart';
 import 'isolate_engine.dart';
 import 'script_engine.dart';
@@ -179,6 +180,45 @@ abstract class ExtensionApi {
   /// [due] is a day, `YYYY-MM-DD`.
   Future<void> addTask(String title, {String? due}) async => throw ExtensionError('Tasks cannot be added here.');
 
+  /// The text of file number [index] of what an importer was given (as text, or as base64 with [binary]).
+  Future<String> readImportFile(int index, {bool binary = false}) async => throw ExtensionError('There are no files here.');
+
+  /// Asks the person something: [kind] is `confirm`, `choose` or `form`; [args] says what (see `ui.confirm`, `ui.choose`, `ui.form`).
+  /// The answer is what they chose, or null when they said no.
+  Future<Object?> askPerson(String kind, Map<String, Object?> args) async => throw ExtensionError('The person cannot be asked here.');
+
+  /// Shows how far a long job has got: [text] and [fraction] (0..1, or null when not known).
+  void showProgress(String text, double? fraction) {}
+
+  /// What the handwriting reader made of the ink of the note (what is kept; nothing is read now): `text` and `latex` of each line
+  /// or formula with its `page`, `top` and `left`. [page] picks one page (from 1).
+  Future<List<Map<String, Object?>>> inkReadings({int? page}) async => throw ExtensionError('Handwriting cannot be looked at here.');
+
+  /// The lines of ink on page [page] (from 1), as `points` with `color` and `width`; at most 300.
+  Future<List<Map<String, Object?>>> inkStrokes({int? page}) async => throw ExtensionError('Handwriting cannot be looked at here.');
+
+  /// The answer of the AI the person chose to [prompt].
+  Future<String> aiComplete(String prompt, {int maxTokens = 400}) async => throw ExtensionError('The AI cannot be asked here.');
+
+  /// Where the AI the person chose runs: `device`, or `service` (a server of their choice, which may be in the cloud); null when none is set up.
+  String? get aiPlace => null;
+
+  /// The links of the note [id] (null: the open note) to other notes, and the notes that link to it.
+  Future<List<Map<String, Object?>>> noteLinks(String? id) async => throw ExtensionError('Links cannot be looked at here.');
+  Future<List<Map<String, Object?>>> noteBacklinks(String? id) async => throw ExtensionError('Links cannot be looked at here.');
+
+  /// The notes with the tag [tag] (or nested under it), and every tag with how many notes have it.
+  Future<List<Map<String, Object?>>> notesWithTag(String tag) async => throw ExtensionError('Tags cannot be looked at here.');
+  Future<List<Map<String, Object?>>> listTags() async => throw ExtensionError('Tags cannot be looked at here.');
+
+  /// The flashcards kept for review: `id`, `front`, `back`, `source` and `due` (a day); [due] only the ones that are due now.
+  Future<List<Map<String, Object?>>> listCards({bool due = false, int limit = 50}) async => throw ExtensionError('Flashcards cannot be looked at here.');
+
+  /// The sources of the citation library that fit [query]: `id`, `title`, `authors`, `year`; and adding one (`title`, `authors`,
+  /// `year`, `url`, `doi`...), which says its id.
+  Future<List<Map<String, Object?>>> searchCitations(String query) async => throw ExtensionError('Citations cannot be looked at here.');
+  Future<String> addCitation(Map<String, Object?> source) async => throw ExtensionError('Citations cannot be added here.');
+
   /// Shows [text] to the person.
   void message(String text) {}
 
@@ -197,12 +237,21 @@ typedef ExtensionEmit = void Function(String name, Map<String, Object?> data);
 
 typedef ExtensionFetch = Future<Map<String, Object?>> Function(Uri url, {String method, Map<String, String> headers, String? body});
 
+/// The same, for an answer that is not text: `body` comes as base64, up to [limit] bytes.
+typedef ExtensionFetchBytes = Future<Map<String, Object?>> Function(Uri url, {String method, Map<String, String> headers, String? body, int limit});
+
+/// What an extension keeps secret (keys, tokens): never shown again, never synced, one place for each extension.
+abstract class ExtensionSecrets {
+  Future<String?> get(String key);
+  Future<void> set(String key, String? value);
+}
+
 /// The JavaScript every extension starts with: the object `notation`, which is all of the app that it can reach. Each call goes
 /// through the one function `__host`, which the app checks (the permissions) before it does anything.
 const _prelude = r'''
 (function () {
   'use strict';
-  const handlers = { tool: Object.create(null), action: Object.create(null), drawtool: Object.create(null) };
+  const handlers = { tool: Object.create(null), action: Object.create(null), drawtool: Object.create(null), transcript: Object.create(null), importer: Object.create(null), exporter: Object.create(null), command: Object.create(null), block: Object.create(null), agenttool: Object.create(null), capture: Object.create(null) };
   const host = globalThis.__host;
   async function call(name, args) {
     const reply = JSON.parse(await host(name, JSON.stringify(args === undefined ? null : args)));
@@ -214,6 +263,13 @@ const _prelude = r'''
     tool(id, fn) { handlers.tool[id] = fn; },
     action(id, fn) { handlers.action[id] = fn; },
     drawTool(id, fn) { handlers.drawtool[id] = fn; },
+    transcriptSource(id, fn) { handlers.transcript[id] = fn; },
+    importer(id, fn) { handlers.importer[id] = fn; },
+    exporter(id, fn) { handlers.exporter[id] = fn; },
+    command(id, fn) { handlers.command[id] = fn; },
+    block(id, fn) { handlers.block[id] = fn; },
+    agentTool(id, fn) { handlers.agenttool[id] = fn; },
+    capture(id, fn) { handlers.capture[id] = fn; },
     note: Object.freeze({
       get: () => call('note.get'),
       insertText: (text, options) => call('note.insertText', Object.assign({}, options, { text: String(text) })),
@@ -228,6 +284,9 @@ const _prelude = r'''
     notes: Object.freeze({
       search: (query, options) => call('notes.search', Object.assign({}, options, { query: String(query) })),
       read: (id) => call('notes.read', { id: String(id) }),
+      links: (id) => call('notes.links', { id: id == null ? null : String(id) }),
+      backlinks: (id) => call('notes.backlinks', { id: id == null ? null : String(id) }),
+      byTag: (tag) => call('notes.byTag', { tag: String(tag) }),
       create: (title, text, options) => call('notes.create', Object.assign({}, options, { title: String(title), text: text == null ? '' : String(text) })),
       list: (options) => call('notes.list', Object.assign({}, options)),
       favorite: (id, on) => call('notes.favorite', { id: String(id), on: on === undefined ? true : Boolean(on) }),
@@ -277,7 +336,11 @@ const _prelude = r'''
       list: () => call('reminders.list'),
       remove: (id) => call('reminders.remove', { id: String(id) }),
     }),
-    cards: Object.freeze({ add: (cards) => call('cards.add', { cards: Array.from(cards, (c) => ({ front: c && c.front, back: c && c.back })) }) }),
+    cards: Object.freeze({
+      add: (cards) => call('cards.add', { cards: Array.from(cards, (c) => ({ front: c && c.front, back: c && c.back })) }),
+      list: (options) => call('cards.list', Object.assign({}, options)),
+      due: (options) => call('cards.list', Object.assign({}, options, { due: true })),
+    }),
     tasks: Object.freeze({
       add: (title, options) => call('tasks.add', Object.assign({}, options, { title: String(title) })),
       list: (options) => call('tasks.list', Object.assign({}, options)),
@@ -285,7 +348,29 @@ const _prelude = r'''
       update: (id, changes) => call('tasks.update', Object.assign({}, changes, { id: String(id) })),
       remove: (id) => call('tasks.remove', { id: String(id) }),
     }),
-    ui: Object.freeze({ message: (text) => call('ui.message', { text: String(text) }) }),
+    ui: Object.freeze({
+      message: (text) => call('ui.message', { text: String(text) }),
+      confirm: (text) => call('ui.ask', { kind: 'confirm', text: String(text) }),
+      choose: (title, items) => call('ui.ask', { kind: 'choose', title: String(title), items: Array.from(items, String) }),
+      form: (title, fields) => call('ui.ask', { kind: 'form', title: String(title), fields: Array.from(fields, (f) => Object.assign({}, f)) }),
+      progress: (text, fraction) => call('ui.progress', { text: String(text), fraction: fraction == null ? null : Number(fraction) }),
+    }),
+    secrets: Object.freeze({
+      get: (key) => call('secrets.get', { key: String(key) }),
+      set: (key, value) => call('secrets.set', { key: String(key), value: value == null ? null : String(value) }),
+      remove: (key) => call('secrets.set', { key: String(key), value: null }),
+    }),
+    settings: Object.freeze({ get: () => call('settings.get') }),
+    ink: Object.freeze({
+      read: (options) => call('ink.read', Object.assign({}, options)),
+      strokes: (options) => call('ink.strokes', Object.assign({}, options)),
+    }),
+    ai: Object.freeze({ complete: (prompt, options) => call('ai.complete', Object.assign({}, options, { prompt: String(prompt) })) }),
+    tags: Object.freeze({ list: () => call('tags.list') }),
+    citations: Object.freeze({
+      search: (query) => call('citations.search', { query: String(query) }),
+      add: (source) => call('citations.add', { source: Object.assign({}, source) }),
+    }),
     events: Object.freeze({ emit: (name, data) => call('events.emit', { event: String(name), data: data === undefined ? {} : data }) }),
     clipboard: Object.freeze({ write: (text) => call('clipboard.write', { text: String(text) }) }),
     network: Object.freeze({ fetch: (url, options) => call('network.fetch', Object.assign({}, options, { url: String(url) })) }),
@@ -303,6 +388,15 @@ const _prelude = r'''
       const fn = handlers[kind] && handlers[kind][id];
       if (typeof fn !== 'function') return JSON.stringify({ error: 'This extension has no ' + kind + ' "' + id + '".' });
       try {
+        if (kind === 'importer' && context && Array.isArray(context.files)) {
+          context = Object.assign({}, context, {
+            files: context.files.map((f, i) => Object.freeze({
+              path: f.path, name: f.name, size: f.size,
+              read: () => call('import.read', { index: i, binary: false }),
+              readBytes: () => call('import.read', { index: i, binary: true }),
+            })),
+          });
+        }
         const value = await fn(context);
         return JSON.stringify({ value: value === undefined ? null : value });
       } catch (e) {
@@ -345,6 +439,18 @@ class ExtensionRuntime {
   /// Announces an event of the extension; null: not here.
   final ExtensionEmit? emit;
 
+  /// The values of the extension's settings (what the person set, with the defaults).
+  final Map<String, Object?> settings;
+
+  /// Where its secrets are kept; null: it has none here.
+  final ExtensionSecrets? secrets;
+
+  /// Requests whose answer is not text (importers); null: not here.
+  final ExtensionFetchBytes? fetchBytes;
+
+  /// A job that needs more room than a tool does (an importer reads whole exports): more time and memory.
+  final bool heavy;
+
   /// Another engine to run in (tests); without one the script runs in QuickJS on an isolate of its own, away from the screen.
   final EngineFactory? engineFactory;
 
@@ -360,14 +466,21 @@ class ExtensionRuntime {
     required this.storage,
     required this.fetch,
     this.emit,
+    this.settings = const {},
+    this.secrets,
+    this.fetchBytes,
+    this.heavy = false,
     this.engineFactory,
     this.limit = const Duration(seconds: 15),
   });
+
+  var _aiCalls = 0;
 
   static const _largestScript = 256 * 1024;
   static const _largestStorage = 64 * 1024;
   static const _largestAnswer = 1024 * 1024;
   static const _largestEventData = 8 * 1024;
+  static const _largestFile = 48 * 1024 * 1024;
 
   /// Calls the [kind] (`tool` or `action`) [id] of the extension with [context] (JSON).
   Future<ExtensionRun> run(String kind, String id, Map<String, Object?> context) async {
@@ -391,7 +504,9 @@ class ExtensionRuntime {
           call: call,
           host: (name, payload) async => await _host([name, payload]) as String,
           onConsole: console,
-          overall: limit,
+          overall: heavy && limit <= const Duration(seconds: 15) ? const Duration(minutes: 5) : limit,
+          memoryBytes: heavy ? 128 * 1024 * 1024 : 32 * 1024 * 1024,
+          pieceTimeout: heavy ? const Duration(seconds: 20) : const Duration(milliseconds: 1500),
         );
       } else {
         engine = make(onConsole: console);
@@ -461,6 +576,31 @@ class ExtensionRuntime {
     final v = p[key];
     if (v is! int || v < 1) throw ExtensionError('"$key" has to be a page number, from 1.');
     return v;
+  }
+
+  /// The arguments of a question to the person, checked: short texts and at most a few lines.
+  Map<String, Object?> _askArgs(Map<String, Object?> p) {
+    final kind = p['kind'];
+    String text(Object? v, int max) => v is String && v.length <= max ? v : throw ExtensionError('A question has to be short text.');
+    switch (kind) {
+      case 'confirm':
+        return {'text': text(p['text'], 600)};
+      case 'choose':
+        final items = p['items'];
+        if (items is! List || items.isEmpty || items.length > 50) throw ExtensionError('"items" has to be a list of 1 to 50 choices.');
+        return {'title': text(p['title'], 100), 'items': [for (final i in items) text(i, 120)]};
+      case 'form':
+        final raw = p['fields'];
+        if (raw is! List || raw.isEmpty || raw.length > 12) throw ExtensionError('"fields" has to be a list of 1 to 12 fields.');
+        final List<ExtensionField> fields;
+        try {
+          fields = ExtensionField.parseForm(raw);
+        } on FormatException catch (e) {
+          throw ExtensionError(e.message);
+        }
+        return {'title': text(p['title'], 100), 'fields': [for (final f in fields) f.toJson()]};
+    }
+    throw ExtensionError('Unknown question: $kind');
   }
 
   Future<Object?> _dispatch(String name, Map<String, Object?> p) async {
@@ -719,6 +859,68 @@ class ExtensionRuntime {
       case 'ui.message':
         api.message(_string(p, 'text', max: 2000));
         return null;
+      case 'ui.progress':
+        final fraction = _optNumber(p, 'fraction');
+        api.showProgress(_string(p, 'text', max: 300), fraction?.clamp(0, 1).toDouble());
+        return null;
+      case 'ui.ask':
+        return await api.askPerson(_string(p, 'kind', max: 20), _askArgs(p));
+      case 'import.read':
+        _need(ExtensionPermission.notesImport);
+        final index = p['index'];
+        if (index is! int || index < 0) throw ExtensionError('"index" has to be a file number.');
+        final text = await api.readImportFile(index, binary: p['binary'] == true);
+        if (text.length > _largestFile) throw ExtensionError('That file is too big to read at once (at most 48 MB).');
+        return text;
+      case 'secrets.get':
+        final store = secrets ?? (throw ExtensionError('Secrets cannot be kept here.'));
+        return await store.get(_string(p, 'key', max: 100));
+      case 'secrets.set':
+        final store = secrets ?? (throw ExtensionError('Secrets cannot be kept here.'));
+        final value = p['value'];
+        if (value != null && (value is! String || value.length > 4000)) throw ExtensionError('A secret has to be text of up to 4000 characters.');
+        await store.set(_string(p, 'key', max: 100), value as String?);
+        return null;
+      case 'settings.get':
+        return settings;
+      case 'ink.read':
+        _need(ExtensionPermission.noteRead);
+        return await api.inkReadings(page: _optPage(p));
+      case 'ink.strokes':
+        _need(ExtensionPermission.noteRead);
+        return await api.inkStrokes(page: _optPage(p));
+      case 'ai.complete':
+        _need(ExtensionPermission.aiUse);
+        if (++_aiCalls > 5) throw ExtensionError('An extension may ask the AI at most 5 times in one run.');
+        final max = p['maxTokens'];
+        if (max != null && (max is! int || max < 1 || max > 1500)) throw ExtensionError('"maxTokens" has to be a number from 1 to 1500.');
+        return await api.aiComplete(_string(p, 'prompt', max: 12000), maxTokens: (max as int?) ?? 400);
+      case 'notes.links':
+        _need(ExtensionPermission.notesReadAll);
+        return await api.noteLinks(p['id'] == null ? null : _string(p, 'id', max: 200));
+      case 'notes.backlinks':
+        _need(ExtensionPermission.notesReadAll);
+        return await api.noteBacklinks(p['id'] == null ? null : _string(p, 'id', max: 200));
+      case 'notes.byTag':
+        _need(ExtensionPermission.notesReadAll);
+        return await api.notesWithTag(_string(p, 'tag', max: 100));
+      case 'tags.list':
+        _need(ExtensionPermission.notesReadAll);
+        return await api.listTags();
+      case 'cards.list':
+        _need(ExtensionPermission.notesReadAll);
+        final limit = p['limit'];
+        if (limit != null && (limit is! int || limit < 1 || limit > 100)) throw ExtensionError('"limit" has to be a number from 1 to 100.');
+        return await api.listCards(due: p['due'] == true, limit: (limit as int?) ?? 50);
+      case 'citations.search':
+        _need(ExtensionPermission.notesReadAll);
+        return await api.searchCitations(_string(p, 'query', max: 200));
+      case 'citations.add':
+        _need(ExtensionPermission.notesManage);
+        final source = p['source'];
+        if (source is! Map) throw ExtensionError('"source" has to be an object.');
+        if (jsonEncode(source).length > 8000) throw ExtensionError('"source" is too big.');
+        return await api.addCitation(source.cast<String, Object?>());
       case 'clipboard.write':
         _need(ExtensionPermission.clipboard);
         await api.copy(_string(p, 'text'));
@@ -736,6 +938,12 @@ class ExtensionRuntime {
           }
         }
         final body = p['body'];
+        if (p['responseType'] == 'base64') {
+          final bytes = fetchBytes ?? (throw ExtensionError('Answers that are not text cannot be fetched here.'));
+          final answer = await bytes(url,
+              method: '${p['method'] ?? 'GET'}'.toUpperCase(), headers: headers, body: body is String ? body : null, limit: heavy ? 20 * 1024 * 1024 : 4 * 1024 * 1024);
+          return answer;
+        }
         final answer = await fetch(url, method: '${p['method'] ?? 'GET'}'.toUpperCase(), headers: headers, body: body is String ? body : null);
         if ('${answer['body']}'.length > _largestAnswer) throw ExtensionError('The answer is too big.');
         return answer;

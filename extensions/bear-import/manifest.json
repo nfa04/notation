@@ -1,0 +1,13 @@
+{
+  "id": "bear-import",
+  "name": "Bear import",
+  "version": "1.0.0",
+  "description": "Brings in Bear notes exported as TextBundle (Bear: File, Export Notes, TextBundle; pick the folder or a zip of it). Pictures and #tags are kept.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["notes.import"],
+  "importers": [
+    { "id": "textbundle", "title": "Bear", "accepts": ["folder", "zip"], "description": "Export the notes as TextBundle, then pick that folder or a zip of it." }
+  ]
+}

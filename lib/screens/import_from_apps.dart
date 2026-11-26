@@ -8,6 +8,10 @@ import 'package:flutter/material.dart' hide Text;
 import 'package:path/path.dart' as p;
 
 import '../data/note_repository.dart';
+import '../extensions/extension_service.dart' show ExtensionService, InstalledExtension;
+import '../extensions/extension_doors.dart' show ExtensionImporter;
+import '../import/extension_import.dart';
+import 'extension_dialogs.dart';
 import '../data/tag_repository.dart';
 import '../import/goodnotes_import.dart';
 import '../import/import_source.dart';
@@ -19,6 +23,9 @@ import 'note_file_actions.dart' show pickerFilter;
 
 enum _From { obsidianFolder, obsidianZip, notion, goodnotes }
 
+/// An importer an extension brings: chosen in the same list as the built-in ones.
+typedef _Ext = ({InstalledExtension extension, ExtensionImporter importer});
+
 /// "Bring your notes": asks which app they come from, reads them in and tells what was taken and what was not. [onOpenNote] opens
 /// the first note that was made when the person asks for it.
 Future<void> showImportFromApps(
@@ -26,8 +33,10 @@ Future<void> showImportFromApps(
   required NoteRepository repository,
   TagRepository? tags,
   required ValueChanged<String> onOpenNote,
+  ExtensionService? extensions,
 }) async {
-  final from = await showDialog<_From>(
+  final bringing = [if (!kIsWeb) ...?extensions?.importers];
+  final choice = await showDialog<Object>(
     context: context,
     builder: (context) => PlatformAlertDialog(
       title: const Text('Bring your notes from another app'),
@@ -44,13 +53,23 @@ Future<void> showImportFromApps(
                 'In Notion: Settings, Export all workspace content, Markdown & CSV. Pick the zip you get.', _From.notion),
             _option(context, const ValueKey('import-goodnotes'), Symbols.picture_as_pdf, 'GoodNotes: PDFs or a .goodnotes file',
                 'In GoodNotes: Share, Export as PDF. Handwriting stays as it looks. A .goodnotes file can only give its PDFs.', _From.goodnotes),
+            for (final b in bringing)
+              ListTile(
+                key: ValueKey('import-ext-${b.extension.id}-${b.importer.id}'),
+                leading: const Icon(Symbols.extension),
+                title: Text.verbatim('${b.extension.manifest.name}: ${b.importer.title}'),
+                subtitle: Text.verbatim(b.importer.description.isEmpty ? _accepts(b.importer) : b.importer.description),
+                onTap: () => Navigator.pop(context, b),
+              ),
           ]),
         ),
       ),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))],
     ),
   );
-  if (from == null || !context.mounted) return;
+  if (choice == null || !context.mounted) return;
+  final ext = choice is _Ext ? choice : null;
+  final from = choice is _From ? choice : null;
   try {
     final progress = ValueNotifier<(int, int)>((0, 0));
     ImportReport? report;
@@ -78,7 +97,42 @@ Future<void> showImportFromApps(
     }
 
     void onProgress(int done, int total) => progress.value = (done, total);
-    switch (from) {
+    if (ext != null) {
+      final service = extensions!;
+      final importer = ext.importer;
+      ImportSource? source;
+      if (!importer.fromAccount) {
+        source = await _pickSource(context, importer);
+        if (source == null || !context.mounted) return;
+      }
+      final known = await service.importMapOf(ext.extension.id, importer.id);
+      final mapped = <String, String>{...known};
+      final name = ext.extension.manifest.name;
+      await run(() async {
+        final result = await service.runImporter(
+          ext.extension,
+          importer,
+          source: source,
+          api: interactiveApiFor(context, name, onProgress: (text, fraction) => progress.value = fraction == null ? (0, 0) : ((fraction * 1000).round(), 1000)),
+        );
+        progress.value = (0, result.notes.length);
+        final report = await importExtensionNotes(
+          notes: result.notes,
+          repository: repository,
+          tags: tags,
+          rootName: importer.title,
+          known: known,
+          onMapped: (s, n) => mapped[s] = n,
+          onProgress: onProgress,
+          notices: result.notices,
+        );
+        await service.saveImportMap(ext.extension.id, importer.id, mapped);
+        return report;
+      });
+      if (report != null && context.mounted) await showImportReport(context, report!, onOpenNote);
+      return;
+    }
+    switch (from!) {
       case _From.obsidianFolder:
         final dir = await FilePicker.getDirectoryPath(dialogTitle: 'Pick the vault folder');
         if (dir == null || !context.mounted) return;
@@ -126,7 +180,7 @@ Future<void> showImportFromApps(
         }
         await run(() async => (await importPdfs(pdfs: pdfs, repository: repository, onProgress: onProgress))..notices.addAll(notices));
     }
-    if (report != null && context.mounted) await _showReport(context, report!, onOpenNote);
+    if (report != null && context.mounted) await showImportReport(context, report!, onOpenNote);
   } on FormatException catch (e) {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text.verbatim(tr(e.message)), duration: const Duration(seconds: 10)));
   } catch (e) {
@@ -144,7 +198,8 @@ Widget _option(BuildContext context, Key key, IconData icon, String title, Strin
       onTap: () => Navigator.pop(context, value),
     );
 
-Future<void> _showReport(BuildContext context, ImportReport r, ValueChanged<String> onOpenNote) async {
+/// Tells what an import did: what was taken, what was left out and why; can open the first note that was made.
+Future<void> showImportReport(BuildContext context, ImportReport r, ValueChanged<String> onOpenNote) async {
   String names(Iterable<String> s) => s.take(60).join('\n') + (s.length > 60 ? '\n...' : '');
   final open = await showDialog<bool>(
     context: context,
@@ -185,3 +240,30 @@ Widget _list(BuildContext context, String title, Iterable<String> items, String 
         children: [Align(alignment: Alignment.centerLeft, child: SelectableText(names(items)))],
       ),
     );
+
+String _accepts(ExtensionImporter i) => i.fromAccount
+    ? tr('From your account: it asks for what it needs.')
+    : tr('Takes: {what}', {'what': i.accepts.map((a) => a == 'folder' ? tr('a folder') : (a == 'zip' ? tr('a zip') : a)).join(', ')});
+
+/// Asks for what an importer takes: a folder, or files (a zip is opened and its files are given on).
+Future<ImportSource?> _pickSource(BuildContext context, ExtensionImporter importer) async {
+  if (importer.fromFolder && !kIsWeb && importer.extensions.isEmpty) {
+    final dir = await FilePicker.getDirectoryPath(dialogTitle: tr('Pick the folder'));
+    return dir == null ? null : sourceFromDirectory(Directory(dir));
+  }
+  final filter = pickerFilter(importer.extensions.isEmpty ? const ['zip'] : importer.extensions);
+  final picked = await FilePicker.pickFiles(dialogTitle: tr('Pick the files'), type: filter.type, allowedExtensions: filter.extensions);
+  if (picked.isEmpty) return null;
+  final files = <SourceFile>[];
+  var name = 'import';
+  for (final f in picked) {
+    final bytes = await f.readAsBytes();
+    name = p.basenameWithoutExtension(f.name);
+    if (f.name.toLowerCase().endsWith('.zip') && !importer.accepts.contains('.zip')) {
+      files.addAll(sourceFromZip(bytes, name: name).files);
+    } else {
+      files.add(SourceFile(f.name, bytes.length, () async => bytes));
+    }
+  }
+  return ImportSource(name, files);
+}

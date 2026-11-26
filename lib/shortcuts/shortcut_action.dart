@@ -12,7 +12,8 @@ enum ShortcutGroup {
   tools('Drawing tools'),
   colors('Pen colors and size'),
   insert('Insert'),
-  view('View and pages');
+  view('View and pages'),
+  extensions('Extensions');
 
   final String label;
   const ShortcutGroup(this.label);

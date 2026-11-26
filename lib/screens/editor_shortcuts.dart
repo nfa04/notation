@@ -15,6 +15,16 @@ extension _EditorShortcuts on _FixedPageNoteEditorState {
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
     // a text that is being typed in has its own undo, caret movement and paste
     final typing = shortcutTextFocused();
+    if (id.startsWith('ext.')) {
+      // a command that is for notes runs inside this note; the others are left to the frame of the app
+      final service = widget.extensions;
+      final entry = service?.commands(CommandPlace.noteMenu).where((c) => 'ext.${c.extension.id}/${c.command.id}' == id).firstOrNull;
+      if (service == null || entry == null) return false;
+      unawaited(runExtensionCommand(context, service, entry, _EditorCommandApi(this, entry.extension.manifest.name), extra: {
+        'note': {'id': widget.noteId, 'title': _titleController.text},
+      }));
+      return true;
+    }
     if (id.startsWith('shape.')) return _chooseShape(ShapeTool.values.byName(id.substring(6)));
     if (id.startsWith('color.') && id != 'color.custom') return _chooseColor(int.parse(id.substring(6)) - 1);
     switch (id) {

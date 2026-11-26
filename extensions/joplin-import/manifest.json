@@ -1,0 +1,13 @@
+{
+  "id": "joplin-import",
+  "name": "Joplin import",
+  "version": "1.0.0",
+  "description": "Brings in a Joplin export: the .jex file (File, Export all, JEX) or the folder of a RAW export. Notebooks become folders, tags and pictures are kept, links between notes keep working.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["notes.import"],
+  "importers": [
+    { "id": "jex", "title": "Joplin", "accepts": [".jex", "folder"], "description": "In Joplin: File, Export all, JEX - Joplin Export File." }
+  ]
+}

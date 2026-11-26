@@ -1,0 +1,13 @@
+{
+  "id": "simplenote-import",
+  "name": "Simplenote import",
+  "version": "1.0.0",
+  "description": "Brings in the notes of a Simplenote export (the zip, or its notes.json): the first line is the title, tags are kept, notes in the trash are left out.",
+  "author": "Notation",
+  "main": "main.js",
+  "apiVersion": 2,
+  "permissions": ["notes.import"],
+  "importers": [
+    { "id": "export", "title": "Simplenote", "accepts": ["zip", ".json"], "description": "In Simplenote: Settings, Export Notes. Pick the zip." }
+  ]
+}

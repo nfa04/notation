@@ -222,6 +222,7 @@ void main() {
       'notation.tool',
       'notation.action',
       'notation.drawTool',
+      'notation.transcriptSource',
       'notation.note.get',
       'notation.note.insertText',
       'notation.note.setTitle',
@@ -278,13 +279,40 @@ void main() {
       'notation.storage.set',
       'notation.storage.remove',
       'notation.ui.message',
+      'notation.importer',
+      'notation.exporter',
+      'notation.command',
+      'notation.block',
+      'notation.agentTool',
+      'notation.capture',
+      'notation.ui.confirm',
+      'notation.ui.choose',
+      'notation.ui.form',
+      'notation.ui.progress',
+      'notation.secrets.get',
+      'notation.secrets.set',
+      'notation.settings.get',
+      'notation.ink.read',
+      'notation.ink.strokes',
+      'notation.ai.complete',
+      'notation.notes.links',
+      'notation.notes.backlinks',
+      'notation.notes.byTag',
+      'notation.tags.list',
+      'notation.cards.list',
+      'notation.cards.due',
+      'notation.citations.search',
+      'notation.citations.add',
     ]) {
+      // (the types file for editors names every call too)
+      expect(File('docs/notation.d.ts').readAsStringSync(), contains(call.substring('notation.'.length).split('.').last), reason: 'notation.d.ts: $call');
       expect(docs, contains(call), reason: 'docs: $call');
       expect(magicSystem, contains(call.replaceFirst('notation.storage.set', '.set').replaceFirst('notation.storage.remove', '.remove').replaceFirst('notation.storage.get', 'notation.storage.get')), reason: 'prompt: $call');
     }
     for (final p in ExtensionPermission.values) {
       expect(docs, contains('`${p.id}`'), reason: 'docs: ${p.id}');
-      expect(magicSystem, contains(p.id), reason: 'prompt: ${p.id}');
+      // (what the assistant asks for a tool of an extension is no permission an extension can ask for: the model is not told of it)
+      if (p != ExtensionPermission.assistantTool) expect(magicSystem, contains(p.id), reason: 'prompt: ${p.id}');
     }
     for (final e in AutomationEvent.values) {
       expect(docs, contains('`${e.name}`'), reason: 'docs: ${e.name}');

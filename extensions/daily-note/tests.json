@@ -1,0 +1,60 @@
+{
+ "cases": [
+  {
+   "name": "makes the note from the template and tags it",
+   "kind": "command",
+   "id": "today",
+   "context": {
+    "day": "2026-01-02"
+   },
+   "settings": {
+    "template": "# {date}\n",
+    "ask": false
+   },
+   "expect": {
+    "value": "Made \"Daily 2026-01-02\".",
+    "calls": [
+     "create:Daily 2026-01-02",
+     "tag:new-1:daily"
+    ]
+   }
+  },
+  {
+   "name": "says when it is there",
+   "kind": "command",
+   "id": "today",
+   "context": {
+    "day": "2026-01-02"
+   },
+   "notes": [
+    {
+     "id": "n9",
+     "title": "Daily 2026-01-02"
+    }
+   ],
+   "settings": {},
+   "expect": {
+    "value": "Today's note is there already: \"Daily 2026-01-02\".",
+    "calls": []
+   }
+  },
+  {
+   "name": "asks first, and the answer is no",
+   "kind": "command",
+   "id": "today",
+   "context": {
+    "day": "2026-01-02"
+   },
+   "settings": {
+    "ask": true
+   },
+   "answers": {
+    "confirm": false
+   },
+   "expect": {
+    "value": "Not made.",
+    "calls": []
+   }
+  }
+ ]
+}

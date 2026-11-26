@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 59;
+const int schemaVersion = 60;
 
 const List<String> createStatements = [
   '''
@@ -163,6 +163,9 @@ const List<String> createStatements = [
   _createGraphVersionsIndex,
   _createEventCache,
   _createTaskEvents,
+  _createLocalCalendars,
+  _createLocalEvents,
+  _createLocalEventsIndex,
   _createSyncTombstones,
   _createSyncMarks,
   _createSyncLineage,
@@ -410,6 +413,44 @@ const String _createEventCache = '''
     PRIMARY KEY (source, range_key)
   )
 ''';
+
+/// The app's own calendars (events that live in the app, not on a CalDAV server or the phone).
+const String _createLocalCalendars = '''
+  CREATE TABLE IF NOT EXISTS local_calendars (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    color      INTEGER,
+    hidden     INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER                                -- a tombstone, so that other devices delete it too
+  )
+''';
+
+/// Events of the app's own calendars. `start_at`/`end_at` are UTC milliseconds; for an all-day event they are the
+/// start of the first day and of the day after the last one (in `tz`, wall time), so that DST never moves them.
+const String _createLocalEvents = '''
+  CREATE TABLE IF NOT EXISTS local_events (
+    id          TEXT PRIMARY KEY,                     -- also the iCalendar UID
+    calendar_id TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    start_at    INTEGER NOT NULL,
+    end_at      INTEGER NOT NULL,
+    all_day     INTEGER NOT NULL DEFAULT 0,
+    tz          TEXT,                                 -- zone name the wall time belongs to (null = the device's)
+    location    TEXT,
+    url         TEXT,
+    notes       TEXT,
+    rrule       TEXT,                                 -- RRULE value without the prefix
+    exdates     TEXT,                                 -- JSON list of UTC ms (skipped occurrences)
+    overrides   TEXT,                                 -- JSON: edited single occurrences, keyed by original start (UTC ms)
+    alarms      TEXT,                                 -- JSON list of minutes before the start
+    updated_at  INTEGER NOT NULL,
+    deleted_at  INTEGER
+  )
+''';
+
+const String _createLocalEventsIndex = 'CREATE INDEX IF NOT EXISTS idx_local_events_time ON local_events(start_at, end_at)';
 
 /// Notes and folders that were deleted for good, so that the other devices of the profile delete them too (see `DeviceSyncService`).
 const String _createSyncTombstones = '''
@@ -745,6 +786,8 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  // the app's own calendars and events
+  59: [_createLocalCalendars, _createLocalEvents, _createLocalEventsIndex],
   // a note can hold several PDFs, each kept as its own file, and shows their pages in any order
   58: ['ALTER TABLE notes ADD COLUMN pdf_files TEXT'],
   // a formula read in the handwriting keeps its page and place, so that the assistant can be given it where it was written

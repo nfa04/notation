@@ -1,11 +1,12 @@
 import '../models/brush.dart';
+import 'extension_doors.dart';
 
 /// What an extension may be allowed to do. Each is asked for in the manifest and granted by the person, one by one; what is
 /// not granted fails when the script tries it.
 enum ExtensionPermission {
   noteRead('note.read', 'Read the text and the title of the note it is used on'),
   noteWrite('note.write', 'Change the text, the title, the text boxes and the pictures of the note it is used on'),
-  notesReadAll('notes.readAll', 'Search and read all of your notes, not only the one it is used on'),
+  notesReadAll('notes.readAll', 'Search and read all of your notes, not only the one it is used on, with their links and tags, your flashcards and your citations'),
   notesManage('notes.manage', 'Create notes, and file notes in folders and with tags'),
   notesDelete('notes.delete', 'Move notes to the trash, and bring them back'),
   drawPage('draw.page', 'Draw lines and shapes on the pages of the note it is used on'),
@@ -18,7 +19,11 @@ enum ExtensionPermission {
   clipboard('clipboard.write', 'Put text on the clipboard'),
   network('network', 'Send requests to the websites it lists'),
   eventsEmit('events.emit', 'Announce the events it lists, which automations can react to'),
-  draw('draw.add', 'Draw on the pages with the drawing tools it lists');
+  draw('draw.add', 'Draw on the pages with the drawing tools it lists'),
+  notesImport('notes.import', 'Bring in notes from other apps and services, with the importers it lists'),
+  /// Not for manifests: what the assistant asks the person when it wants to call a tool of an extension.
+  assistantTool('assistant.tool', 'Let the assistant call a tool this extension offers it'),
+  aiUse('ai.use', 'Ask the AI you chose in the settings (on the device or in the cloud: what it asks goes where that AI is)');
 
   final String id;
   final String description;
@@ -44,8 +49,15 @@ class ExtensionTool {
 /// An action of an extension: it can be chosen in the automations.
 class ExtensionActionDef {
   final String id, title;
-  const ExtensionActionDef(this.id, this.title);
+
+  /// Options the automation's rule asks the person for; the script reads them as `ctx.params`.
+  final List<ExtensionField> fields;
+  const ExtensionActionDef(this.id, this.title, [this.fields = const []]);
 }
+
+/// The version of the extension API this app speaks. A manifest may say which it was written for (`apiVersion`); one written for a
+/// newer one is refused with a reason instead of failing in odd ways.
+const extensionApiVersion = 2;
 
 /// An event of an extension: it announces it with `notation.events.emit`, and an automation can be made for it.
 class ExtensionEventDef {
@@ -84,6 +96,17 @@ class ExtensionDrawTool {
   const ExtensionDrawTool(this.id, this.title, [this.preview = DrawPreview.path]);
 }
 
+/// A source of transcripts of an extension: given an address (or any text the person types) its script answers with the captions of
+/// that video. It appears in "New note from a transcript". It needs no permission of its own (it cannot touch notes); what it
+/// fetches goes through `network`.
+class ExtensionTranscriptSource {
+  final String id, title;
+
+  /// One line that says what it takes ("A YouTube link").
+  final String hint;
+  const ExtensionTranscriptSource(this.id, this.title, [this.hint = '']);
+}
+
 /// The description of an extension (`manifest.json`): what it is called, what it adds to the app and what it asks to be
 /// allowed to do. The script itself is `main` (a `.js` file next to it).
 class ExtensionManifest {
@@ -97,6 +120,22 @@ class ExtensionManifest {
   final List<ExtensionEventDef> events;
   final List<ExtensionBrushDef> brushes;
   final List<ExtensionDrawTool> drawTools;
+  final List<ExtensionTranscriptSource> transcriptSources;
+  final List<ExtensionImporter> importers;
+  final List<ExtensionExporter> exporters;
+  final List<ExtensionCommand> commands;
+  final List<ExtensionField> settings;
+  final List<ExtensionBlock> blocks;
+  final List<ExtensionAgentTool> agentTools;
+  final List<ExtensionCapture> capture;
+  final List<ExtensionTemplate> templates;
+
+  /// The events of the automations it reacts to by itself (the action it names runs).
+  final Map<String, String> on;
+  final int apiVersion;
+
+  /// More scripts of the package, run before [main] in this order (they share what they define).
+  final List<String> modules;
 
   const ExtensionManifest({
     required this.id,
@@ -112,6 +151,18 @@ class ExtensionManifest {
     this.events = const [],
     this.brushes = const [],
     this.drawTools = const [],
+    this.transcriptSources = const [],
+    this.importers = const [],
+    this.exporters = const [],
+    this.commands = const [],
+    this.settings = const [],
+    this.blocks = const [],
+    this.agentTools = const [],
+    this.capture = const [],
+    this.templates = const [],
+    this.on = const {},
+    this.apiVersion = 1,
+    this.modules = const [],
   });
 
   static final _id = RegExp(r'^[a-z0-9][a-z0-9._-]{1,62}[a-z0-9]$');
@@ -153,7 +204,7 @@ class ExtensionManifest {
       if (rawPerms is! List) throw ManifestException('"permissions" has to be a list.');
       for (final p in rawPerms) {
         final perm = p is String ? ExtensionPermission.byId(p) : null;
-        if (perm == null) throw ManifestException('Unknown permission: $p');
+        if (perm == null || perm == ExtensionPermission.assistantTool) throw ManifestException('Unknown permission: $p');
         perms.add(perm);
       }
     }
@@ -177,7 +228,13 @@ class ExtensionManifest {
     }
 
     final tools = [for (final m in items('tools')) () { final e = entry(m, 'tool'); return ExtensionTool(e.id, e.title); }()];
-    final actions = [for (final m in items('actions')) () { final e = entry(m, 'action'); return ExtensionActionDef(e.id, e.title); }()];
+    final actions = [
+      for (final m in items('actions'))
+        () {
+          final e = entry(m, 'action');
+          return ExtensionActionDef(e.id, e.title, ExtensionField.parse(m['fields'], 'fields', max: 8, allowSecret: false));
+        }(),
+    ];
     final events = [for (final m in items('events')) () { final e = entry(m, 'event'); return ExtensionEventDef(e.id, e.title); }()];
     if (events.isNotEmpty && !perms.contains(ExtensionPermission.eventsEmit)) throw ManifestException('"events" needs the permission "events.emit".');
     if (events.isEmpty && perms.contains(ExtensionPermission.eventsEmit)) throw ManifestException('The permission "events.emit" needs "events": the events it announces.');
@@ -220,7 +277,53 @@ class ExtensionManifest {
     ];
     if (drawTools.isNotEmpty && !perms.contains(ExtensionPermission.draw)) throw ManifestException('"drawTools" needs the permission "draw.add".');
     if (drawTools.isEmpty && perms.contains(ExtensionPermission.draw)) throw ManifestException('The permission "draw.add" needs "drawTools": the tools that draw.');
-    for (final ids in [brushes.map((b) => b.id).toList(), drawTools.map((t) => t.id).toList()]) {
+    final transcriptSources = [
+      for (final m in items('transcriptSources'))
+        () {
+          final e = entry(m, 'transcript source');
+          final hint = m['hint'];
+          if (hint != null && (hint is! String || hint.length > 120)) throw ManifestException('"hint" of the transcript source "${e.id}" has to be text of up to 120 letters.');
+          return ExtensionTranscriptSource(e.id, e.title, (hint as String?)?.trim() ?? '');
+        }(),
+    ];
+    final importers = ExtensionImporter.parse(json['importers']);
+    final exporters = ExtensionExporter.parse(json['exporters']);
+    final commands = ExtensionCommand.parse(json['commands']);
+    final settings = ExtensionField.parse(json['settings'], 'settings', max: 30);
+    final blocks = ExtensionBlock.parse(json['blocks']);
+    final agentTools = ExtensionAgentTool.parse(json['agentTools']);
+    final capture = ExtensionCapture.parse(json['capture']);
+    final templates = ExtensionTemplate.parse(json['templates']);
+    final on = parseReactions(json['on']);
+    final modules = parseModules(json['modules'], main);
+    final apiVersion = json['apiVersion'] ?? 1;
+    if (apiVersion is! int || apiVersion < 1) throw ManifestException('"apiVersion" has to be a whole number from 1.');
+    if (apiVersion > extensionApiVersion) throw ManifestException('This extension was written for version $apiVersion of the extension API; this app speaks version $extensionApiVersion. Update the app.');
+    if (importers.isNotEmpty && !perms.contains(ExtensionPermission.notesImport)) throw ManifestException('"importers" needs the permission "notes.import".');
+    if (importers.isEmpty && perms.contains(ExtensionPermission.notesImport)) throw ManifestException('The permission "notes.import" needs "importers".');
+    if (importers.any((i) => i.fromAccount) && !perms.contains(ExtensionPermission.network)) throw ManifestException('An importer that takes an "account" needs the permission "network".');
+    if (exporters.isNotEmpty && !perms.contains(ExtensionPermission.noteRead)) throw ManifestException('"exporters" needs the permission "note.read".');
+    if (agentTools.isNotEmpty && perms.contains(ExtensionPermission.network)) {
+      throw ManifestException('"agentTools" cannot be mixed with the permission "network": text in a note could make the assistant send the note away through it.');
+    }
+    for (final e in on.entries) {
+      if (!actions.any((a) => a.id == e.value)) throw ManifestException('"on": "${e.key}" runs the action "${e.value}", which the extension does not list in "actions".');
+    }
+    final reactionSetting = <String>{for (final s in settings) s.id};
+    if (reactionSetting.length != settings.length) throw ManifestException('Two settings have the same "id".');
+    for (final ids in [
+      importers.map((b) => b.id).toList(),
+      exporters.map((b) => b.id).toList(),
+      commands.map((b) => b.id).toList(),
+      blocks.map((b) => b.id).toList(),
+      agentTools.map((b) => b.id).toList(),
+      capture.map((b) => b.id).toList(),
+      templates.map((b) => b.id).toList(),
+    ]) {
+      if (ids.toSet().length != ids.length) throw ManifestException('Two entries have the same "id".');
+    }
+    if (blocks.map((b) => b.language).toSet().length != blocks.length) throw ManifestException('Two blocks have the same "language".');
+    for (final ids in [brushes.map((b) => b.id).toList(), drawTools.map((t) => t.id).toList(), transcriptSources.map((t) => t.id).toList()]) {
       if (ids.toSet().length != ids.length) throw ManifestException('Two entries have the same "id".');
     }
     for (final ids in [tools.map((t) => t.id).toList(), actions.map((a) => a.id).toList(), events.map((e) => e.id).toList()]) {
@@ -240,6 +343,18 @@ class ExtensionManifest {
       events: events,
       brushes: brushes,
       drawTools: drawTools,
+      transcriptSources: transcriptSources,
+      importers: importers,
+      exporters: exporters,
+      commands: commands,
+      settings: settings,
+      blocks: blocks,
+      agentTools: agentTools,
+      capture: capture,
+      templates: templates,
+      on: on,
+      apiVersion: apiVersion,
+      modules: modules,
     );
   }
 
@@ -253,7 +368,9 @@ class ExtensionManifest {
         'permissions': [for (final p in permissions) p.id],
         if (hosts.isNotEmpty) 'hosts': hosts,
         'tools': [for (final t in tools) {'id': t.id, 'title': t.title}],
-        'actions': [for (final a in actions) {'id': a.id, 'title': a.title}],
+        'actions': [
+          for (final a in actions) {'id': a.id, 'title': a.title, if (a.fields.isNotEmpty) 'fields': [for (final f in a.fields) f.toJson()]},
+        ],
         if (events.isNotEmpty) 'events': [for (final e in events) {'id': e.id, 'title': e.title}],
         if (brushes.isNotEmpty)
           'brushes': [
@@ -272,5 +389,18 @@ class ExtensionManifest {
               },
           ],
         if (drawTools.isNotEmpty) 'drawTools': [for (final t in drawTools) {'id': t.id, 'title': t.title, 'preview': t.preview.id}],
+        if (apiVersion > 1) 'apiVersion': apiVersion,
+        if (importers.isNotEmpty) 'importers': [for (final i in importers) i.toJson()],
+        if (exporters.isNotEmpty) 'exporters': [for (final i in exporters) i.toJson()],
+        if (commands.isNotEmpty) 'commands': [for (final i in commands) i.toJson()],
+        if (settings.isNotEmpty) 'settings': [for (final i in settings) i.toJson()],
+        if (blocks.isNotEmpty) 'blocks': [for (final i in blocks) i.toJson()],
+        if (agentTools.isNotEmpty) 'agentTools': [for (final i in agentTools) i.toJson()],
+        if (capture.isNotEmpty) 'capture': [for (final i in capture) i.toJson()],
+        if (templates.isNotEmpty) 'templates': [for (final i in templates) i.toJson()],
+        if (on.isNotEmpty) 'on': on,
+        if (modules.isNotEmpty) 'modules': modules,
+        if (transcriptSources.isNotEmpty)
+          'transcriptSources': [for (final t in transcriptSources) {'id': t.id, 'title': t.title, if (t.hint.isNotEmpty) 'hint': t.hint}],
       };
 }

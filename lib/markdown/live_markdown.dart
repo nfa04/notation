@@ -15,6 +15,7 @@ import '../l10n/text.dart';
 import '../l10n/language.dart';
 import '../models/rich_text.dart';
 import 'code_highlight.dart';
+import 'extension_block.dart';
 import 'document_dialogs.dart';
 import 'document_images.dart';
 import '../widgets/bounded_image.dart';
@@ -461,6 +462,25 @@ class _LiveBuilder {
     final firstEnd = text.indexOf('\n', b.start);
     final lastStart = text.lastIndexOf('\n', b.end - 1) + 1;
     if (firstEnd < 0 || lastStart <= firstEnd) return;
+    // a language an extension draws is shown as its drawing, until the caret comes into the block (then it is the code, to change)
+    if (!touched && ExtensionBlocks.handles(b.lang)) {
+      final lines = '\n'.allMatches(text.substring(b.start, b.end)).length;
+      fold(
+        b.start,
+        b.end,
+        _Overhang(
+          lift: lines * _hiddenLineHeight(),
+          child: SizedBox(
+            key: ValueKey('live-extension-block-${b.start}'),
+            width: _fullWidth,
+            child: ExtensionBlockView(language: b.lang, code: b.code, width: _fullWidth, fontSize: fontSize, textColor: textColor),
+          ),
+        ),
+        alignment: PlaceholderAlignment.top,
+      );
+      if (b.end < n) hide(b.end, b.end + 1);
+      return;
+    }
     if (touched) {
       dim(b.start, firstEnd);
       dim(lastStart, b.end);
