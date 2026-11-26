@@ -3443,6 +3443,7 @@ const frenchTexts = <String, String>{
   'This device has no accelerator the app can use: models always run on the processor.': 'Cet appareil n’a aucun accélérateur utilisable par l’application : les modèles tournent toujours sur le processeur.',
   'Accelerator when available': 'Accélérateur si disponible',
   'Processor only': 'Processeur seulement',
+  'Recommended on this device: {size}. It is used until you choose another.': 'Recommandé sur cet appareil : {size}. Il est utilisé tant que vous n\'en choisissez pas un autre.',
   'Graphics card ({mb} MB)': 'Carte graphique ({mb} Mo)',
   'Small ({mb} MB)': 'Petit ({mb} Mo)',
   'Full ({mb} MB)': 'Complet ({mb} Mo)',

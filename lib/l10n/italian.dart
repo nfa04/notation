@@ -3443,6 +3443,7 @@ const italianTexts = <String, String>{
   'This device has no accelerator the app can use: models always run on the processor.': 'Questo dispositivo non ha un acceleratore utilizzabile dall’app: i modelli girano sempre sul processore.',
   'Accelerator when available': 'Acceleratore quando disponibile',
   'Processor only': 'Solo processore',
+  'Recommended on this device: {size}. It is used until you choose another.': 'Consigliato su questo dispositivo: {size}. Viene usato finché non ne scegli un altro.',
   'Graphics card ({mb} MB)': 'Scheda grafica ({mb} MB)',
   'Small ({mb} MB)': 'Piccolo ({mb} MB)',
   'Full ({mb} MB)': 'Completo ({mb} MB)',

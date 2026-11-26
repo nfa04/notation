@@ -81,8 +81,9 @@ void main() {
               },
         );
 
-    HandwritingService service({GlmOcrService? g}) => HandwritingService(
+    HandwritingService service({GlmOcrService? g, bool fp16 = false}) => HandwritingService(
           glm: g ?? glm(),
+          prefersFp16: () async => fp16,
           readSetting: (k) async => settings[k],
           writeSetting: (k, v) async => settings[k] = v,
         );
@@ -152,6 +153,42 @@ void main() {
       await again.load(); // (a new start finds the choice and the file)
       expect(again.weights, GlmWeights.compact);
       expect(again.status, HandwritingStatus.installed);
+    });
+
+    test('with an accelerator that runs 16 bits well, nobody having chosen, the graphics card network is the default; one already downloaded stays', () async {
+      final fetched = <String>[];
+      final s = service(
+        fp16: true,
+        g: glm(download: (url, path, progress) async {
+          fetched.add(url.split('/').last);
+          File(path).writeAsBytesSync([1]);
+          progress(1);
+        }),
+      );
+      await s.load();
+      expect(s.recommendedWeights, GlmWeights.gpu);
+      expect(s.weights, GlmWeights.gpu);
+      await s.install();
+      expect(fetched, ['vision-gpu.onnx', 'vision-gpu.onnx.data', 'text.onnx', 'embeddings.bin']);
+      expect(settings.containsKey(HandwritingService.weightsKey), isFalse); // (not a choice: it follows the device)
+
+      // someone who installed the standard network before keeps reading with it, without a new download
+      await s.remove();
+      final before = service();
+      await before.load();
+      expect(before.recommendedWeights, GlmWeights.platformDefault);
+      await before.install();
+      final after = service(fp16: true);
+      await after.load();
+      expect(after.recommendedWeights, GlmWeights.gpu);
+      expect(after.weights, GlmWeights.standard);
+      expect(after.status, HandwritingStatus.installed);
+
+      // a choice wins over the device
+      settings[HandwritingService.weightsKey] = 'compact';
+      final chosen = service(fp16: true);
+      await chosen.load();
+      expect(chosen.weights, GlmWeights.compact);
     });
 
     test('a failing download is reported and leaves nothing behind', () async {

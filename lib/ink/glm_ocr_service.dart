@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../export/pdf_ink_text.dart' show plainI;
 import '../llm/model_files.dart';
-import '../llm/onnx_session.dart' show onnxAccelerationEnabled, onnxAccelerationVersion, onnxCheckedForFp16, onnxPinsSizes, padPicturesNow;
+import '../llm/onnx_session.dart' show onnxAccelerationEnabled, onnxAccelerationVersion, onnxCheckedForFp16, onnxPinsSizes, onnxPrefersFp16Files, padPicturesNow;
 import '../models/canvas_models.dart';
 import 'glm_ocr.dart';
 import 'ink_grouping.dart';
@@ -52,6 +52,14 @@ enum GlmWeights {
 
   /// What a browser starts with (see above); everywhere else the more exact one.
   static const platformDefault = kIsWeb ? compact : standard;
+
+  /// What this device starts with when nobody chose: [platformDefault], except the one for a graphics card where the accelerator in use
+  /// runs it well ([onnxPrefersFp16Files]: CoreML on Apple devices, an AMD or NVIDIA runtime pack on Linux). [prefersFp16] stands in for
+  /// that in tests.
+  static Future<GlmWeights> deviceDefault({Future<bool> Function()? prefersFp16}) async {
+    if (kIsWeb) return platformDefault;
+    return await (prefersFp16 ?? onnxPrefersFp16Files)() ? gpu : platformDefault;
+  }
 }
 
 /// Reads handwriting with GLM-OCR (zai-org, MIT licence, 0.9 billion parameters; the original model, not retrained, in ONNX files made
@@ -160,6 +168,18 @@ class GlmOcrService extends ModelFilesService {
 
   @override
   bool get keepExisting => true;
+
+  /// Whether the files the vision network [w] needs (as it would be used now, see [inUse]) are all on the device.
+  Future<bool> hasFilesOf(GlmWeights w) async {
+    try {
+      for (final name in filesFor(_inUseOf(w)).keys) {
+        if (!await (await file(name)).exists()) return false;
+      }
+      return true;
+    } catch (_) {
+      return false; // (no folder to look in)
+    }
+  }
 
   /// Changes which vision network is used. The other two files stay; only the vision file is fetched, and the one used before stays too
   /// (switching back needs no download; "Remove" deletes them all). Until the new one is there the model counts as not installed.

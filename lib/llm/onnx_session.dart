@@ -354,6 +354,26 @@ Future<List<OrtProvider>> onnxAvailableAccelerators() async {
   return [for (final p in wanted) if (p != OrtProvider.CPU && (have == null || have.contains(p))) p];
 }
 
+/// The accelerator in use, only when the runtime itself said it has it (not when it could not be asked, which [onnxAvailableAccelerators]
+/// treats as "try anyway"): what the default sizes of the models follow. Null with acceleration switched off.
+Future<OrtProvider?> onnxReportedAccelerator() async {
+  if (!onnxAccelerationEnabled) return null;
+  final found = await onnxAvailableAccelerators();
+  if (await _detecting == null) return null;
+  return found.firstOrNull;
+}
+
+/// Whether the 16-bit files ([onnxFp16Files]) are the better default on this device: where the accelerator in use was measured to run
+/// them well or can only run them. CoreML (Mac, iPad, iPhone): the handwriting picture network about 10 times the processor's speed, the
+/// formula encoder 0.8 % from the processor, while the quantised files give wrong answers there. MIGraphX (AMD runtime pack): the
+/// quantised files do not run at all. CUDA (NVIDIA pack): a card computes 16 bits natively and its runtime has no kernels for the
+/// quantised convolutions (not measured on a card). Not Android: QNN on a Snapdragon 865 read 4 times slower than the processor, and the
+/// parts of the 16-bit picture network are not published; not OpenVINO, which also runs on Intel processors without a graphics chip.
+Future<bool> onnxPrefersFp16Files() async {
+  final p = await onnxReportedAccelerator();
+  return p == OrtProvider.CORE_ML || p == OrtProvider.MIGRAPHX || p == OrtProvider.CUDA;
+}
+
 Future<List<OrtProvider>> _usableAccelerators({bool force = false}) async {
   if (!onnxAccelerationEnabled && !force) return const [];
   final have = await onnxAvailableAccelerators();

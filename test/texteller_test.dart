@@ -179,8 +179,9 @@ void main() {
     late Map<String, String> settings;
     late List<String> downloads;
 
-    MathService make({FormulaModel? defaultModel, Map<String, String>? store, Map<String, String> checksums = const {}}) => MathService(
+    MathService make({FormulaModel? defaultModel, Map<String, String>? store, Map<String, String> checksums = const {}, bool fp16 = false}) => MathService(
           defaultModel: defaultModel ?? FormulaModel.texteller,
+          prefersFp16: () async => fp16,
           checksums: checksums,
           modelDirectory: () async => Directory('${dir.path}/p2t'),
           tellerDirectory: () async => Directory('${dir.path}/tt'),
@@ -482,6 +483,32 @@ void main() {
       expect(again.installed, isTrue);
       await again.recognize([zigzag(0, 0, 300, 120)]);
       expect(opened, endsWith('/encoder-gpu.onnx'));
+    });
+
+    test('with an accelerator that runs 16 bits well, nobody having chosen, the 16-bit encoder is the default', () async {
+      final service = make(fp16: true);
+      await service.load();
+      expect(service.recommendedWeights, TellerWeights.gpu);
+      expect(service.weights, TellerWeights.gpu);
+      expect(service.installed, isFalse);
+      await service.install();
+      expect(downloads, ['${MathService.hubTellerRepo}/encoder-gpu.onnx', MathService.tellerFiles['decoder.onnx']!.url]);
+      expect(settings.containsKey(MathService.weightsKey), isFalse); // (not a choice: it follows the device)
+      final plain = make();
+      await plain.load();
+      expect(plain.recommendedWeights, TellerWeights.standard);
+    });
+
+    test('someone who downloaded the 8-bit encoder before keeps it without a new download; a choice wins over the device', () async {
+      putTeller();
+      final service = make(fp16: true);
+      await service.load();
+      expect(service.recommendedWeights, TellerWeights.gpu);
+      expect(service.weights, TellerWeights.standard);
+      expect(service.installed, isTrue);
+      final chosen = make(fp16: true, store: {MathService.weightsKey: 'full'});
+      await chosen.load();
+      expect(chosen.weights, TellerWeights.full);
     });
 
     test('the other model downloads from its own place into its own folder', () async {

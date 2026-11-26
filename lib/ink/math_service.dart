@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../llm/accelerator_plans.dart';
 import '../llm/model_files.dart';
+import '../llm/onnx_session.dart' show onnxPrefersFp16Files;
 import '../models/canvas_models.dart';
 import 'ink_image.dart';
 import 'ink_recognizer.dart';
@@ -33,6 +34,14 @@ enum TellerWeights {
   final String file;
   final int megabytes;
   const TellerWeights(this.file, this.megabytes);
+
+  /// What this device starts with when nobody chose: the 16-bit encoder where the accelerator in use runs it well
+  /// ([onnxPrefersFp16Files]: CoreML on Apple devices, an AMD or NVIDIA runtime pack on Linux), else the 8-bit one (the processor, a
+  /// phone, a browser). [prefersFp16] stands in for that in tests.
+  static Future<TellerWeights> deviceDefault({Future<bool> Function()? prefersFp16}) async {
+    if (kIsWeb) return standard;
+    return await (prefersFp16 ?? onnxPrefersFp16Files)() ? gpu : standard;
+  }
 }
 
 enum FormulaModel {
@@ -117,6 +126,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
   final Future<String?> Function(String key)? _readSetting;
   final Future<void> Function(String key, String value)? _writeSetting;
   final FormulaModel _fallbackModel;
+  final Future<bool> Function()? _prefersFp16;
 
   MathService({
     Future<MathOcrModel> Function(String, String)? open,
@@ -128,6 +138,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
     Future<void> Function(String key, String value)? writeSetting,
     FormulaModel? defaultModel,
     Map<String, String>? checksums,
+    Future<bool> Function()? prefersFp16,
     super.modelDirectory,
     super.download,
   })  : _open = open ?? OnnxMathModel.open,
@@ -138,6 +149,7 @@ class MathService extends ModelFilesService implements InkRecognizer {
         _readSetting = readSetting,
         _writeSetting = writeSetting,
         _fallbackModel = defaultModel ?? standardModel,
+        _prefersFp16 = prefersFp16,
         super(files: (defaultModel ?? standardModel) == FormulaModel.texteller ? tellerFiles : modelFiles, folderName: 'math', checksums: checksums ?? (tellerRepo == defaultTellerRepo ? tellerChecksums : const {}));
 
   /// How long the sessions of TexTeller stay open after a formula was read (the next one is often asked for at once): two minutes. With 6 s
@@ -158,6 +170,33 @@ class MathService extends ModelFilesService implements InkRecognizer {
 
   /// The encoder of TexTeller in use.
   TellerWeights get weights => _weights;
+
+  TellerWeights _recommended = TellerWeights.standard;
+
+  /// The encoder that suits this device (see [TellerWeights.deviceDefault]): used while nobody chose, and marked in the settings.
+  TellerWeights get recommendedWeights => _recommended;
+
+  Future<bool> _hasEncoder(TellerWeights w) async {
+    try {
+      final dir = await _tellerDirectory();
+      for (final name in tellerFilesFor(w).keys) {
+        if (!await File(p.join(dir.path, name)).exists()) return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The encoder while nobody chose: the recommended one, unless only another one is downloaded (it keeps reading without a new
+  /// download; the settings offer the recommended one).
+  Future<TellerWeights> _unchosenWeights() async {
+    if (await _hasEncoder(_recommended)) return _recommended;
+    for (final w in TellerWeights.values) {
+      if (w != _recommended && await _hasEncoder(w)) return w;
+    }
+    return _recommended;
+  }
 
   @override
   bool get keepExisting => model == FormulaModel.texteller; // (the decoder stays when the encoder is changed)
@@ -225,10 +264,12 @@ class MathService extends ModelFilesService implements InkRecognizer {
       stored = FormulaModel.values.where((m) => m.name == name).firstOrNull;
     } catch (_) {}
     _chosen = stored;
+    _recommended = await TellerWeights.deviceDefault(prefersFp16: _prefersFp16);
+    String? w;
     try {
-      final w = await _readSetting?.call(weightsKey);
-      _weights = TellerWeights.values.where((v) => v.name == w).firstOrNull ?? TellerWeights.standard;
+      w = await _readSetting?.call(weightsKey);
     } catch (_) {}
+    _weights = TellerWeights.values.where((v) => v.name == w).firstOrNull ?? await _unchosenWeights();
     var m = stored ?? _fallbackModel;
     if (stored == null) {
       final other = m == FormulaModel.texteller ? FormulaModel.pix2text : FormulaModel.texteller;
