@@ -86,7 +86,7 @@ class _ExtensionStorePageState extends State<ExtensionStorePage> {
       await widget.service.installZip(bytes);
       _say(tr('Installed {name}. It is off until you switch it on in Settings → Extensions.', {'name': m.name}));
     } on StoreException catch (x) {
-      _say(tr(x.message));
+      _say(tr(x.message, x.args));
     } on ManifestException catch (x) {
       _say(tr('Could not install it: {error}', {'error': x.message}));
     } catch (x) {
@@ -121,7 +121,7 @@ class _ExtensionStorePageState extends State<ExtensionStorePage> {
               if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
               if (snap.hasError) {
                 final x = snap.error;
-                return _message(x is StoreException ? tr(x.message) : tr('The store could not be reached.'), icon: Symbols.cloud_off, retry: true);
+                return _message(x is StoreException ? tr(x.message, x.args) : tr('The store could not be reached.'), icon: Symbols.cloud_off, retry: true);
               }
               return _list(context, snap.data!);
             },

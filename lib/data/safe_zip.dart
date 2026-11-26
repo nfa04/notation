@@ -20,6 +20,7 @@ Archive decodeZipLimited(
   int maxEntries = 10000,
   int maxEntryBytes = 512 << 20,
   int maxTotalBytes = 1 << 30,
+  bool strict = false,
 }) {
   final archive = ZipDecoder().decodeBytes(bytes);
   if (archive.files.length > maxEntries) throw const ArchiveTooBigException('The archive has too many files.');
@@ -30,5 +31,21 @@ Archive decodeZipLimited(
     total += f.size;
     if (total > maxTotalBytes) throw const ArchiveTooBigException('The archive is too big.');
   }
+  if (strict) _requireConsistent(bytes);
   return archive;
+}
+
+/// For zips whose content is going to be run (extensions): the file names of the zip's directory and of the headers in front of
+/// each file must be the same, no name may be there twice, and every file must match its checksum. The decoder goes by the
+/// headers in front of the files and drops a second file of the same name, so without this a zip could show a reviewer one file
+/// and give the app another. Throws a [FormatException].
+void _requireConsistent(List<int> bytes) {
+  final directory = ZipDirectory()..read(InputMemoryStream(bytes));
+  final seen = <String>{};
+  for (final h in directory.fileHeaders) {
+    final f = h.file;
+    if (f == null || f.filename != h.filename) throw const FormatException('A file name in the zip differs from its directory entry.');
+    if (!seen.add(h.filename.toLowerCase())) throw const FormatException('The zip has the same file name twice.');
+    if (!h.filename.endsWith('/') && !f.verifyCrc32()) throw const FormatException('A file in the zip does not match its checksum.');
+  }
 }

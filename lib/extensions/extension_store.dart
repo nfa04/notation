@@ -16,11 +16,13 @@ import 'store_defaults.dart';
 
 /// Why the store could not be used (the text is shown to the person).
 class StoreException implements Exception {
+  /// The English text, with `{places}` for [args] (the app translates it, then fills the places).
   final String message;
-  const StoreException(this.message);
+  final Map<String, Object?>? args;
+  const StoreException(this.message, [this.args]);
 
   @override
-  String toString() => message;
+  String toString() => args == null ? message : args!.entries.fold(message, (m, e) => m.replaceAll('{${e.key}}', '${e.value}'));
 }
 
 /// An extension as the store's catalogue lists it. These are claims: the zip's own manifest is what counts when it is installed.
@@ -54,13 +56,13 @@ class StoreEntry {
     String text(String key, {int max = 4000, bool required = false}) {
       final v = json[key];
       if (v == null && !required) return '';
-      if (v is! String || v.length > max || (required && v.isEmpty)) throw StoreException('The store sent a bad "$key".');
+      if (v is! String || v.length > max || (required && v.isEmpty)) throw StoreException('The store sent a bad "{key}".', {'key': key});
       return v;
     }
 
     List<String> list(String key, int max) {
       final v = json[key] ?? const [];
-      if (v is! List || v.length > max || v.any((e) => e is! String || e.length > 253)) throw StoreException('The store sent a bad "$key".');
+      if (v is! List || v.length > max || v.any((e) => e is! String || e.length > 253)) throw StoreException('The store sent a bad "{key}".', {'key': key});
       return v.cast<String>();
     }
 
@@ -227,7 +229,7 @@ Future<Uint8List> fetchLimited(Uri url, int maxBytes) async {
     return out.takeBytes();
   } on DioException catch (e) {
     final code = e.response?.statusCode;
-    throw StoreException(code == null ? 'The store could not be reached.' : 'The store answered with error $code.');
+    throw code == null ? const StoreException('The store could not be reached.') : StoreException('The store answered with error {code}.', {'code': code});
   }
 }
 

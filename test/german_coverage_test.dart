@@ -15,6 +15,7 @@ const _asTheyAre = {
   'wss://signal.example.org',
   'turn:turn.example.org:3478',
   'https://cloud.example.com',
+  'https://store.example.org',
   'https://<account>.r2.cloudflarestorage.com',
   'notation://sync?...',
   'ABCDE-FGHJK-MNPQR-STUVW-XY234',

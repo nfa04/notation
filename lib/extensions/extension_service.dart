@@ -335,7 +335,7 @@ class ExtensionService extends ChangeNotifier {
   ExtensionPackage inspectZip(List<int> zip) {
     final Archive archive;
     try {
-      archive = decodeZipLimited(zip, maxEntries: 100000, maxEntryBytes: 1 << 20, maxTotalBytes: 8 << 20);
+      archive = decodeZipLimited(zip, maxEntries: 100000, maxEntryBytes: 1 << 20, maxTotalBytes: 8 << 20, strict: true);
     } on ArchiveTooBigException {
       throw ManifestException('The zip is too big for an extension.');
     } catch (_) {

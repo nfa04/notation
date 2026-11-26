@@ -8,6 +8,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notes/extensions/extension_service.dart';
+import 'package:notes/data/safe_zip.dart';
 import 'package:notes/extensions/extension_store.dart';
 import 'package:notes/extensions/store_defaults.dart';
 import 'package:notes/screens/extension_store.dart';
@@ -311,6 +312,16 @@ void storeSourceTests() {
       final s = StoreSource('https://store.example.org', key);
       expect(s.keys, [key]);
       expect(s.uri.host, 'store.example.org');
+    });
+  });
+
+  group('zips that are run', () {
+    test('a local file name that differs from the directory is refused', () {
+      final z = zipOf({'notes.txt': 'evil', 'main.js': 'good'});
+      final at = String.fromCharCodes(z).indexOf('notes.txt');
+      final bad = Uint8List.fromList(z)..setRange(at, at + 9, 'main.js  '.codeUnits.take(9)); // first local header says "main.js  "
+      expect(() => decodeZipLimited(bad, strict: true), throwsA(anything));
+      expect(decodeZipLimited(z, strict: true).files.length, 2);
     });
   });
 }

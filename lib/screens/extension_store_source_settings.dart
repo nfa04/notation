@@ -85,9 +85,8 @@ class _ExtensionStoreSourceSettingsState extends State<ExtensionStoreSourceSetti
       label: 'Extension store',
       initiallyOpen: !_saved.isBuiltIn,
       children: [
-        Text(
-          'The store the app browses. By default this is ${Uri.parse(extensionStoreAddress).host}. To use your own, enter its address and the public key '
-          '(store.pub) its catalogue is signed with. Only use a store you trust.',
+        Text.verbatim(
+          tr('The store the app browses. By default this is {host}. To use your own, enter its address and the public key (store.pub) its catalogue is signed with. Only use a store you trust.', {'host': Uri.parse(extensionStoreAddress).host}),
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
         const SizedBox(height: 8),
