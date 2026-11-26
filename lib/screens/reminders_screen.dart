@@ -161,6 +161,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
         ReminderKind.task => Symbols.check_circle_outline,
         ReminderKind.review => Symbols.event_note,
         ReminderKind.study => Symbols.school,
+        ReminderKind.event => Symbols.event,
         ReminderKind.custom => Symbols.notifications_none,
       };
 

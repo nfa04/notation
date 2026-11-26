@@ -1470,7 +1470,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           onOpen: _openFromSearch,
         );
       case 2:
-        return CalendarView(reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style, refresh: _pageRefresh);
+        return CalendarView(local: _app.events, reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style, refresh: _pageRefresh);
       case 10:
         if (!_learnOn) return const SizedBox.shrink();
         return LearningHub(repository: _app.repository, planner: _studyOn ? _app.planner : null, cards: _cardsOn ? _app.cards : null, onOpenNoteAt: (id, page) => _openAtPage(id, page));

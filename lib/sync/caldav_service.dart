@@ -10,6 +10,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../data/settings_repository.dart';
 import '../data/task_repository.dart';
 import 'caldav_connect.dart';
+import 'ics_write.dart';
 import 'caldav_remote.dart';
 import 'task_sync.dart';
 import '../l10n/language.dart';
@@ -61,6 +62,9 @@ class CalDavConfig {
 /// Connects the app to a CalDAV server (tested against the Nextcloud layout):
 /// two-way sync of the tasks with one calendar, and the events of chosen
 /// calendars for the month view. Everything else in the app works without it.
+/// What came of writing an event file: done, or the server said the file is not the one that was expected.
+enum _Put { done, exists }
+
 class CalDavService extends ChangeNotifier {
   final SettingsRepository _settings;
   final TaskRepository _tasks;
@@ -363,7 +367,7 @@ class CalDavService extends ChangeNotifier {
           ),
         );
         final texts = calendarDataOf(response.data ?? '');
-        if (texts.isNotEmpty) return expandServerEvents(texts, from, to, calendar);
+        if (texts.isNotEmpty) return expandServerEvents(texts, from, to, calendar, addresses: eventAddressesOf(response.data ?? ''));
       } finally {
         dio.close();
       }
@@ -384,32 +388,13 @@ class CalDavService extends ChangeNotifier {
     final client = await _connected();
     final calendar = _find(await client.getCalendars(), calendarHref);
     if (calendar == null) throw StateError(tr('That calendar no longer exists on the server.'));
-    DateTime plain(DateTime d) => DateTime.utc(d.year, d.month, d.day);
     final uid = event.uid ?? NoteRepository.newId();
-    final CalendarEvent created;
-    try {
-      created = await client.createEvent(
-        calendar,
-        CalendarEvent(
-          uid: uid,
-          calendarId: calendar.uid,
-          summary: event.title,
-          description: event.description.isEmpty ? null : event.description,
-          isAllDay: event.allDay,
-          start: event.allDay ? plain(event.start) : event.start.toUtc(),
-          end: event.allDay
-              ? (event.end == null || !plain(event.end!).isAfter(plain(event.start)) ? null : plain(event.end!))
-              : (event.end ?? event.start.add(const Duration(hours: 1))).toUtc(),
-        ),
-      );
-    } on ConflictException {
-      // (an event of this UID is there already: another device wrote it; the library names the file after the UID)
-      if (event.uid == null) rethrow;
-      _forgetEvents();
-      return calendar.href.resolve('$uid.ics').toString();
-    }
+    final address = calendar.href.resolve('$uid.ics').toString();
+    final put = await _put(address, buildEventIcs(event, uid: uid), create: true);
     _forgetEvents();
-    return created.href.toString();
+    // (an event of this UID is there already: another device wrote it; it is one event, not two)
+    if (put == _Put.exists && event.uid == null) throw StateError(tr('The event was changed somewhere else. It was loaded again; try your change once more.'));
+    return address;
   }
 
   /// Makes a calendar on the server and shows it (its events are then read with the others); its key is its address.
@@ -423,6 +408,57 @@ class CalDavService extends ChangeNotifier {
     _config = CalDavConfig(serverUrl: c.serverUrl, username: c.username, taskCalendar: c.taskCalendar, eventCalendars: shown);
     _forgetEvents();
     return CalendarInfo(href, created.displayName, created.color);
+  }
+
+  /// Changes the event at [href] to what [event] says. The file is read from the server and only the fields [event] sets are
+  /// changed in it ([patchEventIcs]), so what the app does not know about the event (organizer, answers, other alarms...) stays.
+  /// [old] is the event as it was shown.
+  Future<void> updateEvent(String calendarHref, String href, NewEvent event, {required DayEvent old}) async {
+    final c = _config;
+    final password = await _secret.read();
+    if (c == null || password == null) throw StateError(tr('The calendar server is not connected.'));
+    final dio = calDavDio(c.serverUrl, c.username, password);
+    try {
+      final url = Uri.parse(c.serverUrl).resolveUri(Uri.parse(href));
+      final got = await dio.getUri<String>(url, options: Options(responseType: ResponseType.plain, validateStatus: (s) => s != null && s < 500));
+      if (got.statusCode == 404) throw StateError(tr('That event no longer exists on the server.'));
+      if (got.statusCode == null || got.statusCode! >= 300 || (got.data ?? '').isEmpty) throw StateError(tr('The event could not be read from the server.'));
+      final text = patchEventIcs(got.data!, event, old: old);
+      final put = await _put(href, text, etag: got.headers.value('etag'));
+      if (put == _Put.exists) {
+        _forgetEvents();
+        throw StateError(tr('The event was changed somewhere else. It was loaded again; try your change once more.'));
+      }
+    } finally {
+      dio.close();
+    }
+    _forgetEvents();
+  }
+
+  /// Writes the event file at [address]: a new one ([create]: not over an existing one) or over the version with [etag].
+  Future<_Put> _put(String address, String text, {bool create = false, String? etag}) async {
+    final c = _config;
+    final password = await _secret.read();
+    if (c == null || password == null) throw StateError(tr('The calendar server is not connected.'));
+    final dio = calDavDio(c.serverUrl, c.username, password);
+    try {
+      final response = await dio.putUri<String>(
+        Uri.parse(c.serverUrl).resolveUri(Uri.parse(address)),
+        data: text,
+        options: Options(
+          contentType: 'text/calendar; charset=utf-8',
+          headers: {if (create) 'If-None-Match': '*', if (!create && etag != null) 'If-Match': etag},
+          validateStatus: (s) => s != null && s < 500,
+        ),
+      );
+      final status = response.statusCode ?? 0;
+      if (status == 412) return _Put.exists;
+      if (status == 401 || status == 403) throw StateError(tr('The server did not accept the change. Is the calendar read-only?'));
+      if (status >= 300) throw StateError(tr('The server did not accept the change ({status}).', {'status': status}));
+      return _Put.done;
+    } finally {
+      dio.close();
+    }
   }
 
   /// Removes the event at [href] (what [createEvent] returned); one that is gone already is fine.

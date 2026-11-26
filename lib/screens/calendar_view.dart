@@ -6,6 +6,8 @@ import 'package:flutter/material.dart' hide Text;
 import '../l10n/text.dart';
 
 import '../data/debounced_changes.dart';
+import '../data/event_repository.dart';
+import '../sync/local_events.dart';
 import '../data/task_repository.dart';
 import '../sync/caldav_remote.dart';
 import '../sync/caldav_service.dart';
@@ -49,7 +51,10 @@ class CalendarView extends StatefulWidget {
   /// "Remind me" on a task (it can come back every day, week...); null: not offered.
   final ReminderService? reminders;
 
-  const CalendarView({super.key, required this.repository, this.caldav, this.device, this.ics, this.style, this.mirror, this.reminders, this.refresh});
+  /// The app's own calendars; null: only the calendars of a server, the phone and subscribed ones are shown.
+  final EventRepository? local;
+
+  const CalendarView({super.key, required this.repository, this.local, this.caldav, this.device, this.ics, this.style, this.mirror, this.reminders, this.refresh});
 
   @override
   State<CalendarView> createState() => _CalendarViewState();
@@ -85,6 +90,7 @@ class _CalendarViewState extends State<CalendarView> {
 
   /// Loads the tasks again when they change under the list (an agent, a sync).
   StreamSubscription<void>? _live;
+  StreamSubscription<void>? _localLive;
 
   @override
   void initState() {
@@ -98,6 +104,9 @@ class _CalendarViewState extends State<CalendarView> {
     _caldav?.addListener(_onServiceChanged);
     widget.device?.addListener(_loadEvents);
     widget.ics?.addListener(_loadEvents);
+    _localLive = widget.local?.changes.listen((_) {
+      if (mounted) _loadEvents();
+    });
     widget.ics?.refreshStale(); // followed calendars that got old
     _style.addListener(_onStyleChanged);
     // catch up when the tab is opened; after this frame, because syncing tells its listeners at once and a listener may be
@@ -113,6 +122,7 @@ class _CalendarViewState extends State<CalendarView> {
   @override
   void dispose() {
     _live?.cancel();
+    _localLive?.cancel();
     widget.refresh?.removeListener(_reload);
     widget.mirror?.removeListener(_onStyleChanged);
     _syncTimer?.cancel();
@@ -228,6 +238,7 @@ class _CalendarViewState extends State<CalendarView> {
     final others = Future.wait([
       if (device != null) device.events(from, to),
       if (widget.ics != null) widget.ics!.events(from, to),
+      if (widget.local != null) _localEvents(from, to),
     ]);
     List<DayEvent> merge(List<DayEvent> served, List<List<DayEvent>> rest) =>
         [...served, for (final l in rest) ...l]..sort((a, b) => a.start.compareTo(b.start));
@@ -244,9 +255,26 @@ class _CalendarViewState extends State<CalendarView> {
     _loadWritable();
   }
 
+  /// The events of the app's own calendars in [from, to) as the list shows them, repeats expanded.
+  Future<List<DayEvent>> _localEvents(DateTime from, DateTime to) async {
+    final repo = widget.local!;
+    final calendars = {for (final c in await repo.calendars()) c.id: c};
+    final result = <DayEvent>[];
+    for (final e in await repo.eventsIn(from, to)) {
+      final calendar = calendars[e.calendarId];
+      if (calendar == null) continue;
+      result.addAll(expandLocalEvent(e, from, to, calendarName: calendar.name, key: 'local:${calendar.id}', color: _hexOf(calendar.color)));
+    }
+    return result;
+  }
+
+  static String? _hexOf(int? argb) => argb == null ? null : '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+
   Future<void> _loadWritable() async {
     final caldav = _caldav?.isConnected == true ? _caldav : null;
     final list = [
+      if (widget.local != null)
+        for (final c in await widget.local!.calendars()) CalendarInfo('local:${c.id}', c.name, _hexOf(c.color)),
       ...?await caldav?.writableCalendars(),
       ...?await widget.device?.writableCalendars(),
     ];
@@ -256,14 +284,98 @@ class _CalendarViewState extends State<CalendarView> {
   }
 
   Future<void> _newEvent() async {
-    final added = await newEventDialog(context, day: _selected, targets: _writable, save: (target, event) async {
-      if (target.key.startsWith('phone:')) {
-        await widget.device!.createEvent(target.key.substring('phone:'.length), event);
+    final added = await newEventDialog(context, day: _selected, targets: _writable, save: _writeNew);
+    if (added) _loadEvents(revalidate: true);
+  }
+
+  /// Writes [event] into the app's own calendar [key] (`local:<id>`); with [id], the event of that id is changed.
+  ///
+  /// [old] is the event as the list showed it: of a series that is one day of it, and the series moves by as far as that day did.
+  Future<void> _saveLocal(String key, NewEvent event, {String? id, DayEvent? old}) async {
+    final repo = widget.local!;
+    final previous = id == null ? null : await repo.event(id);
+    final firstDay = dayOf(event.start);
+    final lastDay = dayOf(event.end ?? event.start);
+    final spanDays = lastDay.difference(firstDay).inHours ~/ 24 + 1; // (calendar days: an hour of summer time is no day)
+    final minutes = (event.end ?? event.start.add(const Duration(hours: 1))).difference(event.start).inMinutes;
+    var start = event.allDay ? firstDay : event.start;
+    if (previous != null && previous.repeats && old != null) {
+      final days = (dayOf(event.start).difference(dayOf(old.start)).inHours / 24).round();
+      final moved = event.allDay ? 0 : (event.start.hour * 60 + event.start.minute) - (old.start.hour * 60 + old.start.minute);
+      final p = previous.start;
+      start = DateTime(p.year, p.month, p.day + days, p.hour, p.minute + moved);
+    }
+    final made = LocalEvent(
+      id: id ?? '',
+      calendarId: key.substring('local:'.length),
+      title: event.title,
+      start: start,
+      // (all-day: stored as the start of the day after the last one)
+      end: event.allDay ? DateTime(start.year, start.month, start.day + spanDays) : DateTime(start.year, start.month, start.day, start.hour, start.minute + minutes),
+      allDay: event.allDay,
+      location: event.location == null ? previous?.location : (event.location!.isEmpty ? null : event.location),
+      url: event.url == null ? previous?.url : (event.url!.isEmpty ? null : event.url),
+      notes: event.keepNotes ? previous?.notes : (event.description.isEmpty ? null : event.description),
+      rrule: event.rrule == null ? previous?.rrule : (event.rrule!.isEmpty ? null : event.rrule),
+      exdates: previous?.exdates ?? const [],
+      overrides: previous?.overrides ?? const {},
+      alarms: event.alarms ?? previous?.alarms ?? const [],
+      attendees: event.attendees ?? previous?.attendees ?? const [],
+    );
+    if (previous == null) {
+      await repo.createEvent(made);
+    } else {
+      await repo.updateEvent(made);
+    }
+  }
+
+  /// Whether the event can be changed from here: it is in a calendar this app may write to, and it is known where it is. A series
+  /// is changed as a whole (not on a phone calendar, where this app cannot write a series).
+  bool _canEdit(DayEvent e) {
+    if (!_writable.any((c) => c.key == e.calendarKey)) return false;
+    if (e.calendarKey.startsWith('local:')) return widget.local != null && e.uid.isNotEmpty;
+    return e.calendarKey.startsWith('phone:') ? widget.device != null && e.uid.isNotEmpty && !e.repeats : _caldav != null && e.href.isNotEmpty;
+  }
+
+  Future<void> _editEvent(DayEvent e) async {
+    final changed = await newEventDialog(context, day: e.start, targets: _writable, existing: e, save: (target, event) async {
+      if (target.key != e.calendarKey) {
+        // a different calendar: the event is made there first, and only when that worked taken out of the old one
+        await _writeNew(target, event);
+        await _deleteEvent(e);
+        return;
+      }
+      if (e.calendarKey.startsWith('local:')) {
+        await _saveLocal(e.calendarKey, event, id: e.uid, old: e);
+      } else if (e.calendarKey.startsWith('phone:')) {
+        await widget.device!.updateEvent(e.uid, event);
       } else {
-        await _caldav!.createEvent(target.key, event);
+        await _caldav!.updateEvent(e.calendarKey, e.href, event, old: e);
       }
     });
-    if (added) _loadEvents(revalidate: true);
+    if (changed) _loadEvents(revalidate: true);
+  }
+
+  /// Makes [event] in [target], whatever kind of calendar that is.
+  Future<void> _writeNew(CalendarInfo target, NewEvent event) async {
+    if (target.key.startsWith('local:')) {
+      await _saveLocal(target.key, event);
+    } else if (target.key.startsWith('phone:')) {
+      await widget.device!.createEvent(target.key.substring('phone:'.length), event);
+    } else {
+      await _caldav!.createEvent(target.key, event);
+    }
+  }
+
+  /// Takes [e] out of its calendar.
+  Future<void> _deleteEvent(DayEvent e) async {
+    if (e.calendarKey.startsWith('local:')) {
+      await widget.local!.deleteEvent(e.uid);
+    } else if (e.calendarKey.startsWith('phone:')) {
+      await widget.device!.deleteEvent(e.uid);
+    } else {
+      await _caldav!.deleteEvent(e.calendarKey, e.href);
+    }
   }
 
   /// Events that only show a task that was put on a calendar are not shown twice: the task is shown.
@@ -558,6 +670,7 @@ class _CalendarViewState extends State<CalendarView> {
                 onSelectDay: (day) => setState(() => _selected = day),
                 onToggleTask: (task, done) => _run(() => _repo.setDone(task.id, done)),
                 onEditTask: _edit,
+                onOpenEvent: _eventDetails,
                 style: _style,
                 onStyleEvent: _styleEvent,
                 onStyleTask: _styleTask,
@@ -845,16 +958,28 @@ class _CalendarViewState extends State<CalendarView> {
     return '${two(e.start.hour)}:${two(e.start.minute)}${end == null ? '' : ' - ${two(end.hour)}:${two(end.minute)}'}';
   }
 
+  Widget _detailRow(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(child: SelectableText(text)),
+        ]),
+      );
+
   /// Whether the event can be deleted from here: it is in a calendar this app may write to, it is not one of a series (deleting
   /// would take all of them: that is for the calendar app), and it is known where it is.
   bool _canDelete(DayEvent e) {
     if (e.repeats || !_writable.any((c) => c.key == e.calendarKey)) return false;
+    if (e.calendarKey.startsWith('local:')) return widget.local != null && e.uid.isNotEmpty;
     return e.calendarKey.startsWith('phone:') ? widget.device != null && e.uid.isNotEmpty : _caldav != null && e.href.isNotEmpty;
   }
 
   /// What an event is (tapped in the list of the day), with a way to delete it.
   Future<void> _eventDetails(DayEvent e) async {
     final canDelete = _canDelete(e);
+    final canEdit = _canEdit(e);
+    var edit = false;
     final delete = await showDialog<bool>(
       context: context,
       builder: (context) => PlatformAlertDialog(
@@ -863,12 +988,26 @@ class _CalendarViewState extends State<CalendarView> {
           Text.verbatim(_eventTime(e)),
           const SizedBox(height: 4),
           Text.verbatim(e.calendarName, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          if (e.location?.isNotEmpty == true) _detailRow(Symbols.location_on, e.location!),
+          if (e.url?.isNotEmpty == true) _detailRow(Symbols.link, e.url!),
+          if (e.alarms?.isNotEmpty == true) _detailRow(Symbols.notifications, [for (final m in e.alarms!) alarmLabel(m)].join(', ')),
+          if (e.attendees?.isNotEmpty == true) _detailRow(Symbols.group, e.attendees!.join(', ')),
+          if (e.notes?.isNotEmpty == true) _detailRow(Symbols.notes, e.notes!),
           if (e.repeats) ...[
             const SizedBox(height: 12),
-            Text('This event repeats: change or delete it in your calendar app.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text('This event repeats. Changing it changes every event of the series; to delete it, use your calendar app.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ]),
         actions: [
+          if (canEdit)
+            TextButton(
+              key: const ValueKey('event-edit'),
+              onPressed: () {
+                edit = true;
+                Navigator.pop(context, false);
+              },
+              child: const Text('Edit'),
+            ),
           if (canDelete)
             TextButton(
               key: const ValueKey('event-delete'),
@@ -880,6 +1019,7 @@ class _CalendarViewState extends State<CalendarView> {
         ],
       ),
     );
+    if (edit && mounted) return _editEvent(e);
     if (delete != true || !mounted) return;
     // (gone from the calendar for everyone who shares it, and nothing here can bring it back: asked once more)
     final sure = await showDialog<bool>(
@@ -896,11 +1036,7 @@ class _CalendarViewState extends State<CalendarView> {
     if (sure != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      if (e.calendarKey.startsWith('phone:')) {
-        await widget.device!.deleteEvent(e.uid);
-      } else {
-        await _caldav!.deleteEvent(e.calendarKey, e.href);
-      }
+      await _deleteEvent(e);
       if (mounted) setState(() => _events = [for (final x in _events) if (!identical(x, e)) x]);
       _loadEvents(revalidate: true);
     } catch (error) {

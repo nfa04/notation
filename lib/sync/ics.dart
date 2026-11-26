@@ -30,6 +30,14 @@ class IcsEvent {
   final DateTime? recurrenceId;
   final bool cancelled;
 
+  /// DESCRIPTION, URL, the email addresses of the ATTENDEEs, the minutes before the start of each alarm (VALARM with a relative
+  /// TRIGGER), and the RRULE as it was written.
+  final String? description;
+  final String? url;
+  final List<String> attendees;
+  final List<int> alarms;
+  final String? rruleText;
+
   const IcsEvent({
     required this.uid,
     required this.summary,
@@ -42,6 +50,11 @@ class IcsEvent {
     this.exdates = const {},
     this.recurrenceId,
     this.cancelled = false,
+    this.description,
+    this.url,
+    this.attendees = const [],
+    this.alarms = const [],
+    this.rruleText,
   });
 }
 
@@ -211,6 +224,12 @@ IcsCalendar parseIcs(String text) {
         depth++;
         continue;
       }
+      if (depth > 0 && upper.startsWith('TRIGGER')) {
+        // (an alarm: kept as a property of its own, the other lines of the alarm are skipped)
+        final t = _parseLine(line);
+        if (t != null) current.add(_Prop('ALARM-TRIGGER', t.params, t.value));
+        continue;
+      }
       if (upper == 'END:VEVENT' && depth == 0) {
         final event = _event(current);
         if (event != null) events.add(event);
@@ -278,6 +297,18 @@ IcsEvent? _event(List<_Prop> props) {
     exdates: exdates,
     recurrenceId: recurrenceTime == null ? null : (recurrenceTime.dateOnly ? recurrenceTime.time : _wallIn(recurrenceTime.time, recurrenceTime.zone, start.zone)),
     cancelled: one('STATUS')?.value.toUpperCase() == 'CANCELLED',
+    description: one('DESCRIPTION') == null ? null : _unescape(one('DESCRIPTION')!.value).trim(),
+    url: one('URL')?.value.trim(),
+    attendees: [
+      for (final a in props.where((p) => p.name == 'ATTENDEE'))
+        if (a.value.toLowerCase().startsWith('mailto:')) a.value.substring(7).trim(),
+    ],
+    alarms: [
+      for (final a in props.where((p) => p.name == 'ALARM-TRIGGER'))
+        if (a.params['VALUE'] != 'DATE-TIME' && a.params['RELATED'] != 'END' && _parseDuration(a.value) != null && _parseDuration(a.value)!.inSeconds <= 0)
+          -_parseDuration(a.value)!.inMinutes,
+    ],
+    rruleText: rule?.value,
   );
 }
 
@@ -492,6 +523,12 @@ List<DayEvent> expandIcs(IcsCalendar calendar, DateTime from, DateTime to,
         repeats: repeats,
         calendarKey: key,
         uid: e.uid,
+        notes: e.description,
+        location: e.location,
+        url: e.url,
+        attendees: e.attendees,
+        alarms: e.alarms,
+        rrule: e.rruleText,
       ));
       return;
     }
@@ -508,6 +545,12 @@ List<DayEvent> expandIcs(IcsCalendar calendar, DateTime from, DateTime to,
       repeats: repeats,
       calendarKey: key,
       uid: e.uid,
+      notes: e.description,
+      location: e.location,
+      url: e.url,
+      attendees: e.attendees,
+      alarms: e.alarms,
+      rrule: e.rruleText,
     ));
   }
 

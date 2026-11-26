@@ -57,4 +57,25 @@ END:VCALENDAR</c:calendar-data></d:prop></d:propstat></d:response>
 </d:multistatus>''';
     expect(calendarDataOf(answer).length, 1);
   });
+
+  test('every event gets the address of its file, so that it can be changed or deleted', () {
+    const answer = '''<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response><d:href>/remote.php/dav/calendars/me/work/one.ics</d:href><d:propstat><d:prop><c:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:one
+SUMMARY:Dentist
+DTSTART;VALUE=DATE:20261120
+DTEND;VALUE=DATE:20261121
+END:VEVENT
+END:VCALENDAR</c:calendar-data></d:prop></d:propstat></d:response>
+</d:multistatus>''';
+    final addresses = eventAddressesOf(answer);
+    expect(addresses, {'one': '/remote.php/dav/calendars/me/work/one.ics'});
+    final out = expandServerEvents(calendarDataOf(answer), DateTime(2026, 11, 1), DateTime(2026, 12, 1), calendar, addresses: addresses);
+    expect(out.single.href, '/remote.php/dav/calendars/me/work/one.ics');
+    // without the addresses (as before) the event is still shown, but cannot be written back
+    expect(expandServerEvents(calendarDataOf(answer), DateTime(2026, 11, 1), DateTime(2026, 12, 1), calendar).single.href, '');
+  });
 }

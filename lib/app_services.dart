@@ -13,6 +13,7 @@ import 'data/link_repository.dart';
 import 'data/tag_repository.dart';
 import 'data/note_file_service.dart';
 import 'data/note_repository.dart';
+import 'data/event_repository.dart';
 import 'data/task_repository.dart';
 import 'devicesync/device_sync_service.dart';
 import 'extensions/extension_service.dart';
@@ -45,6 +46,9 @@ import 'sync/task_calendar_mirror.dart';
 class AppServices {
   final NoteRepository repository;
   final TaskRepository tasks;
+
+  /// The app's own calendars and events; null in tests that do not need them.
+  final EventRepository? events;
   final CalDavService caldav;
   final DeviceCalendarService device;
   final StyleService style;
@@ -138,6 +142,7 @@ class AppServices {
   const AppServices({
     required this.repository,
     required this.tasks,
+    this.events,
     required this.caldav,
     required this.device,
     required this.style,

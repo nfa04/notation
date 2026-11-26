@@ -41,6 +41,9 @@ class LocalEvent {
 
   /// Minutes before the start at which to remind.
   final List<int> alarms;
+
+  /// Email addresses of the people invited (kept with the event; the app sends no invitations).
+  final List<String> attendees;
   final int updatedAt;
 
   const LocalEvent({
@@ -58,6 +61,7 @@ class LocalEvent {
     this.exdates = const [],
     this.overrides = const {},
     this.alarms = const [],
+    this.attendees = const [],
     this.updatedAt = 0,
   });
 
@@ -76,6 +80,7 @@ class LocalEvent {
     List<DateTime>? exdates,
     Map<int, Map<String, Object?>>? overrides,
     List<int>? alarms,
+    List<String>? attendees,
   }) =>
       LocalEvent(
         id: id,
@@ -92,6 +97,7 @@ class LocalEvent {
         exdates: exdates ?? this.exdates,
         overrides: overrides ?? this.overrides,
         alarms: alarms ?? this.alarms,
+        attendees: attendees ?? this.attendees,
         updatedAt: updatedAt,
       );
 }
@@ -142,6 +148,7 @@ class EventRepository {
       exdates: [for (final ms in list<int>(r['exdates'])) _time(ms)],
       overrides: {for (final e in raw.entries) int.parse(e.key): Map<String, Object?>.from(e.value as Map)},
       alarms: list<int>(r['alarms']),
+      attendees: list<String>(r['attendees']),
       updatedAt: r['updated_at'] as int? ?? 0,
     );
   }
@@ -161,6 +168,7 @@ class EventRepository {
         'exdates': e.exdates.isEmpty ? null : jsonEncode([for (final d in e.exdates) _ms(d)]),
         'overrides': e.overrides.isEmpty ? null : jsonEncode({for (final o in e.overrides.entries) '${o.key}': o.value}),
         'alarms': e.alarms.isEmpty ? null : jsonEncode(e.alarms),
+        'attendees': e.attendees.isEmpty ? null : jsonEncode(e.attendees),
         'updated_at': now,
         'deleted_at': null,
       };
@@ -217,7 +225,7 @@ class EventRepository {
     final id = e.id.isEmpty ? NoteRepository.newId() : e.id;
     final made = LocalEvent(
       id: id, calendarId: e.calendarId, title: e.title, start: e.start, end: e.end, allDay: e.allDay, tz: e.tz, location: e.location,
-      url: e.url, notes: e.notes, rrule: e.rrule, exdates: e.exdates, overrides: e.overrides, alarms: e.alarms,
+      url: e.url, notes: e.notes, rrule: e.rrule, exdates: e.exdates, overrides: e.overrides, alarms: e.alarms, attendees: e.attendees,
     );
     await _db.insert('local_events', _row(made, DateTime.now().millisecondsSinceEpoch), conflictAlgorithm: ConflictAlgorithm.replace);
     _changed();

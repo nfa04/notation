@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 60;
+const int schemaVersion = 61;
 
 const List<String> createStatements = [
   '''
@@ -445,6 +445,29 @@ const String _createLocalEvents = '''
     exdates     TEXT,                                 -- JSON list of UTC ms (skipped occurrences)
     overrides   TEXT,                                 -- JSON: edited single occurrences, keyed by original start (UTC ms)
     alarms      TEXT,                                 -- JSON list of minutes before the start
+    attendees   TEXT,                                 -- JSON list of email addresses
+    updated_at  INTEGER NOT NULL,
+    deleted_at  INTEGER
+  )
+''';
+
+/// The table as migration 59 made it (before the attendees column of migration 60).
+const String _createLocalEventsV1 = '''
+  CREATE TABLE IF NOT EXISTS local_events (
+    id          TEXT PRIMARY KEY,
+    calendar_id TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    start_at    INTEGER NOT NULL,
+    end_at      INTEGER NOT NULL,
+    all_day     INTEGER NOT NULL DEFAULT 0,
+    tz          TEXT,
+    location    TEXT,
+    url         TEXT,
+    notes       TEXT,
+    rrule       TEXT,
+    exdates     TEXT,
+    overrides   TEXT,
+    alarms      TEXT,
     updated_at  INTEGER NOT NULL,
     deleted_at  INTEGER
   )
@@ -786,8 +809,10 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  // the people invited to an event of the app's own calendars
+  60: ['ALTER TABLE local_events ADD COLUMN attendees TEXT'],
   // the app's own calendars and events
-  59: [_createLocalCalendars, _createLocalEvents, _createLocalEventsIndex],
+  59: [_createLocalCalendars, _createLocalEventsV1, _createLocalEventsIndex],
   // a note can hold several PDFs, each kept as its own file, and shows their pages in any order
   58: ['ALTER TABLE notes ADD COLUMN pdf_files TEXT'],
   // a formula read in the handwriting keeps its page and place, so that the assistant can be given it where it was written

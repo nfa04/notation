@@ -35,6 +35,10 @@ class FakePhone implements PhoneCalendarApi {
     return id;
   }
 
+  final updated = <String, NewEvent>{};
+  @override
+  Future<void> updateEvent(String eventId, NewEvent event) async => updated[eventId] = event;
+
   @override
   Future<void> deleteEvent(String eventId) async => created.remove(eventId);
 

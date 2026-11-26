@@ -14,6 +14,17 @@ enum ReminderKind {
 
   /// A session of a study plan, at its start ([Reminder.refId] is its to-do); tapping the notification opens the session.
   study,
+
+  /// An alarm of an event of the app's own calendars ([Reminder.refId] says which event, occurrence and alarm).
+  event,
+}
+
+/// The moment an alarm of an event goes off. [key] names the event, its occurrence and the alarm, and stays the same while they do.
+class EventAlarm {
+  final String key;
+  final String title;
+  final DateTime at;
+  const EventAlarm({required this.key, required this.title, required this.at});
 }
 
 /// How often a reminder comes again.

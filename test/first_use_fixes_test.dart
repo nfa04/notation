@@ -27,6 +27,10 @@ class _Phone implements PhoneCalendarApi {
   Future<List<PhoneEvent>> events(DateTime from, DateTime to, List<String> ids) async => [...events_];
   @override
   Future<String> createEvent(String calendarId, NewEvent event) async => 'new';
+  final updated = <String, NewEvent>{};
+  @override
+  Future<void> updateEvent(String eventId, NewEvent event) async => updated[eventId] = event;
+
   @override
   Future<void> deleteEvent(String eventId) async {
     deleted.add(eventId);

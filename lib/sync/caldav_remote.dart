@@ -120,11 +120,40 @@ class NewEvent {
   final bool allDay;
   final String description;
 
+  /// Place and link of the event; null: leave as they are (a change) or none (a new event); '' takes it away.
+  final String? location;
+  final String? url;
+
+  /// Minutes before the start at which to be reminded; null: leave as they are, empty: none.
+  final List<int>? alarms;
+
+  /// Email addresses of the people invited; null: leave as they are, empty: none.
+  final List<String>? attendees;
+
+  /// The repeat rule (RRULE without the prefix); null: leave as it is, '': does not repeat.
+  final String? rrule;
+
+  /// A change that does not touch the notes ([description] is then not what the event has).
+  final bool keepNotes;
+
   /// The event's UID where the calendar lets it be chosen (a server calendar): an event made twice with the same UID is one event, so two
   /// devices that both write it do not make it twice. Null: a new one is made up.
   final String? uid;
 
-  const NewEvent({required this.title, required this.start, this.end, this.allDay = false, this.description = '', this.uid});
+  const NewEvent({
+    required this.title,
+    required this.start,
+    this.end,
+    this.allDay = false,
+    this.description = '',
+    this.uid,
+    this.location,
+    this.url,
+    this.alarms,
+    this.attendees,
+    this.rrule,
+    this.keepNotes = false,
+  });
 }
 
 /// An event of a server calendar, for display.
@@ -146,6 +175,18 @@ class DayEvent {
   /// Where the event is on the server (empty for a phone event, or when unknown): what deleting it needs.
   final String href;
 
+  /// The event's notes where they are known (an event of the app's own calendar); null: not known, so an edit leaves them alone.
+  final String? notes;
+
+  /// What the event says about itself where it is known (null: not known); see [NewEvent].
+  final String? location;
+  final String? url;
+  final List<String>? attendees;
+  final List<int>? alarms;
+
+  /// The repeat rule as written (RRULE without the prefix); null for an event that does not repeat or where it is not known.
+  final String? rrule;
+
   const DayEvent({
     required this.title,
     required this.start,
@@ -157,6 +198,12 @@ class DayEvent {
     this.calendarKey = '',
     this.uid = '',
     this.href = '',
+    this.notes,
+    this.location,
+    this.url,
+    this.attendees,
+    this.alarms,
+    this.rrule,
   });
 
   Map<String, Object?> toJson() => {
@@ -170,6 +217,12 @@ class DayEvent {
         'k': calendarKey,
         'u': uid,
         'h': href,
+        if (notes != null) 'd': notes,
+        if (location != null) 'l': location,
+        if (url != null) 'x': url,
+        if (attendees != null) 'p': attendees,
+        if (alarms != null) 'm': alarms,
+        if (rrule != null) 'z': rrule,
       };
 
   static DayEvent fromJson(Map<String, Object?> j) => DayEvent(
@@ -183,6 +236,12 @@ class DayEvent {
         calendarKey: j['k'] as String,
         uid: j['u'] as String,
         href: j['h'] as String? ?? '', // (not in events kept by an older version)
+        notes: j['d'] as String?,
+        location: j['l'] as String?,
+        url: j['x'] as String?,
+        attendees: (j['p'] as List?)?.cast<String>(),
+        alarms: (j['m'] as List?)?.cast<int>(),
+        rrule: j['z'] as String?,
       );
 
   static DayEvent from(CalendarEvent e, Calendar calendar) {
@@ -201,6 +260,27 @@ class DayEvent {
       href: e.href?.toString() ?? '',
     );
   }
+
+  DayEvent withHref(String href) => copyWith(href: href);
+
+  DayEvent copyWith({String? href, String? notes, String? location, String? url}) => DayEvent(
+        title: title,
+        start: start,
+        end: end,
+        allDay: allDay,
+        calendarName: calendarName,
+        color: color,
+        repeats: repeats,
+        calendarKey: calendarKey,
+        uid: uid,
+        href: href ?? this.href,
+        notes: notes ?? this.notes,
+        location: location ?? this.location,
+        url: url ?? this.url,
+        attendees: attendees,
+        alarms: alarms,
+        rrule: rrule,
+      );
 
   /// Whether the event is on [day] (a date without time).
   bool occursOn(DateTime day) {
@@ -221,12 +301,31 @@ List<String> calendarDataOf(String multistatus) => [
         if (e.innerText.trim().isNotEmpty) e.innerText,
     ];
 
+/// Where each event of a calendar-query answer lives on the server: its UID (as in the file's first VEVENT) to the address of
+/// its file. Changing or deleting an event needs it, and [expandServerEvents] only sees the texts.
+Map<String, String> eventAddressesOf(String multistatus) {
+  final found = <String, String>{};
+  for (final r in XmlDocument.parse(multistatus).descendantElements.where((e) => e.name.local == 'response')) {
+    final href = r.childElements.where((e) => e.name.local == 'href').map((e) => e.innerText.trim()).firstOrNull;
+    final data = r.descendantElements.where((e) => e.name.local == 'calendar-data').map((e) => e.innerText).firstOrNull;
+    if (href == null || href.isEmpty || data == null || data.trim().isEmpty) continue;
+    try {
+      for (final e in parseIcs(data).events) {
+        if (e.uid.isNotEmpty) found.putIfAbsent(e.uid, () => href);
+      }
+    } catch (_) {}
+  }
+  return found;
+}
+
 /// The events of one server calendar between [from] and [to] out of the raw [texts] the server sent.
 ///
 /// The `caldav` package reads only the first event of a file and does not repeat anything, so a weekly
 /// meeting showed once and a changed occurrence not at all. This reads every event, repeats them, and
 /// applies the changes and cancellations ([expandIcs]).
-List<DayEvent> expandServerEvents(List<String> texts, DateTime from, DateTime to, Calendar calendar) {
+///
+/// [addresses] (see [eventAddressesOf]) gives the events the address of their file on the server.
+List<DayEvent> expandServerEvents(List<String> texts, DateTime from, DateTime to, Calendar calendar, {Map<String, String> addresses = const {}}) {
   final events = <IcsEvent>[];
   for (final text in texts) {
     try {
@@ -235,6 +334,8 @@ List<DayEvent> expandServerEvents(List<String> texts, DateTime from, DateTime to
       debugPrint('reading one event of ${calendar.displayName} failed: $e');
     }
   }
-  return expandIcs(IcsCalendar(events: events), from, to,
+  final expanded = expandIcs(IcsCalendar(events: events), from, to,
       calendarName: calendar.displayName, key: calendar.href.toString(), color: calendar.color);
+  if (addresses.isEmpty) return expanded;
+  return [for (final e in expanded) e.href.isEmpty && addresses.containsKey(e.uid) ? e.withHref(addresses[e.uid]!) : e];
 }
