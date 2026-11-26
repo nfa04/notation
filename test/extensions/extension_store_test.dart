@@ -343,4 +343,15 @@ void storeSourceTests() {
       expect(decodeZipLimited(z, strict: true).files.length, 2);
     });
   });
+
+  test('versions are compared as numbers, a release is after its pre-release', () {
+    expect(isNewerVersion('1.10.0', '1.9.0'), isTrue);
+    expect(isNewerVersion('1.9.0', '1.10.0'), isFalse);
+    expect(isNewerVersion('1.0.0', '1.0.0'), isFalse);
+    expect(isNewerVersion('1.0', '1.0.0'), isFalse);
+    expect(isNewerVersion('1.0.0', '1.0.0-beta'), isTrue);
+    expect(isNewerVersion('1.0.0-beta', '1.0.0'), isFalse);
+    expect(isNewerVersion('2', '1.9'), isTrue);
+    expect(isNewerVersion('banana', '1.0.0'), isTrue);
+  });
 }

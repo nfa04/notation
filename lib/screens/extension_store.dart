@@ -25,6 +25,26 @@ const _categoryNames = {
   'other': 'Other',
 };
 
+/// Whether [offered] is a later version than [have]: numbers compared part by part (1.10.0 is after 1.9.0), a release after its
+/// pre-release (1.0.0 after 1.0.0-beta). A version that is not numbers counts as "different is newer".
+bool isNewerVersion(String offered, String have) {
+  if (offered == have) return false;
+  List<int>? parts(String v) {
+    final m = RegExp(r'^v?(\d+(?:\.\d+)*)(-.*)?$').firstMatch(v.trim());
+    return m == null ? null : [...m.group(1)!.split('.').map(int.parse), m.group(2) == null ? 1 : 0];
+  }
+  final a = parts(offered), b = parts(have);
+  if (a == null || b == null) return true;
+  final n = a.length > b.length ? a.length : b.length;
+  // the last number of each is "release or not"; compare the dotted numbers first, padded with zeros
+  final na = a.sublist(0, a.length - 1), nb = b.sublist(0, b.length - 1);
+  for (var i = 0; i < (na.length > nb.length ? na.length : nb.length); i++) {
+    final x = i < na.length ? na[i] : 0, y = i < nb.length ? nb[i] : 0;
+    if (x != y) return x > y;
+  }
+  return n > 0 && a.last > b.last;
+}
+
 /// Opens the store: what extensions there are, with what each says about itself, and a button to install one. Installing goes the
 /// way a file does (the same checks, the same dialog that shows what the extension asks to be allowed to do): the store only fetches the file.
 Future<void> showExtensionStore(BuildContext context, ExtensionService service, {ExtensionStoreClient? client}) async {
@@ -203,7 +223,7 @@ class _ExtensionStorePageState extends State<ExtensionStorePage> {
   Widget _button(StoreEntry e) {
     final installed = widget.service.byId(e.id);
     final busy = _busy.contains(e.id);
-    final upToDate = installed != null && installed.manifest.version == e.version;
+    final upToDate = installed != null && !isNewerVersion(e.version, installed.manifest.version);
     final label = upToDate ? tr('Installed') : installed != null ? tr('Update') : tr('Install');
     return FilledButton.tonal(
       key: ValueKey('store-install-${e.id}'),
