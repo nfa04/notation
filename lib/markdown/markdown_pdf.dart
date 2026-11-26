@@ -7,6 +7,7 @@ import '../citations/citation_document.dart';
 import '../l10n/language.dart';
 import '../models/rich_text.dart';
 import 'markdown_parser.dart';
+import 'block_svg.dart';
 import 'code_highlight.dart';
 import 'math_images.dart';
 
@@ -24,6 +25,7 @@ List<pw_widgets.Widget> markdownBlocksToPdf(RichInlineTextController controller,
     CitationDocument? citations,
     bool bibliography = false,
     Map<String, Uint8List> pictures = const {},
+    Map<String, BlockPicture> blockPictures = const {},
     double maxPictureWidth = 450}) {
   final base = pw_widgets.TextStyle(fontSize: fontSize, lineSpacing: fontSize * 0.2, color: color);
   final blocks = parseMarkdown(controller.text);
@@ -160,6 +162,14 @@ List<pw_widgets.Widget> markdownBlocksToPdf(RichInlineTextController controller,
       );
     }
     if (b.type == MdBlockType.table) return table(b, style);
+    final drawn = b.type == MdBlockType.code ? blockPictures[blockPictureKey(b.lang, b.code)] : null;
+    if (drawn != null) {
+      final scale = drawn.width > maxPictureWidth ? maxPictureWidth / drawn.width : 1.0;
+      return pw_widgets.Padding(
+        padding: pw_widgets.EdgeInsets.symmetric(vertical: fontSize * 0.3),
+        child: pw_widgets.SvgImage(svg: drawn.svg, width: drawn.width * scale, height: drawn.height * scale),
+      );
+    }
     if (b.type == MdBlockType.code) {
       final mono = pw_widgets.TextStyle(font: pw_widgets.Font.courier(), fontSize: fontSize * 0.85);
       return pw_widgets.Container(

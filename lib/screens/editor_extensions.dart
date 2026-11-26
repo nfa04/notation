@@ -229,6 +229,8 @@ class _EditorExtensionApi extends SharedExtensionApi with LibraryApi, NotesReadA
   @override
   CardRepository? get moreCards => _editor.widget.cards;
   @override
+  CitationRepository? get moreCitations => CitationScope.maybeOf(_editor.context)?.repository;
+  @override
   AiService? get moreAi => _editor.widget.ai;
   @override
   String? get moreNoteId => _editor.widget.noteId;
@@ -306,6 +308,8 @@ class _EditorCommandApi extends _EditorAgentApi with MoreApi {
   TagRepository? get moreTags => _editor.widget.tags;
   @override
   CardRepository? get moreCards => _editor.widget.cards;
+  @override
+  CitationRepository? get moreCitations => CitationScope.maybeOf(_editor.context)?.repository;
   @override
   AiService? get moreAi => _editor.widget.ai;
   @override

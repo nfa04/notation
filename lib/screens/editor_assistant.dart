@@ -486,14 +486,14 @@ mixin _EditorWideApi on ExtensionApi, LibraryApi, NotesReadApi, ManageNotesApi {
   }
 
   @override
-  Future<List<Map<String, Object?>>> inkStrokes({int? page}) async {
+  Future<List<Map<String, Object?>>> inkStrokes({int? page, List<double>? box}) async {
     final e = _editor;
     if (e._infinite) throw ExtensionError('This note is an infinite canvas: it has no pages.');
     final i = (page ?? e._visiblePage().$1 + 1) - 1;
     if (i < 0 || i >= e._pageCount) throw ExtensionError('There is no page ${i + 1}: the note has ${e._pageCount} pages.');
     double r(double v) => (v * 10).roundToDouble() / 10;
     return [
-      for (final s in (e._strokesPerPage[i] ?? const []).take(300))
+      for (final s in (e._strokesPerPage[i] ?? const []).where((s) => box == null || s.points.any((p) => p.dx >= box[0] && p.dx <= box[2] && p.dy >= box[1] && p.dy <= box[3])).take(300))
         {
           'points': [for (final p in s.points.take(500)) [r(p.dx), r(p.dy)]],
           'color': colorToHex(s.color),

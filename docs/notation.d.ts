@@ -122,7 +122,7 @@ interface Notation {
   ink: {
     /** What the handwriting reader made of the ink (what is kept; nothing is read now). */
     read(options?: { page?: number }): Promise<{ page: number; top: number; left: number; text?: string; latex?: string }[]>;
-    strokes(options?: { page?: number }): Promise<{ points: [number, number][]; color: string; width: number }[]>;
+    strokes(options?: { page?: number; box?: { left: number; top: number; right: number; bottom: number } }): Promise<{ points: [number, number][]; color: string; width: number }[]>;
   };
   calendar: {
     events(from: Day, to: Day): Promise<{ title: string; start: Time | Day; end: Time | Day | null; allDay: boolean; calendar: string }[]>;

@@ -69,6 +69,18 @@ void main() {
     expect(mapped, {'i1': ids['Ideas'], 'p1': ids['Plan']});
   });
 
+  test('the dates the other app had are kept', () async {
+    final created = DateTime(2020, 3, 4, 5, 6), updated = DateTime(2021, 7, 8, 9, 10);
+    await importExtensionNotes(notes: [ImportedNote(path: '', title: 'Old', markdown: 'x', created: created, updated: updated), ImportedNote(path: '', title: 'OnlyEdited', markdown: 'x', updated: updated)], repository: repo);
+    final ids = {for (final n in await repo.listNotes()) n.title: n.id};
+    final times = (await repo.noteTimes(ids['Old']!))!;
+    expect(times.created, created);
+    expect(times.edited, updated);
+    final one = (await repo.noteTimes(ids['OnlyEdited']!))!;
+    expect(one.created, updated);
+    expect(one.edited, updated);
+  });
+
   test('running it again updates the note it made before instead of making another', () async {
     final mapped = <String, String>{};
     await importExtensionNotes(notes: [const ImportedNote(path: '', title: 'Same', markdown: 'one', sourceId: 's')], repository: repo, onMapped: (s, n) => mapped[s] = n);

@@ -47,6 +47,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../ai/ai_prompt.dart' show AiPrompt, AiTask, hasWords, worthSummarizing;
 import '../citations/cite_picker.dart';
+import '../citations/citation_repository.dart' show CitationRepository;
 import '../citations/citation_service.dart';
 import '../citations/citation_document.dart';
 import '../markdown/markdown_parser.dart' show MdRun, parseMarkdown, withoutParagraphFormats;
@@ -148,6 +149,7 @@ import '../block_editor/block_editor.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
 import '../lock/note_lock_service.dart';
+import '../markdown/block_svg.dart';
 import '../markdown/markdown_pdf.dart';
 import '../markdown/markdown_table.dart';
 import '../markdown/markdown_formatting.dart';

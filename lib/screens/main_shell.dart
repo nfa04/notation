@@ -53,7 +53,6 @@ import '../ai/citations.dart' show quoteQuery;
 import '../ai/note_agent.dart';
 import '../ai/note_knowledge.dart';
 import '../ai/note_lookup.dart';
-import '../ai/notes_agent_api.dart';
 import '../extensions/extension_manifest.dart' show ExtensionPermission;
 import '../automations/note_sorter.dart';
 import '../templates/templates.dart';
@@ -1506,13 +1505,17 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           lookup: NoteLookup.of(_app.repository),
           agent: NoteAgent(
             more: _app.extensions == null ? null : () => extensionAgentTools(_app.extensions!),
-            api: NotesAgentApi(_app.repository,
+            api: CommandApi(_app.repository,
                 tasks: _app.tasks,
                 tags: _app.tags,
                 reminders: _app.reminders,
                 calendar: CalendarAccess.of(caldav: _app.caldav, device: _app.device, ics: _app.ics),
                 planner: _app.planner,
-                isOpen: (id) => _tabs.contains(id)),
+                isOpen: (id) => _tabs.contains(id),
+                links: _app.links,
+                cards: _app.cards,
+                citations: _app.citations?.repository,
+                ai: _app.ai),
           ),
           // (every question reads all the notes: reading one more by its id is not asked about)
           granted: const {ExtensionPermission.notesReadAll},

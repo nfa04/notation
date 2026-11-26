@@ -9,6 +9,7 @@ import '../citations/citation_document.dart';
 import '../l10n/language.dart';
 import '../models/page_format.dart';
 import '../models/rich_text.dart';
+import 'block_svg.dart';
 import 'markdown_formatting.dart' show settledText;
 import 'markdown_parser.dart';
 import 'markdown_pdf.dart';
@@ -66,6 +67,7 @@ Future<Uint8List> documentPdf(
   MathImages math = MathImages.empty,
   CitationDocument? citations,
   Map<String, Uint8List> pictures = const {},
+  Map<String, BlockPicture> blockPictures = const {},
 }) async {
   final settings = documentSettings(parseMarkdown(controller.text));
   final small = pw_widgets.TextStyle(fontSize: fontSize * 0.75, color: pw.PdfColors.grey700);
@@ -86,7 +88,7 @@ Future<Uint8List> documentPdf(
     header: settings['header'] == null ? null : (context) => edge(settings['header'], context, top: true) ?? pw_widgets.SizedBox(),
     footer: settings['footer'] == null ? null : (context) => edge(settings['footer'], context, top: false) ?? pw_widgets.SizedBox(),
     build: (context) => markdownBlocksToPdf(controller, fontSize,
-        math: math, citations: citations, bibliography: true, pictures: pictures, maxPictureWidth: pages.textWidth),
+        math: math, citations: citations, bibliography: true, pictures: pictures, blockPictures: blockPictures, maxPictureWidth: pages.textWidth),
   ));
   return doc.save();
 }
@@ -178,7 +180,7 @@ String _hex(int argb) => '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')
 
 /// The document as a web page of its own (pictures in it, as data).
 String documentHtml(String text, List<TextSpanAttribute> attributes,
-    {String title = '', CitationDocument? citations, Map<String, Uint8List> pictures = const {}}) {
+    {String title = '', CitationDocument? citations, Map<String, Uint8List> pictures = const {}, Map<String, BlockPicture> blockPictures = const {}}) {
   final blocks = parseMarkdown(text);
   final notes = footnoteNumbers(blocks);
   final refs = crossReferences(blocks, figure: tr('Figure'), table: tr('Table'));
@@ -280,6 +282,11 @@ String documentHtml(String text, List<TextSpanAttribute> attributes,
       case MdBlockType.math:
         body.writeln('<p class="math">\\[${_esc(b.runs.single.text)}\\]</p>');
       case MdBlockType.code:
+        final drawn = blockPictures[blockPictureKey(b.lang, b.code)];
+        if (drawn != null) {
+          body.writeln('<div class="block">${drawn.svg}</div>');
+          break;
+        }
         body.writeln('<pre><code${b.lang.isEmpty ? '' : ' class="language-${_attr(b.lang)}"'}>${_esc(b.code)}</code></pre>');
       case MdBlockType.table:
         body.writeln('<table>');

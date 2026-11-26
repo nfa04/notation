@@ -17,8 +17,7 @@ final _sourceLink = RegExp(r'\[([^\]]*)\]\(source:([^)\s]+)\)');
 /// at nothing in the import stays as plain text and is counted in the report), pictures kept, tags set.
 ///
 /// A note with a `sourceId` that was imported before ([known]: source id to note id) is updated in place instead of made again;
-/// [onMapped] says which note each source id became, for the next run. The dates of the notes are not kept: the app dates a note
-/// by when it was written into it.
+/// [onMapped] says which note each source id became, for the next run. A note's `created` and `updated` dates are kept when the importer gives them.
 Future<ImportReport> importExtensionNotes({
   required List<ImportedNote> notes,
   required NoteRepository repository,
@@ -148,6 +147,13 @@ Future<ImportReport> importExtensionNotes({
         final note = (await repository.loadNote(id))!;
         note.documentText = out.toString();
         await repository.saveNote(note);
+      }
+      if (n.created != null || n.updated != null) {
+        // the dates the other app had (they are set after the save, which dated the note by now)
+        final was = await repository.noteTimes(id);
+        final created = n.created ?? (was != null && existing.contains(id) ? was.created : n.updated!);
+        final edited = n.updated ?? n.created!;
+        await repository.setTimes(id, created: created.isAfter(edited) ? edited : created, edited: edited);
       }
       if (tags != null && n.tags.isNotEmpty) await tags.setTags(id, n.tags);
       if (n.sourceId != null) onMapped?.call(n.sourceId!, id);

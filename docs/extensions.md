@@ -544,7 +544,7 @@ shows as a one-line message in place of the drawing.
   `{ url, site, title, text }` and may add to the new note.
 - More to read: `notation.notes.links(id?)` and `notation.notes.backlinks(id?)`, `notation.notes.byTag(tag)`, `notation.tags.list()`,
   `notation.cards.list()` and `notation.cards.due()`, `notation.citations.search(query)` and `notation.citations.add(entry)`,
-  `notation.ink.read({ page })` (what the handwriting reader has already read, never runs it) and `notation.ink.strokes({ page })`.
+  `notation.ink.read({ page })` (what the handwriting reader has already read, never runs it) and `notation.ink.strokes({ page, box })` (`box` is `{ left, top, right, bottom }`: only the lines that touch it).
 - `notation.ai.complete(prompt, { maxTokens })` (`ai.use`) asks the AI the person chose; at most 5 calls for each run.
 
 ## Tools for the assistant

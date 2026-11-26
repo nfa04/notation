@@ -194,8 +194,9 @@ abstract class ExtensionApi {
   /// or formula with its `page`, `top` and `left`. [page] picks one page (from 1).
   Future<List<Map<String, Object?>>> inkReadings({int? page}) async => throw ExtensionError('Handwriting cannot be looked at here.');
 
-  /// The lines of ink on page [page] (from 1), as `points` with `color` and `width`; at most 300.
-  Future<List<Map<String, Object?>>> inkStrokes({int? page}) async => throw ExtensionError('Handwriting cannot be looked at here.');
+  /// The lines of ink on page [page] (from 1), as `points` with `color` and `width`; at most 300. [box] (`[left, top, right, bottom]`) keeps
+  /// only the lines that touch that part of the page.
+  Future<List<Map<String, Object?>>> inkStrokes({int? page, List<double>? box}) async => throw ExtensionError('Handwriting cannot be looked at here.');
 
   /// The answer of the AI the person chose to [prompt].
   Future<String> aiComplete(String prompt, {int maxTokens = 400}) async => throw ExtensionError('The AI cannot be asked here.');
@@ -888,7 +889,15 @@ class ExtensionRuntime {
         return await api.inkReadings(page: _optPage(p));
       case 'ink.strokes':
         _need(ExtensionPermission.noteRead);
-        return await api.inkStrokes(page: _optPage(p));
+        final box = p['box'];
+        List<double>? area;
+        if (box != null) {
+          if (box is! Map) throw ExtensionError('"box" has to be like { left, top, right, bottom }.');
+          final v = [for (final k in const ['left', 'top', 'right', 'bottom']) box[k]];
+          if (v.any((x) => x is! num || !x.isFinite)) throw ExtensionError('"box" has to be like { left, top, right, bottom } (numbers).');
+          area = [for (final x in v) (x as num).toDouble()];
+        }
+        return await api.inkStrokes(page: _optPage(p), box: area);
       case 'ai.complete':
         _need(ExtensionPermission.aiUse);
         if (++_aiCalls > 5) throw ExtensionError('An extension may ask the AI at most 5 times in one run.');

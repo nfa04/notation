@@ -111,7 +111,7 @@ extension _EditorDocumentFiles on _FixedPageNoteEditorState {
       if (!mounted) return;
       final math = await renderMathImages(context, mathIn([text]), fontSize: DocumentSheet.fontSize);
       final bytes = await documentPdf(_documentController, _documentPages,
-          fontSize: DocumentSheet.fontSize, math: math, citations: _citationsFor(text), pictures: pictures);
+          fontSize: DocumentSheet.fontSize, math: math, citations: _citationsFor(text), pictures: pictures, blockPictures: await renderBlockPictures(text, width: _documentPages.textWidth));
       if (!mounted) return;
       _setLoadingPdf(false);
       await PrintPreview.show(context, pdf: bytes, title: _titleController.text.trim(), onSave: () => unawaited(_saveDocumentFile(bytes, 'pdf')));
@@ -132,17 +132,18 @@ extension _EditorDocumentFiles on _FixedPageNoteEditorState {
       final pages = _documentPages;
       final cites = _citationsFor(text);
       final pictures = kind == 'md' || kind == 'txt' ? const <String, Uint8List>{} : await _documentPictures();
+      final blockPictures = kind == 'pdf' || kind == 'html' ? await renderBlockPictures(text, width: pages.textWidth) : const <String, BlockPicture>{};
       if (!mounted) return;
       final Uint8List bytes;
       var extension = kind;
       switch (kind) {
         case 'pdf':
           final math = await renderMathImages(context, mathIn([text]), fontSize: DocumentSheet.fontSize);
-          bytes = await documentPdf(_documentController, pages, fontSize: DocumentSheet.fontSize, math: math, citations: cites, pictures: pictures);
+          bytes = await documentPdf(_documentController, pages, fontSize: DocumentSheet.fontSize, math: math, citations: cites, pictures: pictures, blockPictures: blockPictures);
         case 'docx':
           bytes = documentDocx(text, _documentController.attributes, pages, citations: cites, pictures: pictures);
         case 'html':
-          bytes = utf8.encode(documentHtml(text, _documentController.attributes, title: pages.title, citations: cites, pictures: pictures));
+          bytes = utf8.encode(documentHtml(text, _documentController.attributes, title: pages.title, citations: cites, pictures: pictures, blockPictures: blockPictures));
         case 'md':
           bytes = utf8.encode(documentMarkdown(text));
         case 'tex':

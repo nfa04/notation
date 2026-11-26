@@ -43,6 +43,8 @@ class _Api extends InteractiveApi {
   Future<String> aiComplete(String prompt, {int maxTokens = 400}) async => 'ai:$prompt:$maxTokens';
   @override
   Future<List<Map<String, Object?>>> inkReadings({int? page}) async => [{'page': page, 'text': 'hi'}];
+  @override
+  Future<List<Map<String, Object?>>> inkStrokes({int? page, List<double>? box}) async => [{'page': page, 'box': box}];
 }
 
 void main() {
@@ -247,6 +249,8 @@ void main() {
           '[{"id":"b","title":"Back"}]');
       expect((await runtime("notation.command('c', async () => { try { await notation.notes.backlinks(); } catch (e) { return e.message; } });", {}, api).run('command', 'c', {})).value, contains('notes.readAll'));
       expect((await runtime("notation.command('c', async () => JSON.stringify(await notation.ink.read({ page: 2 })));", {ExtensionPermission.noteRead}, api).run('command', 'c', {})).value, '[{"page":2,"text":"hi"}]');
+      expect((await runtime("notation.command('c', async () => JSON.stringify(await notation.ink.strokes({ page: 1, box: { left: 1, top: 2, right: 3, bottom: 4 } })));", {ExtensionPermission.noteRead}, api).run('command', 'c', {})).value, '[{"page":1,"box":[1,2,3,4]}]');
+      expect((await runtime("notation.command('c', async () => { try { await notation.ink.strokes({ box: { left: 1 } }); } catch (e) { return e.message; } });", {ExtensionPermission.noteRead}, api).run('command', 'c', {})).value, contains('box'));
       expect((await runtime("notation.command('c', async () => await notation.ai.complete('hi', { maxTokens: 9 }));", {ExtensionPermission.aiUse}, api).run('command', 'c', {})).value, 'ai:hi:9');
       final many = runtime('''notation.command('c', async () => { let last; for (let i = 0; i < 7; i++) { try { await notation.ai.complete('x'); last = i; } catch (e) { return last + ':' + e.message; } } });''', {ExtensionPermission.aiUse}, api);
       expect((await many.run('command', 'c', {})).value, startsWith('4:'));
