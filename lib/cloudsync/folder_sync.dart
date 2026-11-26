@@ -15,6 +15,7 @@ import '../devicesync/sync_devices.dart';
 import '../devicesync/sync_library.dart';
 import '../l10n/language.dart';
 import 'cloud_folder.dart';
+import '../devicesync/card_sync.dart';
 
 // These run on another isolate. They are functions of their own, not closures made in a method: a closure carries what its method
 // captured - here the whole sync with the library and the database - and that is copied along with the call.
@@ -57,6 +58,10 @@ typedef _Theirs = ({
   Map<String, ({String file, String ext})> images,
   Map<String, String> graphs,
   List<PairedDevice> devices,
+
+  /// The files of the decks of flashcards (source -> file) and of the card pictures (id -> file and size).
+  Map<String, String> cardDecks,
+  Map<String, ({String file, int width, int height})> cardPictures,
 
   /// The big files kept apart from a note file: note -> name in the note file -> where it is, its hash and its length.
   Map<String, Map<String, ({String file, String hash, int length})>> blobs,
@@ -180,6 +185,10 @@ class FolderSync {
   String _graphName(String uid, int at) => encrypted
       ? 'g/${_mac('graph:$uid:$at').substring(0, 24)}'
       : 'g/${_safe(uid)}.$at.json';
+
+  /// The file of a deck of cards as its digest says it is, and the file of a card picture (named by its bytes: written once).
+  String _deckName(String source, String digest) => encrypted ? 'k/${_mac('cards:$source:$digest').substring(0, 24)}' : 'k/${_mac('cards:$source').substring(0, 16)}.$digest.json';
+  String _cardPictureName(String id) => encrypted ? 'q/${_mac('cardpic:$id').substring(0, 24)}' : 'q/$id.png';
 
   String _imageName(String id, int at, String ext) => encrypted ? 'f/${_mac('image:$id:$at').substring(0, 24)}' : 'f/${_safe(id)}.$at.${_safe(ext)}';
 
@@ -398,6 +407,15 @@ class FolderSync {
           for (final e in (json['graphs'] as Map? ?? const {}).entries)
             e.key as String: e.value as String,
         },
+        cardDecks: {
+          for (final e in (json['cardFiles'] as Map? ?? const {}).entries)
+            if (e.key is String && e.value is String) e.key as String: e.value as String,
+        },
+        cardPictures: {
+          for (final e in (json['cardPicFiles'] as Map? ?? const {}).entries)
+            if (e.key is String && e.value is Map && (e.value as Map)['f'] is String && (e.value as Map)['w'] is int && (e.value as Map)['h'] is int)
+              e.key as String: (file: (e.value as Map)['f'] as String, width: (e.value as Map)['w'] as int, height: (e.value as Map)['h'] as int),
+        },
         blobs: {
           for (final e in (json['blobs'] as Map? ?? const {}).entries)
             e.key as String: {
@@ -490,6 +508,37 @@ class FolderSync {
         if (err is CloudAccountMissing) rethrow;
         _trace('taking in the graph $id', err, st);
         _problems.add('${info.name}: ${_why(err)}');
+      }
+    }
+    // the flashcards: what was deleted there, then the decks that differ (merged, see CardSync), with the pictures they need
+    if (plan.deleteCards.isNotEmpty) taken += await library.cards.applyDeletions(plan.deleteCards);
+    if (plan.cardDecks.isNotEmpty) {
+      final have = await library.cards.pictureIds();
+      for (final source in plan.cardDecks) {
+        if (stop?.call() ?? false) return taken;
+        final file = theirs.cardDecks[source];
+        try {
+          final raw = file == null ? null : await folder.read('$dir/$file');
+          if (raw == null) {
+            _incomplete = true; // not up there (yet): the next run
+            continue;
+          }
+          final plain = await _unwrap(raw, '$dir/$file', sealed: theirs.sealed);
+          final deck = jsonDecode(utf8.decode(theirs.sealed ? await unpackMessage(plain) : plain));
+          if (deck is! List) continue;
+          for (final id in CardSync.picturesOf([for (final c in deck) if (c is Map) c.cast<String, Object?>()]).difference(have)) {
+            final pic = theirs.cardPictures[id];
+            final bytes = pic == null ? null : await folder.read('$dir/${pic.file}');
+            if (pic == null || bytes == null) continue;
+            if (await library.cards.applyPicture(id, await _unwrap(bytes, '$dir/${pic.file}', sealed: theirs.sealed), pic.width, pic.height)) have.add(id);
+          }
+          await library.cards.applyDeck(source, deck);
+          taken++;
+        } catch (err, st) {
+          if (err is CloudAccountMissing) rethrow;
+          _trace('taking in the cards of $source', err, st);
+          _problems.add('${tr('Flashcards')}: ${_why(err)}');
+        }
       }
     }
     final notes = {for (final n in theirs.manifest.notes) n.id: n};
@@ -677,6 +726,53 @@ class FolderSync {
         _problems.add('${g.name}: ${_why(e)}');
       }
     }
+    // the flashcards: a file for each deck (written again when its digest changes) and one for each picture (written once)
+    final cardFiles = <String, String>{};
+    final failedDecks = <String>{};
+    for (final MapEntry(key: source, value: digest) in (manifest.cards ?? const <String, String>{}).entries) {
+      if (stop?.call() ?? false) break;
+      final have = published['k:$source'];
+      if (have != null && have['v'] == digest && have['f'] is String) {
+        cardFiles[source] = have['f'] as String;
+        nextPublished['k:$source'] = have;
+        continue;
+      }
+      try {
+        final name = _deckName(source, digest);
+        final bytes = Uint8List.fromList(utf8.encode(jsonEncode(await library.cards.deck(source))));
+        await folder.write('$dir/$name', await _wrap(encrypted ? await packMessage(bytes) : bytes, '$dir/$name'));
+        put++;
+        cardFiles[source] = name;
+        nextPublished['k:$source'] = {'v': digest, 'f': name};
+      } catch (e, st) {
+        if (e is CloudAccountMissing) rethrow;
+        _trace('publishing the cards of $source', e, st);
+        failedDecks.add(source);
+        _problems.add('${tr('Flashcards')}: ${_why(e)}');
+      }
+    }
+    final cardPicFiles = <String, Map<String, Object?>>{};
+    for (final id in manifest.cardPictures ?? const <String>[]) {
+      if (stop?.call() ?? false) break;
+      final have = published['q:$id'];
+      if (have != null && have['f'] is String) {
+        cardPicFiles[id] = have;
+        nextPublished['q:$id'] = have;
+        continue;
+      }
+      try {
+        final p = await library.cards.picture(id);
+        if (p == null) continue;
+        final name = _cardPictureName(id);
+        await folder.write('$dir/$name', await _wrap(p.png, '$dir/$name'));
+        put++;
+        cardPicFiles[id] = nextPublished['q:$id'] = {'f': name, 'w': p.width, 'h': p.height};
+      } catch (e, st) {
+        if (e is CloudAccountMissing) rethrow;
+        _trace('publishing a card picture', e, st);
+        _problems.add('${tr('Flashcards')}: ${_why(e)}');
+      }
+    }
     final images = <String, ({String file, String ext})>{};
     for (final f in manifest.folders) {
       final have = published['i:${f.id}'];
@@ -714,13 +810,17 @@ class FolderSync {
       'device': deviceId,
       'name': deviceName,
       if (encrypted && book != null) 'devices': [for (final d in book!.all) d.toJson()],
-      'm': (failed.isEmpty && failedGraphs.isEmpty ? manifest : SyncManifest(manifest.folders, [for (final n in manifest.notes) if (!failed.contains(n.id)) n], manifest.settings, manifest.tombs,
+      'm': (failed.isEmpty && failedGraphs.isEmpty && failedDecks.isEmpty ? manifest : SyncManifest(manifest.folders, [for (final n in manifest.notes) if (!failed.contains(n.id)) n], manifest.settings, manifest.tombs,
                       graphs: [
                         for (final g in manifest.graphs)
                           if (!failedGraphs.contains(g.uid)) g,
-                      ],)).toJson(),
+                      ],
+                      cards: manifest.cards == null ? null : {for (final e in manifest.cards!.entries) if (!failedDecks.contains(e.key)) e.key: e.value},
+                      cardPictures: manifest.cardPictures)).toJson(),
       'notes': noteFiles,
       if (graphFiles.isNotEmpty) 'graphs': graphFiles,
+      if (cardFiles.isNotEmpty) 'cardFiles': cardFiles,
+      if (cardPicFiles.isNotEmpty) 'cardPicFiles': cardPicFiles,
       if (blobRefs.isNotEmpty) 'blobs': blobRefs,
       'images': {for (final e in images.entries) e.key: {'f': e.value.file, 'e': e.value.ext}},
     };
@@ -739,10 +839,17 @@ class FolderSync {
     // files no manifest points to any more (older versions, deleted notes). Only looked for when something was written: the folder is
     // listed then, and an idle run - most of them - asks for nothing but the manifests of the others.
     if (put > 0) {
-      final keep = {...noteFiles.values, ...graphFiles.values,
+      final keep = {...noteFiles.values, ...graphFiles.values, ...cardFiles.values,
+        for (final p in cardPicFiles.values) p['f'] as String,
         ...images.values.map((i) => i.file),
         for (final refs in blobRefs.values) for (final ref in refs.values) ref['f'] as String,};
-      final listed = await Future.wait([for (final sub in ['n', 'f', 'g', 'b']) folder.list('$dir/$sub').then((names) => [for (final name in names) '$sub/$name'])]);
+      // (the folders of cards only where there are or were cards; at most four listed at once)
+      final cardsUp = cardFiles.isNotEmpty || cardPicFiles.isNotEmpty || published.keys.any((k) => k.startsWith('k:') || k.startsWith('q:'));
+      final subs = ['n', 'f', 'g', 'b', if (cardsUp) ...['k', 'q']];
+      final listed = [
+        for (var i = 0; i < subs.length; i += 4)
+          ...await Future.wait([for (final sub in subs.skip(i).take(4)) folder.list('$dir/$sub').then((names) => [for (final name in names) '$sub/$name'])]),
+      ];
       final stale = [for (final names in listed) for (final name in names) if (!keep.contains(name)) name];
       final deleted = await _pool(stale, (name) => folder.delete('$dir/$name'));
       for (final d in deleted) {
@@ -756,7 +863,11 @@ class FolderSync {
   Future<void> _removeAll({required bool oldMode}) async {
     final dir = dirOf(deviceId, encrypted: oldMode);
     await folder.delete('$dir/${_manifestName(oldMode)}');
-    final listed = await Future.wait([for (final sub in ['n', 'f', 'g', 'b']) folder.list('$dir/$sub').then((names) => [for (final name in names) '$sub/$name'])]);
+    final subs = ['n', 'f', 'g', 'b', 'k', 'q'];
+    final listed = [
+      for (var i = 0; i < subs.length; i += 4)
+        ...await Future.wait([for (final sub in subs.skip(i).take(4)) folder.list('$dir/$sub').then((names) => [for (final name in names) '$sub/$name'])]),
+    ];
     final results = await _pool([for (final names in listed) ...names], (name) => folder.delete('$dir/$name'));
     for (final r in results) {
       if (r?.error != null) throw r!.error!;

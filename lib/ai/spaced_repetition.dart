@@ -65,6 +65,33 @@ class CardSchedule {
     this.lastReview,
   });
 
+  /// As JSON: where a card's history starts (see `CardSync`).
+  Map<String, Object?> toJson() => {
+        'i': interval,
+        'e': ease,
+        'r': reps,
+        'l': lapses,
+        'due': ?due?.millisecondsSinceEpoch,
+        's': ?stability,
+        'd': ?difficulty,
+        'last': ?lastReview?.millisecondsSinceEpoch,
+      };
+
+  static CardSchedule fromJson(Map j) {
+    DateTime? time(Object? v) => v is int ? DateTime.fromMillisecondsSinceEpoch(v) : null;
+    double? number(Object? v) => v is num ? v.toDouble() : null;
+    return CardSchedule(
+      interval: number(j['i']) ?? 0,
+      ease: number(j['e']) ?? startingEase,
+      reps: (j['r'] as num?)?.toInt() ?? 0,
+      lapses: (j['l'] as num?)?.toInt() ?? 0,
+      due: time(j['due']),
+      stability: number(j['s']),
+      difficulty: number(j['d']),
+      lastReview: time(j['last']),
+    );
+  }
+
   bool isDue(DateTime now) => due == null || !due!.isAfter(now);
 
   /// Not yet through the learning steps.

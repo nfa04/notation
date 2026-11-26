@@ -15,6 +15,9 @@ import '../data/safe_names.dart';
 import '../data/settings_repository.dart';
 import '../graph/graph_model.dart' show KnowledgeGraph;
 import '../l10n/language.dart';
+import '../ai/fsrs.dart';
+import '../data/card_repository.dart';
+import 'card_sync.dart';
 
 /// The settings that travel between the devices of a profile: how the app looks and behaves, not where it connects to or
 /// what it is allowed to (servers, accounts, the choice of model are per device, and secrets are never in the settings).
@@ -208,8 +211,15 @@ class SyncManifest {
   /// The graphs that were kept (never part of a share: the library of a share leaves them out).
   final List<SyncGraph> graphs;
 
+  /// The flashcards: a digest of each deck (by its source), and the ids of the card pictures there are. Null from a device that does not
+  /// sync cards (an older version, a share): it is sent none.
+  final Map<String, String>? cards;
+  final List<String>? cardPictures;
+
   const SyncManifest(this.folders, this.notes, this.settings, this.tombs, {
     this.graphs = const [],
+    this.cards,
+    this.cardPictures,
   });
 
   Map<String, Object?> toJson() => {
@@ -218,6 +228,8 @@ class SyncManifest {
         'settings': [for (final s in settings) s.toJson()],
         'tombs': [for (final t in tombs) t.toJson()],
     if (graphs.isNotEmpty) 'graphs': [for (final g in graphs) g.toJson()],
+        'cards': ?cards,
+        'cardPics': ?cardPictures,
       };
 
   static SyncManifest fromJson(Map j) => SyncManifest(
@@ -229,6 +241,8 @@ class SyncManifest {
       for (final g in (j['graphs'] as List? ?? const []))
         SyncGraph.fromJson(g as Map),
     ],
+        cards: j['cards'] is Map ? {for (final e in (j['cards'] as Map).entries) if (e.key is String && e.value is String) e.key as String: e.value as String} : null,
+        cardPictures: j['cardPics'] is List ? [for (final id in j['cardPics'] as List) if (id is String) id] : null,
       );
 }
 
@@ -249,9 +263,15 @@ class SyncPlan {
   final List<String> deleteFolders = [];
   final Map<String, int> deletedAt = {};
 
+  /// Decks of flashcards to ask for (by source), and cards the other device deleted (id -> when).
+  final List<String> cardDecks = [];
+  final Map<String, int> deleteCards = {};
+
   bool get isEmpty => notes.isEmpty && folders.isEmpty && settings.isEmpty && deleteNotes.isEmpty && deleteFolders.isEmpty &&
       graphs.isEmpty &&
-      deleteGraphs.isEmpty;
+      deleteGraphs.isEmpty &&
+      cardDecks.isEmpty &&
+      deleteCards.isEmpty;
 }
 
 class _SyncState {
@@ -324,6 +344,12 @@ class SyncLibrary {
   /// The database, for a library that sees only part of this one.
   Database get database => _db;
 
+  /// The flashcards (with the retention that is set: a merged card's answers are given again with it).
+  late final CardSync cards = CardSync(_db, scheduler: () async {
+    final r = double.tryParse(await settings.get(CardRepository.retentionKey) ?? '');
+    return Fsrs(retention: (r ?? 0.9).clamp(CardRepository.minRetention, CardRepository.maxRetention).toDouble());
+  });
+
   Future<SyncManifest> manifest() async {
     final folders = [
       for (final r in await _db.query('folders'))
@@ -345,7 +371,7 @@ class SyncLibrary {
       for (final g in await notes.knowledge.listGraphs()) SyncGraph.of(g),
     ];
     return SyncManifest(folders, noteList, [for (final e in values.entries) SyncSettingValue(e.key, e.value.value, e.value.changedAt)], tombs,
-      graphs: graphs,);
+      graphs: graphs, cards: await cards.digests(), cardPictures: (await cards.pictureIds()).toList());
   }
 
   /// The line of the manifest for the note of row [r] (with its marks and what the sync knew of its versions, [line]).
@@ -496,6 +522,8 @@ class SyncLibrary {
           plan.deleteGraphs.add(t.id);
           plan.deletedAt['graph:${t.id}'] = t.at;
         }
+      } else if (t.kind == 'card') {
+        plan.deleteCards[t.id] = t.at;
       } else if (t.kind == 'folder') {
         final f = myFolders[t.id];
         if (f != null && f.updatedAt <= t.at) {
@@ -552,6 +580,14 @@ class SyncLibrary {
           r.at > l.at ||
           (r.at == l.at && !r.sameAs(l) && theirWin)) {
         plan.graphs.add(r.uid);
+      }
+    }
+
+    // the decks of cards that differ (both devices ask for each other's and merge them: see CardSync)
+    final myCards = mine.cards, theirCards = theirs.cards;
+    if (myCards != null && theirCards != null) {
+      for (final MapEntry(key: source, value: digest) in theirCards.entries) {
+        if (myCards[source] != digest) plan.cardDecks.add(source);
       }
     }
 

@@ -150,6 +150,7 @@ void main() {
           CREATE TABLE review_cards (id TEXT PRIMARY KEY, source TEXT NOT NULL, front TEXT NOT NULL, back TEXT NOT NULL, page INTEGER,
             due INTEGER NOT NULL, interval REAL NOT NULL DEFAULT 0, ease REAL NOT NULL DEFAULT 2.5, reps INTEGER NOT NULL DEFAULT 0,
             lapses INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)''');
+        await d.execute('CREATE TABLE sync_tombstones (kind TEXT NOT NULL, id TEXT NOT NULL, deleted_at INTEGER NOT NULL, PRIMARY KEY (kind, id))');
         await d.insert('review_cards', {'id': 'c1', 'source': 'n1', 'front': 'Q', 'back': 'A', 'due': t0.millisecondsSinceEpoch, 'interval': 10, 'ease': 2.5, 'reps': 3, 'created_at': 0});
       }));
       await old.close();

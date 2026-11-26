@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 62;
+const int schemaVersion = 63;
 
 const List<String> createStatements = [
   '''
@@ -176,6 +176,7 @@ const List<String> createStatements = [
   _createReviewCards,
   _indexReviewCards,
   ..._reviewCardsFsrs,
+  _reviewCardsBase,
   _createNoteTags,
   _indexNoteTags,
   _createPageBookmarks,
@@ -210,6 +211,10 @@ const String _indexReviewCards = 'CREATE INDEX IF NOT EXISTS idx_review_cards_du
 /// `difficulty`, `last_review`, see `CardSchedule`), the [kind] of card ('basic', 'cloze', 'region') and what a card that is more
 /// than text needs ([media], JSON, see `Flashcard.media`); and the log of every answer (`review_log`), which two devices' reviews are
 /// merged by.
+/// Where a card's history starts (version 63): its schedule before the first answer in `review_log`, as JSON. The cards of two devices
+/// are merged by giving all the answers of both again from there (see `CardSync`).
+const String _reviewCardsBase = 'ALTER TABLE review_cards ADD COLUMN base TEXT';
+
 const List<String> _reviewCardsFsrs = [
   'ALTER TABLE review_cards ADD COLUMN stability REAL',
   'ALTER TABLE review_cards ADD COLUMN difficulty REAL',
@@ -501,7 +506,7 @@ const String _createLocalEventsIndex = 'CREATE INDEX IF NOT EXISTS idx_local_eve
 /// Notes and folders that were deleted for good, so that the other devices of the profile delete them too (see `DeviceSyncService`).
 const String _createSyncTombstones = '''
   CREATE TABLE IF NOT EXISTS sync_tombstones (
-    kind       TEXT NOT NULL,                     -- 'note', 'folder' or 'graph'
+    kind       TEXT NOT NULL,                     -- 'note', 'folder', 'graph' or 'card'
     id         TEXT NOT NULL,
     deleted_at INTEGER NOT NULL,
     PRIMARY KEY (kind, id)
@@ -832,6 +837,7 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  62: [_reviewCardsBase],
   61: [_createReviewCards, ..._reviewCardsFsrs],
   // the people invited to an event of the app's own calendars
   60: ['ALTER TABLE local_events ADD COLUMN attendees TEXT'],

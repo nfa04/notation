@@ -23,6 +23,11 @@ class ReviewCard {
   const ReviewCard({required this.id, required this.source, required this.card, required this.schedule});
 }
 
+final _changedElsewhere = StreamController<void>.broadcast();
+
+/// Says that cards were changed by something else than a [CardRepository] (a sync), so that what shows them looks again.
+void cardsChangedElsewhere() => _changedElsewhere.add(null);
+
 /// The cards kept for spaced repetition (table `review_cards`). Cards come from the assistant and the graph's study tools; what
 /// is kept is the question, the answer and the schedule, so they can be asked again days later.
 class CardRepository {
@@ -34,7 +39,9 @@ class CardRepository {
   /// Where the retention the person chose is kept (synced to their other devices); null: always the default.
   final SettingsRepository? settings;
 
-  CardRepository(this._db, {this.settings});
+  CardRepository(this._db, {this.settings}) {
+    _changedElsewhere.stream.listen((_) => _changed());
+  }
 
   /// The setting of the retention, as a number such as "0.9".
   static const retentionKey = 'card_retention';
@@ -116,7 +123,11 @@ class CardRepository {
           {..._row(source, c), 'due': at, 'created_at': at},
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
-        if (n > 0) added++;
+        if (n > 0) {
+          added++;
+          // (made again after it was deleted: no longer deleted for the other devices)
+          await txn.delete('sync_tombstones', where: 'kind = ? AND id = ?', whereArgs: ['card', idOf(source, c.identity)]);
+        }
       }
     });
     if (added > 0) _changed();
@@ -148,7 +159,11 @@ class CardRepository {
           },
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
-        if (n > 0) added++;
+        if (n > 0) {
+          added++;
+          // (made again after it was deleted: no longer deleted for the other devices)
+          await txn.delete('sync_tombstones', where: 'kind = ? AND id = ?', whereArgs: ['card', idOf(source, c.identity)]);
+        }
       }
     });
     if (added > 0) _changed();
@@ -215,9 +230,12 @@ class CardRepository {
     final at = now ?? DateTime.now();
     final next = card.schedule.review(recall, at, fsrs: await scheduler());
     await _db.transaction((txn) async {
+      // (the first answer that is logged keeps where the card stood before it: its history starts there)
+      final logged = (await txn.query('review_log', columns: ['at'], where: 'card_id = ?', whereArgs: [card.id], limit: 1)).isNotEmpty;
       await txn.update(
         'review_cards',
         {
+          if (!logged) 'base': jsonEncode(card.schedule.toJson()),
           'due': next.due!.millisecondsSinceEpoch,
           'interval': next.interval,
           'ease': next.ease,
@@ -272,6 +290,16 @@ class CardRepository {
     }
   }
 
+  /// Tells the other devices that these cards were deleted (see `CardSync`).
+  Future<void> _tomb(List<String> ids) async {
+    final at = DateTime.now().millisecondsSinceEpoch;
+    final batch = _db.batch();
+    for (final id in ids) {
+      batch.insert('sync_tombstones', {'kind': 'card', 'id': id, 'deleted_at': at}, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
   /// The answers given to card [id], oldest first.
   Future<List<(DateTime, Recall)>> log(String id) async {
     final rows = await _db.query('review_log', where: 'card_id = ?', whereArgs: [id], orderBy: 'at');
@@ -281,12 +309,15 @@ class CardRepository {
   Future<void> remove(String id) async {
     await _db.delete('review_cards', where: 'id = ?', whereArgs: [id]);
     await _db.delete('review_log', where: 'card_id = ?', whereArgs: [id]);
+    await _tomb([id]);
     await _prunePictures();
     _changed();
   }
 
   /// Forgets every card of [source] (a note that was deleted, say).
   Future<void> removeSource(String source) async {
+    final ids = [for (final r in await _db.query('review_cards', columns: ['id'], where: 'source = ?', whereArgs: [source])) r['id'] as String];
+    await _tomb(ids);
     await _db.delete('review_log', where: 'card_id IN (SELECT id FROM review_cards WHERE source = ?)', whereArgs: [source]);
     await _db.delete('review_cards', where: 'source = ?', whereArgs: [source]);
     await _prunePictures();

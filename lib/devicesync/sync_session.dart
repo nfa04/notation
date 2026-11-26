@@ -14,6 +14,7 @@ import 'sync_devices.dart';
 import 'sync_diag.dart';
 import 'sync_keys.dart';
 import 'sync_library.dart';
+import 'card_sync.dart';
 
 /// How a meeting of two devices ended.
 enum SyncEnd {
@@ -367,10 +368,13 @@ class SyncSession {
         await library.deleteGraph(id, at: plan.deletedAt['graph:$id']!);
         changes++;
       }
+      if (plan.deleteCards.isNotEmpty) changes += await library.cards.applyDeletions(plan.deleteCards);
       await _send({
         't': 'want',
         'folders': plan.folders,
         'graphs': plan.graphs,
+        // (only to a device that syncs cards: an older one does not know the word, and is never sent a deck)
+        if (theirs.cards != null) 'cards': plan.cardDecks,
         'notes': {for (final e in plan.notes.entries) e.key: {'data': e.value.data, 'meta': e.value.meta}},
         'settings': plan.settings,
       });
@@ -410,12 +414,25 @@ class SyncSession {
         final v = await library.settingValue(k);
         if (v != null) await _send({'t': 'setting', 's': v.toJson()});
       }
+      if (want['cards'] is List && mine.cards != null) {
+        final theyHave = {...?theirs.cardPictures};
+        for (final source in [for (final s in want['cards'] as List) if (s is String) s]) {
+          final deck = await library.cards.deck(source);
+          final pictures = <String, Object?>{};
+          for (final id in CardSync.picturesOf(deck).difference(theyHave)) {
+            final p = await library.cards.picture(id);
+            if (p != null) pictures[id] = {'png': base64.encode(p.png), 'w': p.width, 'h': p.height};
+            theyHave.add(id);
+          }
+          await _send({'t': 'cards', 'src': source, 'deck': deck, 'pics': pictures});
+        }
+      }
       await _send({'t': 'end'});
 
       // taking
       var taken = 0;
       final expected = plan.folders.length + plan.notes.length + plan.settings.length +
-          plan.graphs.length;
+          plan.graphs.length + plan.cardDecks.length;
       while (true) {
         final m = await _nextAny();
         final t = m['t'];
@@ -434,6 +451,16 @@ class SyncSession {
             await library.applyGraph(
               SyncGraph.fromJson(m['g'] as Map),
               m['payload'] as String,);
+          }
+        } else if (t == 'cards') {
+          if (m['src'] is String && m['deck'] is List) {
+            for (final e in ((m['pics'] as Map?) ?? const {}).entries) {
+              final p = e.value;
+              if (e.key is String && p is Map && p['png'] is String && p['w'] is int && p['h'] is int) {
+                await library.cards.applyPicture(e.key as String, base64.decode(p['png'] as String), p['w'] as int, p['h'] as int);
+              }
+            }
+            await library.cards.applyDeck(m['src'] as String, m['deck'] as List);
           }
         } else if (t == 'setting') {
           await library.applySetting(SyncSettingValue.fromJson(m['s'] as Map));
