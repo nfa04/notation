@@ -59,6 +59,11 @@ Future<PcmSource> _openMp4(ByteSource source) async {
         ..[17] = d[8]
         ..[18] = d[10];
       return _opusPcm(head, mp4Samples(source, audio), audio.seconds == 0 ? null : audio.seconds);
+    case 'vorbis':
+      final split = audio.config == null ? null : VorbisDecoder.splitXiph(audio.config!);
+      if (split == null) throw const AudioFormatException('The Vorbis settings of this file are incomplete.');
+      final decoder = VorbisDecoder(split.$1, split.$2);
+      return _FramePcm('vorbis', decoder.sampleRate, decoder.channels, audio.seconds == 0 ? null : audio.seconds, mp4Samples(source, audio), decoder.decode, 1024);
     case final other:
       throw AudioFormatException('The audio of this file is "$other", which cannot be read yet.');
   }
@@ -177,13 +182,18 @@ class _FramePcm implements PcmSource {
   final Stream<Uint8List> _frames;
   final List<Float64List>? Function(Uint8List) _decode;
   final int _frameSamples;
-  _FramePcm(this.codec, this.sampleRate, this.channels, this.seconds, this._frames, this._decode, this._frameSamples);
+  /// Cut the sound off after this many samples per channel (the end granule of an Ogg file says where the last page really ends).
+  final int? _limit;
+  _FramePcm(this.codec, this.sampleRate, this.channels, this.seconds, this._frames, this._decode, this._frameSamples, {bool trim = false})
+      : _limit = trim && seconds != null ? (seconds * sampleRate).round() : null;
 
   @override
   Stream<List<Float64List>> blocks() async* {
     var pending = <List<Float64List>>[];
     final per = (sampleRate / _frameSamples).ceil();
+    var left = _limit ?? 1 << 62;
     await for (final frame in _frames) {
+      if (left <= 0) break;
       List<Float64List>? pcm;
       try {
         pcm = _decode(frame);
@@ -191,6 +201,8 @@ class _FramePcm implements PcmSource {
         continue;
       }
       if (pcm == null) continue;
+      if (pcm[0].length > left) pcm = [for (final c in pcm) Float64List.sublistView(c, 0, left)];
+      left -= pcm[0].length;
       pending.add(pcm);
       if (pending.length >= per) {
         yield _concat(pending);
@@ -265,7 +277,7 @@ Future<PcmSource> _openOgg(ByteSource source) async {
       }
     }
 
-    return _opusPcm(first, packets(), seconds);
+    return _opusPcm(first, packets(), seconds, trim: true);
   }
   if (first.length > 7 && first[0] == 1 && String.fromCharCodes(first.sublist(1, 7)) == 'vorbis') {
     final headers = <Uint8List>[];
@@ -280,13 +292,13 @@ Future<PcmSource> _openOgg(ByteSource source) async {
     if (headers.length < 3) throw const AudioFormatException('The Vorbis headers of this file are incomplete.');
     final decoder = VorbisDecoder(headers[0], headers[2]);
     final seconds = ogg.lastGranule < 0 ? null : ogg.lastGranule / decoder.sampleRate;
-    return _FramePcm('vorbis', decoder.sampleRate, decoder.channels, seconds, Stream.fromIterable(rest), decoder.decode, 1024);
+    return _FramePcm('vorbis', decoder.sampleRate, decoder.channels, seconds, Stream.fromIterable(rest), decoder.decode, 1024, trim: true);
   }
   throw const AudioFormatException('The sound in this Ogg file is not Opus or Vorbis; other kinds cannot be read yet.');
 }
 
 /// Opus packets with the settings of an `OpusHead` ([head]) as 48 kHz samples; the pre-skip and the gain of the head are applied.
-PcmSource _opusPcm(Uint8List head, Stream<Uint8List> packets, double? seconds) {
+PcmSource _opusPcm(Uint8List head, Stream<Uint8List> packets, double? seconds, {bool trim = false}) {
   if (head.length < 19) throw const AudioFormatException('The Opus settings of this file are too short.');
   final channels = head[9];
   final preSkip = head[10] | (head[11] << 8);
@@ -314,5 +326,5 @@ PcmSource _opusPcm(Uint8List head, Stream<Uint8List> packets, double? seconds) {
       if (pcm[0].isEmpty) return null;
     }
     return pcm;
-  }, 960);
+  }, 960, trim: trim);
 }

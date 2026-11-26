@@ -16,7 +16,10 @@ class Mp4Audio {
   /// The time scale and the duration of the track, in that scale.
   final int timeScale, duration;
 
-  Mp4Audio({required this.codec, required this.config, required this.sampleRate, required this.channels, required this.offsets, required this.sizes, required this.timeScale, required this.duration});
+  /// The track number (fragments refer to it).
+  final int trackId;
+
+  Mp4Audio({this.trackId = 0, required this.codec, required this.config, required this.sampleRate, required this.channels, required this.offsets, required this.sizes, required this.timeScale, required this.duration});
 
   int get count => sizes.length;
   double get seconds => timeScale == 0 ? 0 : duration / timeScale;
@@ -54,7 +57,7 @@ Future<Mp4Audio> readMp4Audio(ByteSource source) async {
   // top level boxes: look for moov without reading the media data
   var pos = 0;
   Uint8List? moov;
-  var sawFragment = false;
+  final fragments = <(int, int)>[]; // (start, size) of each moof
   while (pos + 8 <= source.length) {
     final head = await source.read(pos, 16);
     if (head.length < 8) break;
@@ -70,19 +73,16 @@ Future<Mp4Audio> readMp4Audio(ByteSource source) async {
       size = source.length - pos;
     }
     if (size < header) break;
-    if (type == 'moov') {
-      moov = await source.read(pos + header, size - header);
-      break;
-    }
-    if (type == 'moof') sawFragment = true;
+    if (type == 'moov') moov = await source.read(pos + header, size - header);
+    if (type == 'moof') fragments.add((pos, size));
     pos += size;
   }
-  if (moov == null) {
-    throw AudioFormatException(sawFragment ? 'This MP4 file is built in fragments, which are not supported yet.' : 'This does not look like an MP4 file (no "moov" box).');
-  }
+  if (moov == null) throw const AudioFormatException('This does not look like an MP4 file (no "moov" box).');
   for (final trak in _boxes(moov, 0, moov.length).where((b) => b.type == 'trak')) {
     final audio = _readTrack(moov, trak);
-    if (audio != null) return audio;
+    if (audio == null) continue;
+    if (fragments.isEmpty) return audio;
+    return _withFragments(source, moov, audio, fragments);
   }
   throw const AudioFormatException('This file has no audio track.');
 }
@@ -97,6 +97,9 @@ _Box? _find(Uint8List b, _Box parent, String type) {
 Mp4Audio? _readTrack(Uint8List b, _Box trak) {
   final mdia = _find(b, trak, 'mdia');
   if (mdia == null) return null;
+  var trackId = 0;
+  final tkhd = _find(b, trak, 'tkhd');
+  if (tkhd != null) trackId = ByteData.sublistView(b).getUint32(tkhd.bodyStart + (b[tkhd.bodyStart] == 1 ? 20 : 12));
   final hdlr = _find(b, mdia, 'hdlr');
   if (hdlr == null || hdlr.end - hdlr.bodyStart < 12) return null;
   final handler = latin1.decode(b.sublist(hdlr.bodyStart + 8, hdlr.bodyStart + 12), allowInvalid: true);
@@ -209,7 +212,79 @@ Mp4Audio? _readTrack(Uint8List b, _Box trak) {
     }
   }
   if (sample < count) throw const AudioFormatException('The sample table of this MP4 file is broken.');
-  return Mp4Audio(codec: codec, config: config, sampleRate: sampleRate, channels: channels, offsets: offsets, sizes: sizes, timeScale: timeScale, duration: duration);
+  return Mp4Audio(trackId: trackId, codec: codec, config: config, sampleRate: sampleRate, channels: channels, offsets: offsets, sizes: sizes, timeScale: timeScale, duration: duration);
+}
+
+/// A file built in fragments: the samples are in the `trun` boxes of the `moof` boxes ([fragments]), not in the sample table.
+Future<Mp4Audio> _withFragments(ByteSource source, Uint8List moov, Mp4Audio base, List<(int, int)> fragments) async {
+  var defaultSize = 0, defaultDuration = 0;
+  for (final mvex in _boxes(moov, 0, moov.length).where((b) => b.type == 'mvex')) {
+    for (final trex in _boxes(moov, mvex.bodyStart, mvex.end).where((b) => b.type == 'trex')) {
+      final d = ByteData.sublistView(moov);
+      if (d.getUint32(trex.bodyStart + 4) == base.trackId) {
+        defaultDuration = d.getUint32(trex.bodyStart + 12);
+        defaultSize = d.getUint32(trex.bodyStart + 16);
+      }
+    }
+  }
+  final offsets = base.offsets.toList(), sizes = base.sizes.toList();
+  var total = base.duration;
+  for (final (start, size) in fragments) {
+    final b = await source.read(start, size);
+    if (b.length < size) break;
+    final d = ByteData.sublistView(b);
+    for (final traf in _boxes(b, 8, b.length).where((x) => x.type == 'traf')) {
+      final tfhd = _find(b, traf, 'tfhd');
+      if (tfhd == null || d.getUint32(tfhd.bodyStart + 4) != base.trackId) continue;
+      final tf = d.getUint32(tfhd.bodyStart) & 0xFFFFFF;
+      var p = tfhd.bodyStart + 8;
+      var baseOffset = start; // (default-base-is-moof, and what nearly every writer means)
+      if (tf & 1 != 0) {
+        baseOffset = d.getUint64(p);
+        p += 8;
+      }
+      if (tf & 2 != 0) p += 4;
+      var dur = defaultDuration, sz = defaultSize;
+      if (tf & 8 != 0) {
+        dur = d.getUint32(p);
+        p += 4;
+      }
+      if (tf & 0x10 != 0) sz = d.getUint32(p);
+      var next = -1; // where the data of a run goes on after the previous one
+      for (final trun in _boxes(b, traf.bodyStart, traf.end).where((x) => x.type == 'trun')) {
+        final fl = d.getUint32(trun.bodyStart) & 0xFFFFFF;
+        final n = d.getUint32(trun.bodyStart + 4);
+        var q = trun.bodyStart + 8;
+        var at = next;
+        if (fl & 1 != 0) {
+          at = baseOffset + d.getInt32(q);
+          q += 4;
+        }
+        if (at < 0) at = baseOffset;
+        if (fl & 4 != 0) q += 4;
+        for (var i = 0; i < n; i++) {
+          var sDur = dur, sSize = sz;
+          if (fl & 0x100 != 0) {
+            sDur = d.getUint32(q);
+            q += 4;
+          }
+          if (fl & 0x200 != 0) {
+            sSize = d.getUint32(q);
+            q += 4;
+          }
+          if (fl & 0x400 != 0) q += 4;
+          if (fl & 0x800 != 0) q += 4;
+          offsets.add(at);
+          sizes.add(sSize);
+          at += sSize;
+          total += sDur;
+        }
+        next = at;
+      }
+    }
+  }
+  return Mp4Audio(
+      trackId: base.trackId, codec: base.codec, config: base.config, sampleRate: base.sampleRate, channels: base.channels, offsets: Int64List.fromList(offsets), sizes: Int32List.fromList(sizes), timeScale: base.timeScale, duration: total);
 }
 
 /// The decoder-specific bytes and the object type of an 'esds' box body (after its version and flags).

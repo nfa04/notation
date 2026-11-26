@@ -99,6 +99,13 @@ void main() {
     expect(t.asked.last.toString(), contains('lang=de-CH'));
   }, skip: skip);
 
+  test('a language asked for after the link is taken, or the languages there are are told', () async {
+    final t = await setUpWith((url) => url.path.contains('youtubei') ? ok(player(tracks: [track('de', kind: 'asr'), track('fr'), track('en')])) : ok(xml));
+    final r = await t.source.fetch('abcdefghijk lang=fr');
+    expect(r.language, 'fr');
+    await expectLater(t.source.fetch('abcdefghijk lang=ja'), throwsA(isA<TranscriptSourceError>().having((e) => e.message, 'message', allOf(contains('"ja"'), contains('de, fr, en')))));
+  }, skip: skip);
+
   test('only automatic captions: they are taken', () async {
     final t = await setUpWith((url) => url.path.contains('youtubei') ? ok(player(tracks: [track('en', kind: 'asr')])) : ok(xml));
     expect((await t.source.fetch('abcdefghijk')).language, 'en');

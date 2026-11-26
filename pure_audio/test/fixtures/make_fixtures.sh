@@ -35,6 +35,11 @@ ffmpeg -loglevel error -y -i o_celt_stereo.opus -c:a copy o_in_mkv.mka
 ffmpeg -loglevel error -y -i mono22.wav -c:a libvorbis -q:a 3 v_mono.ogg
 ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libvorbis -q:a 5 v_stereo.ogg
 ffmpeg -loglevel error -y -i st44.wav -t 2 -c:a libvorbis -b:a 64k v_stereo_in.mkv
+ffmpeg -loglevel error -y -i aac_stereo_44k.m4a -c:a copy -movflags frag_keyframe+empty_moov+default_base_moof f_aac.mp4
+ffmpeg -loglevel error -y -i o_hybrid_mono.opus -c:a copy -movflags frag_keyframe+empty_moov f_opus.mp4
+ffmpeg -loglevel error -y -i f_aac.mp4 -f s16le - | gzip -9 > f_aac.ref.gz
+ffmpeg -loglevel error -y -c:a libopus -i f_opus.mp4 -f s16le - | gzip -9 > f_opus.ref.gz
+ffmpeg -loglevel error -y -i v_stereo.ogg -c:a copy -strict -2 v_in_mp4.mp4
 for f in v_*; do
   case "$f" in *.ref.gz) continue;; esac
   ffmpeg -loglevel error -y -i "$f" -f s16le - | gzip -9 > "${f%.*}.ref.gz"

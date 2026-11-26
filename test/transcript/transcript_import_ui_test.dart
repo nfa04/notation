@@ -14,18 +14,29 @@ void main() {
 
   late NoteRepository repo;
   String? opened;
+  String? existingId;
 
-  Future<void> start(WidgetTester tester, {List<TranscriptSource> sources = const []}) async {
+  Future<void> start(WidgetTester tester, {List<TranscriptSource> sources = const [], bool addToExisting = false}) async {
     tester.view.physicalSize = const Size(1000, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     opened = null;
-    await tester.runAsync(() async => repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath)));
+    String? existing;
+    await tester.runAsync(() async {
+      repo = NoteRepository(await AppDatabase.open(path: inMemoryDatabasePath));
+      if (addToExisting) {
+        existing = await repo.createNote(title: 'Old note');
+        final n = (await repo.loadNote(existing!))!;
+        n.documentText = 'Already here';
+        await repo.saveNote(n);
+      }
+    });
+    existingId = existing;
     await tester.pumpWidget(MaterialApp(
       home: Builder(
         builder: (context) => TextButton(
           key: const ValueKey('go'),
-          onPressed: () => showTranscriptImport(context, repository: repo, onOpenNote: (id) => opened = id, sources: sources),
+          onPressed: () => showTranscriptImport(context, repository: repo, onOpenNote: (id) => opened = id, sources: sources, addToNoteId: existing),
           child: const Text('go'),
         ),
       ),
@@ -90,5 +101,22 @@ void main() {
     await tester.tap(fetch);
     await tester.pumpAndSettle();
     expect(find.text('No captions for this video.'), findsOneWidget);
+  });
+
+  testWidgets('a transcript can be added to the end of a note that exists', (tester) async {
+    await start(tester, addToExisting: true);
+    expect(find.text('Add to the note'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('transcript-title')), 'Lecture 4');
+    await tester.enterText(find.byKey(const ValueKey('transcript-captions')), _srt);
+    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const ValueKey('transcript-create')));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pumpAndSettle();
+    expect(opened, existingId);
+    final note = await tester.runAsync(() => repo.loadNote(opened!));
+    expect(note!.documentText, startsWith('Already here\n\n## Lecture 4\n\n'));
+    expect(note.documentText, contains('A minute later'));
   });
 }

@@ -19,13 +19,13 @@ Files are read in pieces, so a video of many gigabytes needs memory for about a 
 
 | Kind | Status |
 | --- | --- |
-| MP4 / M4A / MOV with AAC-LC (mono, stereo; HE-AAC is decoded at its core rate, without the high band) | works, checked against ffmpeg (> 115 dB SNR) |
+| MP4 / M4A / MOV (also built in fragments, as from streaming sites) with AAC-LC (mono, stereo; HE-AAC is decoded at its core rate, without the high band) | works, checked against ffmpeg (> 115 dB SNR) |
 | MP3 in MP3 files, MP4 or Matroska (MPEG-1/2/2.5 Layer III) | works, checked against ffmpeg (> 115 dB SNR); intensity stereo is not applied |
 | Matroska / WebM / MKA with AAC or MP3 | works |
 | FLAC, WAV (8/16/24/32 bit PCM, float, A-law, mu-law) | works, exact |
 | Opus (Ogg `.opus`/`.ogg`, WebM, Matroska, MP4): CELT, SILK and hybrid, mono and stereo, all frame sizes | works, checked against libopus (speech modes are bit-exact, music within 16 bit rounding, > 75 dB); no repair of lost packets, no cross fade at a change of mode, more than two channels not supported |
-| Vorbis I (Ogg, Matroska/WebM), floor type 1 | works, checked against ffmpeg (> 75 dB); floor type 0 (very old files) is not supported |
-| Layers I and II, AAC Main/LTP/SSR, 5.1 channels, fragmented MP4 | not supported (an `AudioFormatException` says so in a plain sentence) |
+| Vorbis I (Ogg, Matroska/WebM, MP4), floor type 1 | works, checked against ffmpeg (> 75 dB); floor type 0 (very old files) is not supported |
+| Layers I and II, AAC Main/LTP/SSR, 5.1 channels | not supported (an `AudioFormatException` says so in a plain sentence) |
 
 There are no encoders.
 

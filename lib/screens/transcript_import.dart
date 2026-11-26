@@ -29,10 +29,11 @@ Future<void> showTranscriptImport(
   String? folderId,
   List<TranscriptSource> sources = const [],
   SpeechToText? speech,
+  String? addToNoteId,
 }) async {
   final id = await showDialog<String>(
     context: context,
-    builder: (context) => _TranscriptDialog(repository: repository, folderId: folderId, sources: sources, speech: speech),
+    builder: (context) => _TranscriptDialog(repository: repository, folderId: folderId, sources: sources, speech: speech, addToNoteId: addToNoteId),
   );
   if (id != null) onOpenNote(id);
 }
@@ -42,7 +43,10 @@ class _TranscriptDialog extends StatefulWidget {
   final String? folderId;
   final List<TranscriptSource> sources;
   final SpeechToText? speech;
-  const _TranscriptDialog({required this.repository, required this.folderId, required this.sources, this.speech});
+
+  /// When set, the transcript is added at the end of this note instead of making a new one.
+  final String? addToNoteId;
+  const _TranscriptDialog({required this.repository, required this.folderId, required this.sources, this.speech, this.addToNoteId});
 
   @override
   State<_TranscriptDialog> createState() => _TranscriptDialogState();
@@ -213,10 +217,17 @@ class _TranscriptDialogState extends State<_TranscriptDialog> {
       final source = _source.text.trim().isNotEmpty ? _source.text.trim() : t.source;
       final text = formatTranscript(Transcript(title: t.title, source: source, language: t.language, segments: t.segments), times: _times, sourceLabel: tr('Source'));
       final title = _title.text.trim().isEmpty ? tr('Transcript') : _title.text.trim();
-      final id = NoteRepository.newId();
-      await widget.repository.createNote(title: title, folderId: widget.folderId, id: id);
-      final note = (await widget.repository.loadNote(id))!;
-      note.documentText = text;
+      final existing = widget.addToNoteId;
+      final id = existing ?? NoteRepository.newId();
+      if (existing == null) await widget.repository.createNote(title: title, folderId: widget.folderId, id: id);
+      final note = await widget.repository.loadNote(id);
+      if (note == null) throw StateError('The note is gone.');
+      if (existing == null) {
+        note.documentText = text;
+      } else {
+        final before = note.documentText.trimRight();
+        note.documentText = '${before.isEmpty ? '' : '$before\n\n'}## $title\n\n$text';
+      }
       await widget.repository.saveNote(note);
       if (mounted) Navigator.pop(context, id);
     } catch (e) {
@@ -235,7 +246,7 @@ class _TranscriptDialogState extends State<_TranscriptDialog> {
     final t = _current;
     final length = t == null || t.segments.isEmpty ? null : clockText(t.segments.last.end > 0 ? t.segments.last.end : t.segments.last.start);
     return PlatformAlertDialog(
-      title: const Text('Note from a transcript'),
+      title: widget.addToNoteId == null ? const Text('Note from a transcript') : const Text('Add a transcript to this note'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -316,7 +327,7 @@ class _TranscriptDialogState extends State<_TranscriptDialog> {
       ),
       actions: [
         TextButton(onPressed: _busy || _listening ? null : () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(key: const ValueKey('transcript-create'), onPressed: _busy || _listening || t == null ? null : _create, child: const Text('Make the note')),
+        FilledButton(key: const ValueKey('transcript-create'), onPressed: _busy || _listening || t == null ? null : _create, child: widget.addToNoteId == null ? const Text('Make the note') : const Text('Add to the note')),
       ],
     );
   }

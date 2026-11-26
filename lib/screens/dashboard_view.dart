@@ -304,6 +304,7 @@ class _DashboardViewState extends State<DashboardView> {
         PopupMenuItem(value: 'star', child: Text(note.favorite ? 'Remove from favourites' : 'Add to favourites')),
         if (widget.reminders != null) const PopupMenuItem(value: 'remind', child: Text('Remind me...')),
         const PopupMenuItem(value: 'select', child: Text('Select')),
+        if (!note.locked) const PopupMenuItem(value: 'transcript', child: Text('Add a transcript...')),
         if (widget.noteFiles != null && !note.locked) const PopupMenuItem(value: 'file', child: Text('Save as a file...')),
         const PopupMenuItem(value: 'delete', child: Text('Delete')),
       ];
@@ -313,6 +314,9 @@ class _DashboardViewState extends State<DashboardView> {
     if (choice == 'star') await _toggleFavorite(note);
     if (choice == 'remind' && mounted) await showRemindDialog(context, widget.reminders!, kind: ReminderKind.note, refId: note.id, title: note.shownTitle);
     if (choice == 'select') _toggleSelected(note.id);
+    if (choice == 'transcript' && mounted) {
+      await showTranscriptImport(context, repository: widget.repository, onOpenNote: widget.onOpenNote, sources: widget.extensions?.transcriptChoices ?? const [], speech: widget.speech, addToNoteId: note.id);
+    }
     if (choice == 'template' && mounted) await saveNoteAsTemplate(context, widget.templates!, note.id, note.title);
     if (choice == 'file' && mounted) await saveNoteAsFile(context, widget.noteFiles!, note.id, note.title);
     if (choice == 'delete') await _deleteNote(note);

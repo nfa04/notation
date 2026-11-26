@@ -8,6 +8,6 @@
   "permissions": ["network"],
   "hosts": ["www.youtube.com"],
   "transcriptSources": [
-    { "id": "youtube", "title": "YouTube", "hint": "A YouTube link (watch, youtu.be, shorts) or the 11-letter video id" }
+    { "id": "youtube", "title": "YouTube", "hint": "A YouTube link (watch, youtu.be, shorts) or the 11-letter video id. Add \" lang=fr\" after it for another language" }
   ]
 }

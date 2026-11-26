@@ -22,7 +22,20 @@ function videoId(input) {
 }
 
 // The track to take: the language the video is spoken in (the automatic track says it), a person's captions before the automatic ones.
-function chooseTrack(tracks) {
+// A language can be asked for after the link: "https://youtu.be/abc... lang=fr". Gives the link and the language ('' for none).
+function splitLanguage(input) {
+  const m = String(input || '').trim().match(/^(.*?)\s+lang[=:]\s*([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$/);
+  return m ? [m[1], m[2]] : [String(input || ''), ''];
+}
+
+function chooseTrack(tracks, wanted) {
+  if (wanted) {
+    const base = wanted.toLowerCase().split('-')[0];
+    const same = tracks.filter((t) => String(t.languageCode || '').toLowerCase().split('-')[0] === base);
+    const exact = same.filter((t) => String(t.languageCode || '').toLowerCase() === wanted.toLowerCase());
+    const pool = exact.length ? exact : same;
+    return pool.find((t) => t.kind !== 'asr') || pool[0] || null;
+  }
   const automatic = tracks.filter((t) => t.kind === 'asr');
   const written = tracks.filter((t) => t.kind !== 'asr');
   const spoken = automatic.length ? String(automatic[0].languageCode || '').split('-')[0] : '';
@@ -39,7 +52,8 @@ async function ask(url, options) {
 }
 
 notation.transcriptSource('youtube', async (ctx) => {
-  const id = videoId(ctx.input);
+  const [link, wanted] = splitLanguage(ctx.input);
+  const id = videoId(link);
   if (!id) throw new Error('This is not a YouTube link.');
 
   const answer = await ask('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
@@ -66,7 +80,11 @@ notation.transcriptSource('youtube', async (ctx) => {
   const tracks = ((listed && listed.captionTracks) || []).filter((t) => t && typeof t.baseUrl === 'string');
   if (!tracks.length) throw new Error('This video has no captions.');
 
-  const track = chooseTrack(tracks);
+  const track = chooseTrack(tracks, wanted);
+  if (!track) {
+    const have = [...new Set(tracks.map((t) => String(t.languageCode || '?')))].join(', ');
+    throw new Error('This video has no captions in "' + wanted + '". It has: ' + have + '.');
+  }
   if (!track.baseUrl.startsWith('https://www.youtube.com/')) throw new Error('YouTube pointed to a place this extension may not use.');
   const file = await ask(track.baseUrl, { headers: { 'User-Agent': USER_AGENT } });
   if (file.status !== 200 || !file.body || !file.body.trim()) {
