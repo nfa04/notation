@@ -315,7 +315,7 @@ Future<void> _start() async {
     _withKeystore('The AI provider in the cloud', cloudModel.load()),
     aiSwitch.load(),
   ]);
-  final cards = CardRepository(db);
+  final cards = CardRepository(db, settings: settings);
   // (before the mirror's first run: the to-dos of study sessions are kept off its calendar)
   final planner = StudyPlanner(settings, cards, tasks, calendar: AppStudyCalendar(caldav: caldav, device: device, ics: ics), readNote: (id) => readNoteShape(db, id));
   await planner.load();

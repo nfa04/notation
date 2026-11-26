@@ -145,7 +145,7 @@ void main() {
       final db = await databaseFactoryFfi.openDatabase(path, options: OpenDatabaseOptions(singleInstance: false));
       final col = (await db.query('col')).single;
       final models = jsonDecode(col['models'] as String) as Map<String, dynamic>;
-      final id = models.keys.single;
+      final id = models.keys.first; // (the type for front and back, which the note has)
       Future<Uint8List> pack(int type, String fields, {int templates = 1}) async {
         (models[id] as Map<String, dynamic>)['type'] = type;
         (models[id] as Map<String, dynamic>)['tmpls'] = List.filled(templates, {});

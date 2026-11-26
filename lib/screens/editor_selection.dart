@@ -611,6 +611,14 @@ extension _EditorSelection on _FixedPageNoteEditorState {
                       visualDensity: VisualDensity.compact,
                       onPressed: () => unawaited(_diagramFromDrawing()),
                     ),
+                  if (_canMakeCards)
+                    IconButton(
+                      key: const ValueKey('make-cards-from-selection'),
+                      icon: const Icon(Symbols.style),
+                      tooltip: tr('Make flashcards of this'),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => unawaited(_makeCardsFromSelection()),
+                    ),
                   if (widget.math != null && _selection.isNotEmpty && _on(Feature.checkMaths))
                     IconButton(
                       key: const ValueKey('check-selected-maths'),

@@ -81,10 +81,12 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
   ///
   /// With [only] the picture is of one layer of the note alone, see-through (for the layers of an OpenRaster file): its lines, pictures
   /// and text boxes at full opacity, or with [_paperLayer] the paper, the PDF page, the written document and the highlights.
-  Future<Uint8List> _picturePage(int i, ImagePreset preset, {required bool seeThrough, String? only, double? across}) async {
+  /// [area] limits the picture to that part of the page (in the page's units): the picture of a card made from a selection.
+  Future<Uint8List> _picturePage(int i, ImagePreset preset, {required bool seeThrough, String? only, double? across, Rect? area}) async {
     final onPaper = only == _paperLayer, onLayer = only != null && !onPaper;
-    final window = _infinite ? _canvasPicture() : null;
+    final window = area ?? (_infinite ? _canvasPicture() : null);
     final size = window?.size ?? Size(_paperWidth, _heightOf(i));
+    final whole = Offset.zero & Size(_paperWidth, _heightOf(i)); // (the page: where its PDF and its lines lie when only a part is drawn)
     var plan = planImage(preset, size);
     if (across != null) {
       // (a small picture for a list of pages: [across] pixels wide)
@@ -121,7 +123,8 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
       }
       // the page of the PDF, as sharp as the picture is
       if (!onLayer && !_isBlank && _pdfDocument != null && i < _pdfDocument!.pages.length) {
-        paperPage = await renderPageImage(_pdfDocument!.pages[i], plan.page.width.round());
+        // (for a part of the page, the whole page as sharp as the part is)
+        paperPage = await renderPageImage(_pdfDocument!.pages[i], area == null ? plan.page.width.round() : math.min(4000, (whole.width * plan.scale).round()));
       }
       if (!mounted) throw StateError('the note was closed');
       // the written document and the text boxes: drawn the way the editor draws them (formulas, lists, code), as pictures
@@ -191,14 +194,15 @@ extension _EditorImageExport on _FixedPageNoteEditorState {
         }
         if (!seeThrough) canvas.drawRect(bounds, Paint()..color = Colors.white);
         if (paperPage != null) {
-          canvas.drawImageRect(paperPage, Rect.fromLTWH(0, 0, paperPage.width.toDouble(), paperPage.height.toDouble()), bounds, Paint()..filterQuality = FilterQuality.medium);
+          canvas.drawImageRect(paperPage, Rect.fromLTWH(0, 0, paperPage.width.toDouble(), paperPage.height.toDouble()), area == null ? bounds : whole,
+              Paint()..filterQuality = FilterQuality.medium);
         }
         // (the paper's lines: on a blank page, a page added to a PDF, and the canvas)
         if (!seeThrough && _background != PageBackground.blank && (_isBlank || _nativePages.contains(i) || _infinite)) {
-          if (window != null) {
+          if (_infinite && window != null) {
             CanvasBackgroundPainter(_background, () => (rect: window, scale: plan.scale)).paint(canvas, const Size(canvasExtent, canvasExtent));
           } else {
-            PageBackgroundPainter(_background).paint(canvas, size);
+            PageBackgroundPainter(_background).paint(canvas, whole.size);
           }
         }
         if (documentShot != null) drawShot(canvas, documentShot, Offset(_marginLeft, _marginTop), 1);

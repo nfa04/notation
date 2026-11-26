@@ -104,8 +104,9 @@ void main() {
       expect(find.byKey(const ValueKey('flashcard-back')), findsOneWidget);
       // the buttons say when the card would come back
       expect(find.text('10 min'), findsOneWidget);
-      expect(find.text('1 d'), findsNWidgets(2)); // hard and good
-      expect(find.text('4 d'), findsOneWidget);
+      expect(find.text('15 min'), findsOneWidget);
+      expect(find.text('2 d'), findsOneWidget);
+      expect(find.text('8 d'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('review-again')));
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -137,10 +138,10 @@ void main() {
       expect(find.byKey(const ValueKey('review-done')), findsOneWidget);
       expect(find.textContaining('3 reviewed: 1 again, 0 hard, 1 good, 1 easy'), findsOneWidget);
 
-      // "good" put a card on its next day, "easy" (after the "again") four days on
+      // "easy" right after the "again" put that card on the next day (it is barely known yet), "good" on a new card two days on
       expect(await cards.dueCount(now: t0), 0);
       expect(await cards.dueCount(now: DateTime(2026, 3, 2)), 1);
-      expect(await cards.dueCount(now: DateTime(2026, 3, 6)), 2);
+      expect(await cards.dueCount(now: DateTime(2026, 3, 3)), 2);
       await db.close();
     });
   });

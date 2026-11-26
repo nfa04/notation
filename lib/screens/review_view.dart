@@ -4,10 +4,12 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide Text;
 import 'study_card.dart';
 
+import '../ai/flashcards.dart';
 import '../ai/spaced_repetition.dart';
 import '../data/card_repository.dart';
 import '../data/note_repository.dart';
 import '../review/study_planner.dart';
+import 'card_picture.dart';
 import 'review_export.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
@@ -57,6 +59,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Future<void> _load() async {
+    await widget.cards.scheduler(); // (the buttons say when a card comes back at the retention set now)
     final sources = widget.sources;
     final due = sources == null
         ? await widget.cards.due(now: _now(), source: widget.source)
@@ -154,16 +157,19 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Widget _card(BuildContext context, ReviewCard review) {
     final scheme = Theme.of(context).colorScheme;
     final now = _now();
+    final region = RegionCard.of(review.card);
     return StudyCard(
       cardKey: _turn,
-      front: review.card.front,
-      back: review.card.back,
+      front: review.card.faces.$1,
+      back: review.card.faces.$2,
+      // (a card of a part of a page: its picture on the question, unless the picture is the answer, and on the answer)
+      picture: region == null ? null : (front) => front && region.reverse ? null : CardPicture(cards: widget.cards, region: region, front: front),
       flipped: _flipped,
       onFlip: () => setState(() => _flipped = !_flipped),
       onMove: _move,
       ratings: [
         for (final r in Recall.values)
-          StudyRating(key: ValueKey('review-${r.name}'), label: r.label, hint: review.schedule.previewLabel(r, now), primary: r == Recall.good),
+          StudyRating(key: ValueKey('review-${r.name}'), label: r.label, hint: review.schedule.previewLabel(r, now, fsrs: widget.cards.fsrs), primary: r == Recall.good),
       ],
       onRate: (i) => _answer(Recall.values[i]),
       progress: _total == 0 ? 0 : _done / _total,

@@ -3,14 +3,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:path_provider/path_provider.dart';
 
+import '../ai/flashcards.dart' show RegionCard;
 import '../data/card_repository.dart';
 import '../data/note_repository.dart';
 import '../export/anki_export.dart';
 import '../export/anki_import.dart';
-import '../ai/flashcards.dart';
 import '../export/file_dialogs.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import 'card_picture.dart';
 
 /// Saves the review cards (those of [source], a note; null: all) as an Anki package. Each note the cards are from becomes a deck of its
 /// own, named after the note ([repository] knows the names).
@@ -28,13 +29,26 @@ Future<void> exportCardsToAnki(BuildContext context, CardRepository cards, {Note
       final title = info?.title.trim() ?? '';
       names[id] = id.startsWith(ankiSourcePrefix) ? id.substring(ankiSourcePrefix.length) : id == CardRepository.graphSource ? tr('Facts of all notes') : (title.isEmpty ? tr('Untitled') : title);
     }
-    final bytes = await ankiPackage([for (final c in all) AnkiCard.of(c, deck: names[c.source]!)], workDirectory: await getTemporaryDirectory());
+    final bytes = await ankiPackage([for (final c in all) await ankiCardOf(c, deck: names[c.source]!, cards: cards)], workDirectory: await getTemporaryDirectory());
     final path = await saveWithDialog(dialogTitle: tr('Export to Anki'), fileName: 'Notation cards.apkg', extension: 'apkg', bytes: bytes);
     if (path == null) return;
     messenger.showSnackBar(SnackBar(content: Text.verbatim(tr('Exported {n} cards to {path}', {'n': all.length, 'path': path}))));
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text.verbatim(tr('Could not export the cards: {error}', {'error': e})), duration: const Duration(seconds: 8)));
   }
+}
+
+/// [review] as a card for Anki; a card of a part of a page takes its picture along, with its covers drawn on (Anki has none).
+Future<AnkiCard> ankiCardOf(ReviewCard review, {required String deck, required CardRepository cards}) async {
+  final card = AnkiCard.of(review, deck: deck);
+  final region = RegionCard.of(review.card);
+  if (region == null) return card;
+  final png = await cards.picture(region.picture);
+  if (png == null) return card;
+  return card.withPictures(
+    front: region.reverse ? null : await pictureWithCovers(png, region, front: true),
+    back: await pictureWithCovers(png, region, front: false),
+  );
 }
 
 /// The source of cards that come from an Anki deck (the rest of it is the deck's name).
@@ -57,7 +71,7 @@ Future<int?> importCardsFromAnki(BuildContext context, CardRepository cards) asy
     // (a package made by this app has its own deck above the others: that name is not kept)
     String nameOf(String deck) => deck.startsWith('Notation::') ? deck.substring('Notation::'.length) : deck;
     for (final deck in {for (final c in read) nameOf(c.deck)}) {
-      added += await cards.addScheduled('$ankiSourcePrefix$deck', [for (final c in read) if (nameOf(c.deck) == deck) (Flashcard(c.front, c.back), c.schedule)]);
+      added += await cards.addScheduled('$ankiSourcePrefix$deck', [for (final c in read) if (nameOf(c.deck) == deck) (c.card, c.schedule)]);
     }
     messenger.showSnackBar(SnackBar(content: Text.verbatim(tr('Imported {n} new cards ({total} in the package)', {'n': added, 'total': read.length}))));
     return added;

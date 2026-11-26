@@ -5,8 +5,12 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../ai/cloze.dart';
+import '../ai/flashcards.dart';
 import '../ai/spaced_repetition.dart';
 import '../data/safe_zip.dart';
+
+export '../ai/cloze.dart' show clozeSides;
 
 /// A package that cannot be read, with the reason in words for the person.
 class AnkiImportException implements Exception {
@@ -24,7 +28,16 @@ class ImportedCard {
   final String front, back;
   final CardSchedule schedule;
 
-  const ImportedCard({required this.deck, required this.front, required this.back, required this.schedule});
+  /// For a card of a cloze note: the text with its parts hidden (`{{c1::...}}`, as plain text), the words the note adds to the answer,
+  /// and the number of the part this card asks for. [front] and [back] are that card's two sides as plain text.
+  final String? clozeText;
+  final String clozeExtra;
+  final int? cloze;
+
+  const ImportedCard({required this.deck, required this.front, required this.back, required this.schedule, this.clozeText, this.clozeExtra = '', this.cloze});
+
+  /// The card as it is kept here: a cloze card stays one (its parts are hidden when it is asked).
+  Flashcard get card => clozeText != null && cloze != null ? Flashcard.cloze(clozeText!, cloze!, extra: clozeExtra) : Flashcard(front, back);
 }
 
 /// The text of an Anki field as plain text: line breaks kept, markup and sounds left out, pictures marked, `\(a\)` and `\[a\]` as the
@@ -48,15 +61,6 @@ String _unescape(String s) => s.replaceAllMapped(RegExp(r'&(#x[0-9a-fA-F]+|#\d+|
       if (e.startsWith('#')) return String.fromCharCode(int.parse(e.substring(1)));
       return switch (e) { 'amp' => '&', 'lt' => '<', 'gt' => '>', 'quot' => '"', 'apos' => "'", 'nbsp' => ' ', _ => m[0]! };
     });
-
-/// A cloze text with the hidden part [number] (`{{c1::answer::hint}}`) hidden as `[...]` (or `[hint]`) in the question, and shown in
-/// the answer; the other clozes are shown in both.
-(String, String) clozeSides(String text, int number) {
-  final cloze = RegExp(r'\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}', dotAll: true);
-  final front = text.replaceAllMapped(cloze, (m) => int.parse(m[1]!) == number ? '[${(m[3] ?? '').isEmpty ? '...' : m[3]}]' : m[2]!);
-  final back = text.replaceAllMapped(cloze, (m) => m[2]!);
-  return (front, back);
-}
 
 /// The cards of an Anki package (`.apkg`, as Anki exports it with "Support older Anki versions" ticked). Basic notes give a card
 /// with the first field as the question and the second as the answer, cloze notes one card for each hidden part; the scheduling
@@ -126,11 +130,15 @@ Future<List<ImportedCard>> _cardsOf(Database db, DateTime now) async {
     if (fields.isEmpty) continue;
     final ord = c['ord'] as int;
     String front, back;
+    String? clozeText;
+    var extra = '';
     if (model != null && model['type'] == 1) {
       // a cloze note: the text is the first field, the second may hold extra words for the answer
-      final (f, b) = clozeSides((note['flds'] as String).split('\x1f').first, ord + 1);
-      front = ankiPlainText(f);
-      back = [ankiPlainText(b), if (fields.length > 1 && fields[1].isNotEmpty) fields[1]].join('\n\n');
+      clozeText = ankiPlainText((note['flds'] as String).split('\x1f').first);
+      extra = fields.length > 1 ? fields[1] : '';
+      final (f, b) = clozeSides(clozeText, ord + 1);
+      front = f;
+      back = [b, if (extra.isNotEmpty) extra].join('\n\n');
     } else {
       // (a note with a card in the other direction, "Basic (and reversed)", gives its second card turned round)
       final turned = ord == 1 && fields.length > 1 && (model?['tmpls'] as List?)?.length == 2;
@@ -139,7 +147,8 @@ Future<List<ImportedCard>> _cardsOf(Database db, DateTime now) async {
     }
     if (front.trim().isEmpty) continue;
     final deckName = decks['${c['did']}'] ?? 'Default';
-    out.add(ImportedCard(deck: deckName, front: front, back: back, schedule: _scheduleOf(c, created, now)));
+    out.add(ImportedCard(
+        deck: deckName, front: front, back: back, schedule: _scheduleOf(c, created, now), clozeText: clozeText, clozeExtra: extra, cloze: clozeText == null ? null : ord + 1));
   }
   return out;
 }

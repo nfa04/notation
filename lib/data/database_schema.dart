@@ -11,7 +11,7 @@
 ///    notes.page_width wide`, origin top-left, y down. Storing the width lets
 ///    a note be rescaled if the editor's page size ever changes.
 ///  - the order rows were drawn in is their rowid / `seq`.
-const int schemaVersion = 61;
+const int schemaVersion = 62;
 
 const List<String> createStatements = [
   '''
@@ -175,6 +175,7 @@ const List<String> createStatements = [
   _createNativeShareItems,
   _createReviewCards,
   _indexReviewCards,
+  ..._reviewCardsFsrs,
   _createNoteTags,
   _indexNoteTags,
   _createPageBookmarks,
@@ -204,6 +205,28 @@ const String _createReviewCards = '''
   )
   ''';
 const String _indexReviewCards = 'CREATE INDEX IF NOT EXISTS idx_review_cards_due ON review_cards(due)';
+
+/// What the cards gained with FSRS and cards that are more than two texts (version 62): the FSRS memory state (`stability`,
+/// `difficulty`, `last_review`, see `CardSchedule`), the [kind] of card ('basic', 'cloze', 'region') and what a card that is more
+/// than text needs ([media], JSON, see `Flashcard.media`); and the log of every answer (`review_log`), which two devices' reviews are
+/// merged by.
+const List<String> _reviewCardsFsrs = [
+  'ALTER TABLE review_cards ADD COLUMN stability REAL',
+  'ALTER TABLE review_cards ADD COLUMN difficulty REAL',
+  'ALTER TABLE review_cards ADD COLUMN last_review INTEGER',
+  "ALTER TABLE review_cards ADD COLUMN kind TEXT NOT NULL DEFAULT 'basic'",
+  'ALTER TABLE review_cards ADD COLUMN media TEXT',
+  '''
+  CREATE TABLE IF NOT EXISTS review_log (
+    card_id TEXT NOT NULL,
+    at      INTEGER NOT NULL,                  -- when it was answered
+    recall  INTEGER NOT NULL,                  -- 1 again, 2 hard, 3 good, 4 easy
+    PRIMARY KEY (card_id, at)
+  )
+  ''',
+  // the pictures of cards made from a part of a page (PNG), by the SHA-1 of their bytes
+  'CREATE TABLE IF NOT EXISTS card_pictures (id TEXT PRIMARY KEY, png BLOB NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL)',
+];
 
 /// The tags of notes (see `TagRepository`): one row per note and tag, the tag as `normalizeTag` makes it.
 const String _createNoteTags = '''
@@ -809,6 +832,7 @@ const String _createImagesV6 = '''
 
 /// `migrations[v]` upgrades a database from version `v` to `v + 1`.
 const Map<int, List<String>> migrations = {
+  61: [_createReviewCards, ..._reviewCardsFsrs],
   // the people invited to an event of the app's own calendars
   60: ['ALTER TABLE local_events ADD COLUMN attendees TEXT'],
   // the app's own calendars and events

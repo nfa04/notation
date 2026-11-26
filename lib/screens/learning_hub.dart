@@ -139,6 +139,12 @@ class _LearningHubState extends State<LearningHub> {
                   label: const Text('Export to Anki'),
                   onPressed: () => exportCardsToAnki(context, widget.cards!, repository: widget.repository),
                 ),
+              TextButton.icon(
+                key: const ValueKey('hub-retention'),
+                icon: const Icon(Symbols.tune),
+                label: const Text('How often cards come back'),
+                onPressed: () => askRetention(context, widget.cards!),
+              ),
             ]),
             ..._deckRows(context),
           ],
@@ -326,4 +332,45 @@ class _LearnTodayRowState extends State<LearnTodayRow> {
       ),
     );
   }
+}
+
+/// The setting of how well the cards are to be known: the chance of remembering a card at which it comes back. More means more
+/// reviews a day and less forgotten.
+Future<void> askRetention(BuildContext context, CardRepository cards) async {
+  var r = (await cards.scheduler()).retention;
+  if (!context.mounted) return;
+  final chosen = await showDialog<double>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final scheme = Theme.of(context).colorScheme;
+        final percent = (r * 100).round();
+        return AlertDialog(
+          title: const Text('How often cards come back'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('A card comes back when you are this likely to still remember it. Higher means more reviews each day and less forgotten; lower means fewer reviews and more forgotten.',
+                style: TextStyle(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            Text.verbatim(tr('Remembered: {n} %', {'n': percent}), key: const ValueKey('retention-value'), style: Theme.of(context).textTheme.titleMedium),
+            Slider.adaptive(
+              key: const ValueKey('retention-slider'),
+              value: r,
+              min: CardRepository.minRetention,
+              max: CardRepository.maxRetention,
+              divisions: ((CardRepository.maxRetention - CardRepository.minRetention) * 100).round(),
+              label: '$percent %',
+              onChanged: (v) => setState(() => r = (v * 100).round() / 100),
+            ),
+            Text(percent > 93 ? 'Many reviews: worth it in the last weeks before an exam.' : (percent < 85 ? 'Few reviews: for cards you only want to keep in mind.' : 'The usual choice (90 %).'),
+                key: const ValueKey('retention-hint'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(key: const ValueKey('retention-save'), onPressed: () => Navigator.pop(context, r), child: const Text('Save')),
+          ],
+        );
+      },
+    ),
+  );
+  if (chosen != null) await cards.setRetention(chosen);
 }

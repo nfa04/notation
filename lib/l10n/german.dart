@@ -4490,4 +4490,33 @@ const germanTexts = <String, String>{
   'The store sent an entry that is not an object.': 'Der Store hat einen Eintrag gesendet, der kein Objekt ist.',
   'The store sent an entry with a bad id.': 'Der Store hat einen Eintrag mit ungültiger ID gesendet.',
   'The files in the download are not the ones the store reviewed. Nothing was installed.': 'Die Dateien im Download sind nicht die, die der Store geprüft hat. Es wurde nichts installiert.',
+  // the spaced-repetition scheduler (FSRS)
+  'How often cards come back': 'Wie oft Karten wiederkommen',
+  'A card comes back when you are this likely to still remember it. Higher means more reviews each day and less forgotten; lower means fewer reviews and more forgotten.':
+      'Eine Karte kommt wieder, wenn du dich mit dieser Wahrscheinlichkeit noch an sie erinnerst. Höher heisst mehr Wiederholungen am Tag und weniger Vergessenes, tiefer heisst weniger Wiederholungen und mehr Vergessenes.',
+  'Remembered: {n} %': 'Erinnert: {n} %',
+  'Many reviews: worth it in the last weeks before an exam.': 'Viele Wiederholungen: lohnt sich in den letzten Wochen vor einer Prüfung.',
+  'Few reviews: for cards you only want to keep in mind.': 'Wenige Wiederholungen: für Karten, die du nur im Hinterkopf behalten willst.',
+  'The usual choice (90 %).': 'Die übliche Wahl (90 %).',
+  // cards made of a part of a page
+  'Make flashcards of this': 'Lernkarten daraus machen',
+  'The picture of this card is not on this device yet.': 'Das Bild dieser Karte ist noch nicht auf diesem Gerät.',
+  'Make cards': 'Karten machen',
+  'Cover parts': 'Teile abdecken',
+  'Hide words': 'Wörter verstecken',
+  'The picture is the answer': 'Das Bild ist die Antwort',
+  'The picture is the answer to the question you type.': 'Das Bild ist die Antwort auf die Frage, die du eintippst.',
+  'The picture is the question; type the answer.': 'Das Bild ist die Frage; tippe die Antwort ein.',
+  'Drag over each part to hide (a label, a name, a step). Each cover becomes a card. Tap a cover to take it away.':
+      'Zieh über jeden Teil, der verdeckt werden soll (eine Beschriftung, einen Namen, einen Schritt). Jede Abdeckung wird eine Karte. Tippe auf eine Abdeckung, um sie wegzunehmen.',
+  'Keep the other covers on': 'Die anderen Abdeckungen lassen',
+  'All parts are hidden and one is asked: harder, nothing gives the answer away.': 'Alle Teile sind verdeckt und einer wird abgefragt: schwieriger, nichts verrät die Antwort.',
+  'Only the part asked is hidden.': 'Nur der abgefragte Teil ist verdeckt.',
+  'Choose words in the text and hide them. Each hidden part becomes a card that asks for it.':
+      'Wähle Wörter im Text aus und verstecke sie. Jeder versteckte Teil wird eine Karte, die danach fragt.',
+  'Type or paste the text': 'Tippe den Text ein oder füge ihn ein',
+  'Hide the chosen words': 'Ausgewählte Wörter verstecken',
+  'Make the card': 'Karte machen',
+  'Make {n} cards': '{n} Karten machen',
+  'Could not make the picture: {error}': 'Das Bild konnte nicht gemacht werden: {error}',
 };

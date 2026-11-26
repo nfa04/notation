@@ -22,13 +22,13 @@ void main() {
 
   Future<void> data(WidgetTester tester, Future<void> Function() fill) => tester.runAsync(() async {
         final db = await AppDatabase.open(path: inMemoryDatabasePath);
-        for (final t in ['settings', 'tasks', 'review_cards', 'notes']) {
+        for (final t in ['settings', 'tasks', 'review_cards', 'review_log', 'notes']) {
           await db.delete(t);
         }
         notes = NoteRepository(db);
-        cards = CardRepository(db);
-        tasks = TaskRepository(db);
         settings = SettingsRepository(db);
+        cards = CardRepository(db, settings: settings);
+        tasks = TaskRepository(db);
         await fill();
       });
 
@@ -68,6 +68,29 @@ void main() {
       await tester.tap(find.byKey(ValueKey('deck-$lecture')));
       await settle(tester);
       expect(find.text('2 left'), findsOneWidget, reason: 'only the cards of that note');
+    });
+
+    testWidgets('how often cards come back is set with a slider and kept', (tester) async {
+      tester.view.physicalSize = const Size(1000, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await data(tester, () async {});
+      await tester.pumpWidget(MaterialApp(home: LearningHub(repository: notes, cards: cards, clock: () => now)));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('hub-retention')));
+      await settle(tester);
+      expect(find.text('Remembered: 90 %'), findsOneWidget);
+      expect(find.text('The usual choice (90 %).'), findsOneWidget);
+      // the far right end of the slider: the most there is
+      final slider = tester.getRect(find.byKey(const ValueKey('retention-slider')));
+      await tester.tapAt(Offset(slider.right - 2, slider.center.dy));
+      await tester.pump();
+      expect(find.text('Remembered: 97 %'), findsOneWidget);
+      expect(find.textContaining('Many reviews'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('retention-save')));
+      await settle(tester);
+      expect(await tester.runAsync(() => settings.get(CardRepository.retentionKey)), '0.97');
+      expect(cards.fsrs.retention, 0.97);
     });
 
     testWidgets('with no cards it says how to get some, and with a planner it offers a plan', (tester) async {

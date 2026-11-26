@@ -3,6 +3,8 @@ import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
 import '../l10n/text.dart';
+import '../markdown/markdown_view.dart';
+import '../models/rich_text.dart';
 import '../style/motion.dart';
 
 /// One way to answer a card: a button, and the key 1, 2, ... in the order of the list.
@@ -44,6 +46,9 @@ class StudyCard extends StatefulWidget {
   /// A chip in the corner of the card (the page it is from).
   final Widget? corner;
 
+  /// A picture above the text of a side (true: the question); null: none.
+  final Widget? Function(bool front)? picture;
+
   /// Takes the keyboard at once (the review does; beside a chat box the typing field keeps it until the card is clicked).
   final bool autofocus;
 
@@ -60,6 +65,7 @@ class StudyCard extends StatefulWidget {
     required this.header,
     this.onMove,
     this.corner,
+    this.picture,
     this.autofocus = false,
   });
 
@@ -163,12 +169,17 @@ class _StudyCardState extends State<StudyCard> {
                         Expanded(
                           child: Center(
                             child: SingleChildScrollView(
-                              child: Text.verbatim(
-                                front ? widget.front : widget.back,
-                                key: ValueKey(front ? 'flashcard-front' : 'flashcard-back'),
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 20, color: on),
-                              ),
+                              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                if (widget.picture?.call(front) case final picture?) ...[
+                                  ConstrainedBox(constraints: const BoxConstraints(maxHeight: 420), child: picture),
+                                  if ((front ? widget.front : widget.back).trim().isNotEmpty) const SizedBox(height: 12),
+                                ],
+                                CardFaceText(
+                                  front ? widget.front : widget.back,
+                                  key: ValueKey(front ? 'flashcard-front' : 'flashcard-back'),
+                                  color: on,
+                                ),
+                              ]),
                             ),
                           ),
                         ),
@@ -241,3 +252,58 @@ class _StudyCardState extends State<StudyCard> {
         _ => true,
       };
 }
+
+/// Whether [text] has anything that Markdown draws otherwise than as it is typed: formulas, bold, italics, code, lists, tables, headings.
+bool looksLikeMarkdown(String text) =>
+    text.contains(r'$') || RegExp(r'\*\*|__|`|(^|\n)\s*([-*+] |\d+[.)] |#{1,6} |\||> )|(^|\s)[*_][^\s*_]').hasMatch(text);
+
+/// The text of a side of a card: plain text as it is, centred; Markdown (with formulas) drawn as in a note.
+class CardFaceText extends StatefulWidget {
+  final String text;
+  final Color color;
+  final double fontSize;
+
+  const CardFaceText(this.text, {super.key, required this.color, this.fontSize = 20});
+
+  @override
+  State<CardFaceText> createState() => _CardFaceTextState();
+}
+
+class _CardFaceTextState extends State<CardFaceText> {
+  RichInlineTextController? _controller;
+
+  void _take() {
+    if (!looksLikeMarkdown(widget.text)) {
+      _controller?.dispose();
+      _controller = null;
+      return;
+    }
+    (_controller ??= RichInlineTextController()).text = widget.text;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _take();
+  }
+
+  @override
+  void didUpdateWidget(CardFaceText old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text) _take();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _controller;
+    if (c == null) return Text.verbatim(widget.text, textAlign: TextAlign.center, style: TextStyle(fontSize: widget.fontSize, color: widget.color));
+    return Semantics(label: widget.text, child: MarkdownView(controller: c, fontSize: widget.fontSize * 0.9, textColor: widget.color));
+  }
+}
+

@@ -43,6 +43,7 @@ bool syncedSetting(String key) =>
       'native_shares',
       'sync_cloud_folder',
       'sync_signin_verifier',
+      'card_retention',
     }.contains(key) ||
     key.startsWith('a11y_') ||
     // the study plans, one key each (see StudyPlanner)

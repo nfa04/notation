@@ -6,6 +6,7 @@ import 'package:archive/archive.dart' show Archive, ArchiveFile, ZipEncoder;
 import 'package:crypto/crypto.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../ai/flashcards.dart';
 import '../ai/spaced_repetition.dart';
 import '../data/card_repository.dart';
 
@@ -26,7 +27,19 @@ class AnkiCard {
   final String source;
   final CardSchedule schedule;
 
-  const AnkiCard({required this.id, required this.deck, required this.front, required this.back, this.source = '', required this.schedule});
+  /// For a cloze card: the number of the part it asks for; [front] is then the text with its parts hidden (`{{c1::...}}`) and [back]
+  /// the words added to the answer. The cards of one text become one cloze note in Anki, with a card for each part.
+  final int? cloze;
+
+  /// Pictures shown above the text of the question and of the answer (PNG; a card of a part of a page, its covers drawn on).
+  final Uint8List? frontPicture, backPicture;
+
+  const AnkiCard(
+      {required this.id, required this.deck, required this.front, required this.back, this.source = '', required this.schedule, this.cloze, this.frontPicture, this.backPicture});
+
+  /// This card with pictures.
+  AnkiCard withPictures({Uint8List? front, Uint8List? back}) =>
+      AnkiCard(id: id, deck: deck, front: this.front, back: this.back, source: source, schedule: schedule, cloze: cloze, frontPicture: front, backPicture: back);
 
   /// [review] with the deck named [deck] and a [source] line (the page is one-based there).
   factory AnkiCard.of(ReviewCard review, {required String deck}) => AnkiCard(
@@ -36,11 +49,13 @@ class AnkiCard {
         back: review.card.back,
         source: [deck, if (review.card.page != null) 'p. ${review.card.page! + 1}'].join(', '),
         schedule: review.schedule,
+        cloze: review.card.kind == CardKind.cloze ? review.card.clozeNumber : null,
       );
 }
 
-/// The id of the note type: always the same, so that Anki keeps one type however often a package is imported.
+/// The ids of the note types (front and back; cloze): always the same, so that Anki keeps one type each however often a package is imported.
 const _modelId = 1730000000001;
+const _clozeModelId = 1730000000002;
 const _rootDeckDefault = 'Notation';
 
 String _html(String s) => const HtmlEscape(HtmlEscapeMode.element).convert(s).replaceAll('\n', '<br>');
@@ -56,6 +71,9 @@ String ankiField(String text) {
 
 /// What Anki checks a note's first field by: the first eight hex digits of the SHA-1 of its text without markup, as a number.
 int _checksum(String field) => int.parse(sha1.convert(utf8.encode(field.replaceAll(RegExp(r'<[^>]*>'), ''))).toString().substring(0, 8), radix: 16);
+
+/// The guid of the cloze note of [text] in [deck]: the same for every card of the text, and on every export.
+String _clozeGuid(String deck, String text) => sha1.convert(utf8.encode('cloze\n$deck\n$text')).toString().substring(0, 20);
 
 int _idOf(String name) => int.parse(sha1.convert(utf8.encode(name)).toString().substring(0, 11), radix: 16);
 
@@ -118,6 +136,33 @@ Map<String, Object?> _model(int deckId, int now) => {
       'vers': <Object?>[],
     };
 
+/// The cloze note type: the text with its parts hidden, words added to the answer, the source.
+Map<String, Object?> _clozeModel(int deckId, int now) => {
+      ..._model(deckId, now),
+      'css': '$_css\n.cloze { font-weight: bold; color: blue; }',
+      'flds': [
+        for (final (i, name) in const ['Text', 'Back Extra', 'Source'].indexed)
+          {'font': 'Arial', 'media': <Object?>[], 'name': name, 'ord': i, 'rtl': false, 'size': 20, 'sticky': false},
+      ],
+      'id': _clozeModelId,
+      'name': 'Notation: Cloze',
+      'req': [
+        [0, 'any', [0]],
+      ],
+      'tmpls': [
+        {
+          'afmt': '{{cloze:Text}}<br>\n{{Back Extra}}\n{{#Source}}<div class="source">{{Source}}</div>{{/Source}}',
+          'bafmt': '',
+          'bqfmt': '',
+          'did': null,
+          'name': 'Cloze',
+          'ord': 0,
+          'qfmt': '{{cloze:Text}}',
+        },
+      ],
+      'type': 1,
+    };
+
 Map<String, Object?> _deck(int id, String name, int now) => {
       'collapsed': false,
       'conf': 1,
@@ -173,6 +218,7 @@ Future<Uint8List> ankiPackage(List<AnkiCard> cards, {required Directory workDire
     for (final e in deckIds.entries) '${e.value}': _deck(e.value, '$rootDeck::${e.key.replaceAll('::', ':')}', nowSeconds),
   };
 
+  final media = <String, Uint8List>{};
   final dir = await workDirectory.createTemp('anki_export');
   final file = '${dir.path}/collection.anki2';
   try {
@@ -206,29 +252,45 @@ Future<Uint8List> ankiPackage(List<AnkiCard> cards, {required Directory workDire
             'sortType': 'noteFld',
             'timeLim': 0,
           }),
-          'models': jsonEncode({'$_modelId': _model(deckIds.values.firstOrNull ?? 1, nowSeconds)}),
+          'models': jsonEncode({
+            '$_modelId': _model(deckIds.values.firstOrNull ?? 1, nowSeconds),
+            '$_clozeModelId': _clozeModel(deckIds.values.firstOrNull ?? 1, nowSeconds),
+          }),
           'decks': jsonEncode(decks),
           'dconf': jsonEncode(_deckConfiguration),
           'tags': '{}',
         });
         var next = at.millisecondsSinceEpoch;
         var position = 0;
+        // the cards of one cloze text share a note
+        final clozeNotes = <(String, String), int>{};
+        // (a picture is a file of the package, named by its bytes, and shown by an img tag in the field)
+        String withPicture(Uint8List? png, String field) {
+          if (png == null) return field;
+          final name = 'notation-${sha1.convert(png).toString().substring(0, 16)}.png';
+          media[name] = png;
+          return field.isEmpty ? '<img src="$name">' : '<img src="$name"><br>$field';
+        }
         for (final c in cards) {
-          final front = ankiField(c.front), back = ankiField(c.back), source = _html(c.source);
-          final noteId = next++, cardId = next++;
-          await txn.insert('notes', {
-            'id': noteId,
-            'guid': c.id,
-            'mid': _modelId,
-            'mod': nowSeconds,
-            'usn': -1,
-            'tags': ' ${_tag(c.deck)} ',
-            'flds': [front, back, source].join('\x1f'),
-            'sfld': front.replaceAll(RegExp(r'<[^>]*>'), ''),
-            'csum': _checksum(front),
-            'flags': 0,
-            'data': '',
-          });
+          final front = withPicture(c.frontPicture, ankiField(c.front)), back = withPicture(c.backPicture, ankiField(c.back)), source = _html(c.source);
+          final shared = c.cloze == null ? null : clozeNotes[(c.deck, c.front)];
+          final noteId = shared ?? next++, cardId = next++;
+          if (c.cloze != null) clozeNotes[(c.deck, c.front)] = noteId;
+          if (shared == null) {
+            await txn.insert('notes', {
+              'id': noteId,
+              'guid': c.cloze == null ? c.id : _clozeGuid(c.deck, c.front),
+              'mid': c.cloze == null ? _modelId : _clozeModelId,
+              'mod': nowSeconds,
+              'usn': -1,
+              'tags': ' ${_tag(c.deck)} ',
+              'flds': [front, back, source].join('\x1f'),
+              'sfld': front.replaceAll(RegExp(r'<[^>]*>'), ''),
+              'csum': _checksum(front),
+              'flags': 0,
+              'data': '',
+            });
+          }
           final s = c.schedule;
           // a card that was answered at least once (or forgotten) is a review card; the others are new
           final learned = s.reps > 0 || s.lapses > 0;
@@ -237,7 +299,7 @@ Future<Uint8List> ankiPackage(List<AnkiCard> cards, {required Directory workDire
             'id': cardId,
             'nid': noteId,
             'did': deckIds[c.deck]!,
-            'ord': 0,
+            'ord': c.cloze == null ? 0 : c.cloze! - 1,
             'mod': nowSeconds,
             'usn': -1,
             'type': learned ? 2 : 0,
@@ -258,9 +320,14 @@ Future<Uint8List> ankiPackage(List<AnkiCard> cards, {required Directory workDire
     } finally {
       await db.close();
     }
+    // the media files are numbered in the package, and the list says which name each number has
+    final names = media.keys.toList();
     final archive = Archive()
       ..add(ArchiveFile.bytes('collection.anki2', await File(file).readAsBytes()))
-      ..add(ArchiveFile.bytes('media', utf8.encode('{}')));
+      ..add(ArchiveFile.bytes('media', utf8.encode(jsonEncode({for (final (i, n) in names.indexed) '$i': n}))));
+    for (final (i, n) in names.indexed) {
+      archive.add(ArchiveFile.bytes('$i', media[n]!));
+    }
     return Uint8List.fromList(ZipEncoder().encodeBytes(archive));
   } finally {
     await dir.delete(recursive: true);

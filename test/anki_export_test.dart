@@ -68,9 +68,11 @@ void main() {
       expect(cards[2]['did'], deckOf['Notation::Biology']);
 
       final models = jsonDecode(col['models'] as String) as Map<String, dynamic>;
-      final model = models.values.single as Map<String, dynamic>;
+      // a type for front and back, used by these notes, and one for cloze texts
+      expect(models.values.map((m) => (m as Map)['type']), [0, 1]);
+      final model = models.values.first as Map<String, dynamic>;
       expect((model['flds'] as List).map((f) => f['name']), ['Front', 'Back', 'Source']);
-      expect(notes.every((n) => '${n['mid']}' == models.keys.single), isTrue);
+      expect(notes.every((n) => '${n['mid']}' == models.keys.first), isTrue);
       expect(col['ver'], 11);
       expect(jsonDecode(col['dconf'] as String), isA<Map>());
     } finally {
