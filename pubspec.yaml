@@ -33,6 +33,8 @@ dependencies:
   qr: ^3.0.2
   pdf_overlay:
     path: pdf_overlay
+  pure_audio:
+    path: pure_audio
   flutter:
     sdk: flutter
 

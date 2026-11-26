@@ -10,6 +10,7 @@ import 'package:notes/data/settings_repository.dart';
 import 'package:notes/screens/speech_recorder.dart';
 import 'package:notes/speech/mic_recorder.dart';
 import 'package:notes/speech/speech_to_text.dart';
+import 'package:notes/speech/whisper_timestamps.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _Mic extends ChangeNotifier implements MicRecorder {
@@ -47,6 +48,9 @@ class _Mic extends ChangeNotifier implements MicRecorder {
 class _Engine implements WhisperEngine {
   @override
   Future<String> transcribe(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop}) async => 'We meet on Friday.';
+  @override
+  Future<List<TimedText>> transcribeTimed(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop}) async =>
+      [const TimedText(0, 1, 'We meet on Friday.')];
   @override
   Future<void> close() async {}
 }

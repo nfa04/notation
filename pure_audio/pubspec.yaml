@@ -1,0 +1,12 @@
+name: pure_audio
+description: >-
+  Decode audio and the audio of video files in plain Dart: AAC-LC and MP3 (also inside MP4/M4A/MOV), FLAC and WAV (PCM, float,
+  A-law, mu-law), with a resampler to 16 kHz mono. No native code, no ffmpeg, works on every platform including the web.
+version: 0.1.0
+publish_to: none # remove when you publish
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dev_dependencies:
+  test: ^1.24.0

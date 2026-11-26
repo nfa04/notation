@@ -12,7 +12,9 @@ import 'package:path_provider/path_provider.dart';
 import '../data/settings_repository.dart';
 import '../ink/ink_recognizer.dart' show HandwritingStatus;
 import '../llm/model_files.dart';
+import '../transcript/transcript.dart' show TranscriptSegment;
 import 'whisper_audio.dart';
+import 'whisper_timestamps.dart';
 import 'whisper_tokenizer.dart';
 
 /// One of the Whisper models on offer (MIT licence of OpenAI, Apache-2.0 on the ONNX copies; the ONNX files are those of `onnx-community`). The encoder is
@@ -82,6 +84,9 @@ abstract class WhisperEngine {
   /// The text of a window of at most 30 seconds. [language] is a code like 'de', or null to find it out; [detected] is told which one
   /// the model found. [onPartial] gets the text as it is written.
   Future<String> transcribe(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop});
+
+  /// The same, as stretches of speech with their times (seconds from the start of [window]), written by the model itself.
+  Future<List<TimedText>> transcribeTimed(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop});
   Future<void> close();
 }
 
@@ -121,7 +126,17 @@ class OnnxWhisper implements WhisperEngine {
   static Future<void> _breathe() => Future<void>.delayed(const Duration(milliseconds: 4));
 
   @override
-  Future<String> transcribe(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop}) async {
+  Future<String> transcribe(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop}) async =>
+      tokenizer.decode(await _decode(window, language, detected, shouldStop, timed: false)).trim();
+
+  @override
+  Future<List<TimedText>> transcribeTimed(Float32List window, {String? language, void Function(String language)? detected, bool Function()? shouldStop}) async {
+    final tokens = await _decode(window, language, detected, shouldStop, timed: true);
+    return segmentsFromTokens(tokens, tokenizer.decode, windowSeconds: window.length / whisperSampleRate);
+  }
+
+  /// The tokens the model writes for [window]; with [timed] they include the times (see [pickTimedToken]).
+  Future<List<int>> _decode(Float32List window, String? language, void Function(String language)? detected, bool Function()? shouldStop, {required bool timed}) async {
     final encoder = await _enc();
     final decoder = await _dec();
     // (30 seconds of audio, whatever was said: one size, one plan)
@@ -173,19 +188,23 @@ class OnnxWhisper implements WhisperEngine {
         lang = best;
         detected?.call(languages[best]);
       }
-      final prompt = [_startOfTranscript, _firstLanguage + lang, _transcribe, _noTimestamps];
+      final prompt = [_startOfTranscript, _firstLanguage + lang, _transcribe, if (!timed) _noTimestamps];
       var (scores, first0) = await step(prompt, null);
       cache = first0;
       var first = true;
       for (var i = 0; i < _maxTokens; i++) {
         if (shouldStop?.call() ?? false) break;
         var best = -1;
-        var bestScore = double.negativeInfinity;
-        for (var t = 0; t < _vocab; t++) {
-          if (suppressed.contains(t) || t > _noTimestamps || (first && (t == 220 || t == _endOfText))) continue;
-          if (scores[t] > bestScore) {
-            bestScore = scores[t];
-            best = t;
+        if (timed) {
+          best = pickTimedToken(scores, tokens, suppressed);
+        } else {
+          var bestScore = double.negativeInfinity;
+          for (var t = 0; t < _vocab; t++) {
+            if (suppressed.contains(t) || t > _noTimestamps || (first && (t == 220 || t == _endOfText))) continue;
+            if (scores[t] > bestScore) {
+              bestScore = scores[t];
+              best = t;
+            }
           }
         }
         first = false;
@@ -213,7 +232,7 @@ class OnnxWhisper implements WhisperEngine {
         await v.dispose();
       }
     }
-    return tokenizer.decode(tokens).trim();
+    return tokens;
   }
 
   /// Whether the last tokens are the same group over and over (the model stuck on a word): then it is cut short.
@@ -365,6 +384,132 @@ class SpeechToText extends ModelFilesService {
       return text.toString();
     } catch (e) {
       await unload(); // start from scratch next time
+      rethrow;
+    } finally {
+      _unloadTimer = Timer(keepLoaded, unload);
+    }
+  }
+
+  /// What was said in [samples] (16 kHz, mono, -1..1) as stretches with their times in seconds from the start, written by the model
+  /// itself. Cut into pieces like [transcribe]; each piece is timed inside itself and moved to where it begins. [onSegments] gets the
+  /// stretches so far after each piece. One request at a time; the next waits.
+  Future<List<TranscriptSegment>> transcribeTimed(
+    Float32List samples, {
+    String? language,
+    void Function(List<TranscriptSegment> soFar)? onSegments,
+    void Function(double done)? progress,
+    bool Function()? shouldStop,
+  }) {
+    final result = _queue.then((_) => _transcribeTimed(samples, language ?? this.language, onSegments, progress, shouldStop));
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<List<TranscriptSegment>> _transcribeTimed(
+      Float32List samples, String? lang, void Function(List<TranscriptSegment>)? onSegments, void Function(double)? progress, bool Function()? shouldStop) async {
+    if (!installed) throw StateError('The speech model is not downloaded yet.');
+    _unloadTimer?.cancel();
+    try {
+      final engine = await _open();
+      final pieces = splitAtQuiet(samples);
+      final out = <TranscriptSegment>[];
+      var spoken = lang;
+      var offset = 0.0;
+      for (var i = 0; i < pieces.length; i++) {
+        if (shouldStop?.call() ?? false) break;
+        progress?.call(i / pieces.length);
+        final seconds = pieces[i].length / whisperSampleRate;
+        if (loudness(pieces[i]) >= 0.004) {
+          final said = await engine.transcribeTimed(pieces[i], language: spoken, detected: (l) => spoken ??= l, shouldStop: shouldStop);
+          for (final t in said) {
+            out.add(TranscriptSegment(offset + t.start, offset + t.end, t.text));
+          }
+          if (said.isNotEmpty) onSegments?.call(List.of(out));
+        }
+        offset += seconds;
+      }
+      progress?.call(1);
+      return out;
+    } catch (e) {
+      await unload();
+      rethrow;
+    } finally {
+      _unloadTimer = Timer(keepLoaded, unload);
+    }
+  }
+
+  /// Like [transcribeTimed], for sound that arrives as it is decoded (a long video): [chunks] are 16 kHz mono blocks of any size.
+  /// About 90 seconds are held back at a time, cut at a quiet place; the rest is written down. [progress] gets the seconds of sound
+  /// that are done. The sound of the whole file is never held in memory.
+  Future<List<TranscriptSegment>> transcribeTimedStream(
+    Stream<Float32List> chunks, {
+    String? language,
+    void Function(List<TranscriptSegment> soFar)? onSegments,
+    void Function(double seconds)? progress,
+    bool Function()? shouldStop,
+  }) {
+    final result = _queue.then((_) => _transcribeStream(chunks, language ?? this.language, onSegments, progress, shouldStop));
+    _queue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<List<TranscriptSegment>> _transcribeStream(
+      Stream<Float32List> chunks, String? lang, void Function(List<TranscriptSegment>)? onSegments, void Function(double)? progress, bool Function()? shouldStop) async {
+    if (!installed) throw StateError('The speech model is not downloaded yet.');
+    _unloadTimer?.cancel();
+    try {
+      final engine = await _open();
+      final out = <TranscriptSegment>[];
+      var spoken = lang;
+      var offset = 0.0; // seconds of sound already written down
+      var buffer = Float32List(0);
+      var stopped = false;
+
+      Future<void> write(Float32List piece) async {
+        final seconds = piece.length / whisperSampleRate;
+        if (loudness(piece) >= 0.004) {
+          final said = await engine.transcribeTimed(piece, language: spoken, detected: (l) => spoken ??= l, shouldStop: shouldStop);
+          for (final t in said) {
+            out.add(TranscriptSegment(offset + t.start, offset + t.end, t.text));
+          }
+          if (said.isNotEmpty) onSegments?.call(List.of(out));
+        }
+        offset += seconds;
+        progress?.call(offset);
+      }
+
+      Future<void> drain({required bool all}) async {
+        if (buffer.isEmpty) return;
+        final pieces = splitAtQuiet(buffer);
+        final count = all ? pieces.length : pieces.length - 1;
+        for (var i = 0; i < count; i++) {
+          if (shouldStop?.call() ?? false) {
+            stopped = true;
+            return;
+          }
+          await write(pieces[i]);
+        }
+        buffer = all ? Float32List(0) : Float32List.fromList(pieces.last);
+      }
+
+      await for (final chunk in chunks) {
+        if (shouldStop?.call() ?? false) {
+          stopped = true;
+          break;
+        }
+        final joined = Float32List(buffer.length + chunk.length)
+          ..setAll(0, buffer)
+          ..setAll(buffer.length, chunk);
+        buffer = joined;
+        if (buffer.length >= 90 * whisperSampleRate) {
+          await drain(all: false);
+          if (stopped) break;
+        }
+      }
+      if (!stopped) await drain(all: true);
+      return out;
+    } catch (e) {
+      await unload();
       rethrow;
     } finally {
       _unloadTimer = Timer(keepLoaded, unload);
