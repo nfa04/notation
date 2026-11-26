@@ -22,6 +22,7 @@ reference, shortened, is what the *Create with AI* button gives the AI assistant
 - [Tools for the assistant](#tools-for-the-assistant)
 - [Packages: modules, templates, versions](#packages-modules-templates-versions)
 - [The gallery](#the-gallery)
+- [The extension store](#the-extension-store)
 - [Developing an extension](#developing-an-extension)
 - [Where tools and actions run](#where-tools-and-actions-run)
 - [Automations](#automations)
@@ -567,6 +568,24 @@ in odd places.
 server of ours). Each entry has the name, version, permissions, the download address and the `sha256` of the zip. The app checks the hash and
 that the zip is on the same website as the index, then shows the same review as for any install (what it asks for) before it installs. A newer
 version that asks for more permissions asks again. `dart run tool/build_extensions.dart` zips every folder of `extensions/` and writes the index.
+
+## The extension store
+
+*Settings → Extensions → Browse the store* lists the extensions of a store: a small web server that holds reviewed packages (the code is in the
+separate repository `notation-extension-store`, with its own README and a `/docs` page on how to submit an extension). The default store is
+`store.notation.noelaeby.me`; *Settings → Advanced → Extension store* points the app to another one (its address and the public key, `store.pub`,
+its catalogue is signed with).
+
+What the app checks, whatever the server says:
+
+- The catalogue is signed (Ed25519) with the key the app trusts, over https, and its `sequence` never goes back, so an old catalogue cannot be replayed.
+- The zip has the size and the `sha256` the catalogue lists. The zip is read strictly: a file name that differs between the zip's directory and
+  its file headers, the same name twice, or a file that fails its checksum refuses the package.
+- The `manifest.json` and the script in the zip have the `manifestSha256` and `mainSha256` the store listed: they are the files the store reviewed.
+- The extension's id, version and permissions are the ones listed. Then the same review as for any install (what it asks for) is shown, and nothing
+  is switched on until the person does so.
+
+The store is a place to find extensions, not what keeps a bad one out: the person's own approval is.
 
 ## Developing an extension
 

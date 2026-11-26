@@ -29,6 +29,9 @@ class StoreException implements Exception {
 class StoreEntry {
   static final idPattern = RegExp(r'^[a-z0-9][a-z0-9._-]{1,62}[a-z0-9]$');
   final String id, name, version, author, summary, description, category, updated, sha256, logoSha256;
+
+  /// Hashes of the manifest and of the script as the store reviewed them (the app compares them with what it unpacks).
+  final String manifestSha256, mainSha256;
   final List<String> tags, permissions, hosts;
   final int size;
 
@@ -43,6 +46,8 @@ class StoreEntry {
     required this.updated,
     required this.sha256,
     required this.logoSha256,
+    required this.manifestSha256,
+    required this.mainSha256,
     required this.tags,
     required this.permissions,
     required this.hosts,
@@ -71,7 +76,8 @@ class StoreEntry {
     final size = json['size'];
     if (size is! int || size <= 0 || size > maxZipBytes) throw const StoreException('The store sent a bad size.');
     final sha = text('sha256', max: 64, required: true), logoSha = text('logoSha256', max: 64, required: true);
-    if (!_hash.hasMatch(sha) || !_hash.hasMatch(logoSha)) throw const StoreException('The store sent a bad hash.');
+    final manifestSha = text('manifestSha256', max: 64, required: true), mainSha = text('mainSha256', max: 64, required: true);
+    if (!_hash.hasMatch(sha) || !_hash.hasMatch(logoSha) || !_hash.hasMatch(manifestSha) || !_hash.hasMatch(mainSha)) throw const StoreException('The store sent a bad hash.');
     return StoreEntry(
       id: id,
       name: text('name', max: 60, required: true),
@@ -83,6 +89,8 @@ class StoreEntry {
       updated: text('updated', max: 10),
       sha256: sha,
       logoSha256: logoSha,
+      manifestSha256: manifestSha,
+      mainSha256: mainSha,
       tags: list('tags', 8),
       permissions: list('permissions', 40),
       hosts: list('hosts', 10),
@@ -326,6 +334,9 @@ class ExtensionStoreClient {
     }
     return bytes;
   }
+
+  /// Whether the manifest and script [package] was unpacked into are the very files [e] says the store reviewed.
+  static bool matchesReview(StoreEntry e, String manifestText, String script) => _sha(utf8.encode(manifestText)) == e.manifestSha256 && _sha(utf8.encode(script)) == e.mainSha256;
 
   static String _sha(List<int> bytes) => crypto.sha256.convert(bytes).toString();
 }

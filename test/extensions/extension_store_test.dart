@@ -28,9 +28,12 @@ Uint8List manifestZip(String id, {String version = '1.0.0', List<String> permiss
 
 final png = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4]);
 
-Map<String, Object?> entryFor(String id, Uint8List zip, {String version = '1.0.0', List<String> permissions = const [], Uint8List? logo}) => {
+String _hashOfFile(Uint8List zip, String name) => sha(ZipDecoder().decodeBytes(zip).files.firstWhere((f) => f.name == name).content as List<int>);
+
+Map<String, Object?> entryFor(String id, Uint8List zip, {String version = '1.0.0', List<String> permissions = const [], Uint8List? logo, String? mainSha}) => {
       'id': id, 'name': 'Demo $id', 'version': version, 'author': 'A', 'summary': 'Does a thing.', 'description': 'Long text.', 'category': 'writing',
       'tags': ['x'], 'permissions': permissions, 'hosts': <String>[], 'updated': '2026-11-26', 'size': zip.length, 'sha256': sha(zip), 'logoSha256': sha(logo ?? png),
+      'manifestSha256': _hashOfFile(zip, 'manifest.json'), 'mainSha256': mainSha ?? _hashOfFile(zip, 'main.js'),
     };
 
 /// A fake store: signs its catalogue like the PHP server does, serves files from a map, and records what was asked for.
@@ -248,6 +251,22 @@ void main() {
       }
       expect(find.byKey(const ValueKey('extension-review')), findsNothing);
       expect(find.textContaining('not the one the store listed'), findsOneWidget);
+      expect(s.byId('alpha'), isNull);
+    });
+
+    testWidgets('a script that is not the one the store reviewed is not installed', (tester) async {
+      final z = manifestZip('alpha');
+      store.files['/v1/extensions/alpha/extension.zip'] = z;
+      await store.publish(sequence: 1, entries: [entryFor('alpha', z, mainSha: sha(utf8.encode('something else')))]);
+      final s = service();
+      await open(tester, s, store.client());
+      await tester.tap(find.byKey(const ValueKey('store-install-alpha')));
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(find.byKey(const ValueKey('extension-review')), findsNothing);
+      expect(find.textContaining('not the ones the store reviewed'), findsOneWidget);
       expect(s.byId('alpha'), isNull);
     });
 

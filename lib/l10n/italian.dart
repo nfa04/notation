@@ -4441,4 +4441,5 @@ const italianTexts = <String, String>{
   'The store sent a bad size.': 'Lo store ha inviato una dimensione non valida.',
   'The store sent an entry that is not an object.': 'Lo store ha inviato una voce che non è un oggetto.',
   'The store sent an entry with a bad id.': 'Lo store ha inviato una voce con un id non valido.',
+  'The files in the download are not the ones the store reviewed. Nothing was installed.': 'I file scaricati non sono quelli esaminati dallo store. Non è stato installato nulla.',
 };

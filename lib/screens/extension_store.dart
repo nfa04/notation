@@ -76,6 +76,9 @@ class _ExtensionStorePageState extends State<ExtensionStorePage> {
       final bytes = await widget.client.zip(e);
       final package = widget.service.inspectZip(bytes);
       final m = package.manifest;
+      if (!ExtensionStoreClient.matchesReview(e, package.manifestText, package.script)) {
+        throw const StoreException('The files in the download are not the ones the store reviewed. Nothing was installed.');
+      }
       // the catalogue is signed, but what is in the zip is what runs: it has to be what was promised
       final asked = {for (final p in m.permissions) p.id};
       if (m.id != e.id || m.version != e.version || asked.length != e.permissions.length || !asked.containsAll(e.permissions)) {

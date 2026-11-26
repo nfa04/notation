@@ -4458,4 +4458,5 @@ const germanTexts = <String, String>{
   'The store sent a bad size.': 'Der Store hat eine ungültige Grösse gesendet.',
   'The store sent an entry that is not an object.': 'Der Store hat einen Eintrag gesendet, der kein Objekt ist.',
   'The store sent an entry with a bad id.': 'Der Store hat einen Eintrag mit ungültiger ID gesendet.',
+  'The files in the download are not the ones the store reviewed. Nothing was installed.': 'Die Dateien im Download sind nicht die, die der Store geprüft hat. Es wurde nichts installiert.',
 };

@@ -4441,4 +4441,5 @@ const spanishTexts = <String, String>{
   'The store sent a bad size.': 'La tienda envió un tamaño no válido.',
   'The store sent an entry that is not an object.': 'La tienda envió una entrada que no es un objeto.',
   'The store sent an entry with a bad id.': 'La tienda envió una entrada con un id no válido.',
+  'The files in the download are not the ones the store reviewed. Nothing was installed.': 'Los archivos descargados no son los que revisó la tienda. No se instaló nada.',
 };
