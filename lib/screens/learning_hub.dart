@@ -7,7 +7,10 @@ import '../data/card_repository.dart';
 import '../data/note_repository.dart';
 import '../l10n/language.dart';
 import '../l10n/text.dart';
+import '../review/course.dart';
+import '../review/grades.dart';
 import '../review/study_planner.dart';
+import 'course_header.dart';
 import 'review_export.dart';
 import 'review_view.dart';
 import 'study_plan_detail.dart';
@@ -22,7 +25,7 @@ String cardSourceName(String source, Map<String, String> titles) {
 }
 
 /// The tabs under "Today" in the hub.
-enum _HubTab { cards, exams }
+enum _HubTab { cards, exams, courses }
 
 /// One source of cards in the hub: how many it has and how many are due.
 typedef _Deck = ({String source, String name, int count, int due});
@@ -34,10 +37,13 @@ class LearningHub extends StatefulWidget {
   final NoteRepository repository;
   final StudyPlanner? planner;
   final CardRepository? cards;
+
+  /// The courses and their grades; null: not offered.
+  final CourseRepository? courses;
   final OpenNoteAt? onOpenNoteAt;
   final DateTime Function()? clock;
 
-  const LearningHub({super.key, required this.repository, this.planner, this.cards, this.onOpenNoteAt, this.clock});
+  const LearningHub({super.key, required this.repository, this.planner, this.cards, this.courses, this.onOpenNoteAt, this.clock});
 
   @override
   State<LearningHub> createState() => _LearningHubState();
@@ -95,7 +101,7 @@ class _LearningHubState extends State<LearningHub> {
       return StudyPlanDetail(planner: planner, planId: open, clock: widget.clock, cards: widget.cards, onOpenNoteAt: widget.onOpenNoteAt, onBack: () => setState(() => _open = null));
     }
     // Today stays on top; the cards and the exams are two tabs under it (a plain heading when only one of them is on).
-    final sections = [if (widget.cards != null) _HubTab.cards, if (planner != null) _HubTab.exams];
+    final sections = [if (widget.cards != null) _HubTab.cards, if (planner != null) _HubTab.exams, if (widget.courses?.courses.isNotEmpty ?? false) _HubTab.courses];
     final shown = sections.contains(_tab) ? _tab : (sections.isEmpty ? null : sections.first);
     Widget page(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Learning hub')),
@@ -116,12 +122,13 @@ class _LearningHubState extends State<LearningHub> {
                   isScrollable: true,
                   tabAlignment: TabAlignment.start,
                   onTap: (i) => setState(() => _tab = sections[i]),
-                  tabs: [for (final s in sections) Tab(key: ValueKey('hub-tab-${s.name}'), text: s == _HubTab.cards ? tr('Cards') : tr('Exams'))],
+                  tabs: [for (final s in sections) Tab(key: ValueKey('hub-tab-${s.name}'), text: _tabName(s))],
                 ),
               ),
             )
           else if (shown != null)
-            _heading(context, shown == _HubTab.cards ? tr('Cards') : tr('Exams')),
+            _heading(context, _tabName(shown)),
+          if (shown == _HubTab.courses) ..._courseRows(context),
           if (shown == _HubTab.cards) ...[
             Wrap(spacing: 8, children: [
               TextButton.icon(
@@ -176,7 +183,58 @@ class _LearningHubState extends State<LearningHub> {
         ],
       ),
     );
-    return planner == null ? page(context) : ListenableBuilder(listenable: planner, builder: (context, _) => page(context));
+    final listen = Listenable.merge([?planner, ?widget.courses]);
+    return ListenableBuilder(listenable: listen, builder: (context, _) => page(context));
+  }
+
+  static String _tabName(_HubTab t) => switch (t) {
+        _HubTab.cards => tr('Cards'),
+        _HubTab.exams => tr('Exams'),
+        _HubTab.courses => tr('Courses'),
+      };
+
+  Map<String, String> _folderNames = const {};
+
+  Future<void> _loadFolderNames() async {
+    final names = {for (final f in await widget.repository.listFolders()) f.id: f.name};
+    if (mounted) setState(() => _folderNames = names);
+  }
+
+  /// The courses by term (the latest first as they are named), each with its grade and what it needs, and the average by credits of
+  /// a term (for the courses graded on one scale).
+  List<Widget> _courseRows(BuildContext context) {
+    final courses = widget.courses!.courses.values.toList();
+    if (_folderNames.isEmpty) unawaited(_loadFolderNames());
+    final scheme = Theme.of(context).colorScheme;
+    final byTerm = <String, List<Course>>{};
+    for (final c in courses) {
+      (byTerm[c.term] ??= []).add(c);
+    }
+    final terms = byTerm.keys.toList()..sort((a, b) => b.compareTo(a));
+    return [
+      for (final term in terms) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Text.verbatim(term.isEmpty ? tr('No term') : term, style: Theme.of(context).textTheme.titleSmall),
+        ),
+        for (final c in byTerm[term]!..sort((a, b) => (_folderNames[a.folderId] ?? '').compareTo(_folderNames[b.folderId] ?? '')))
+          ListTile(
+            key: ValueKey('hub-course-${c.folderId}'),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            leading: const Icon(Symbols.school),
+            title: Text.verbatim(_folderNames[c.folderId] ?? tr('A deleted folder')),
+            subtitle: Text.verbatim(c.parts.isEmpty ? tr('No graded parts yet') : neededText(c), style: TextStyle(color: scheme.onSurfaceVariant)),
+            trailing: Text.verbatim(c.grades.average == null ? '-' : gradeText(c.scale, c.grades.average!), style: Theme.of(context).textTheme.titleMedium),
+            onTap: () => showCourseDialog(context, widget.courses!, c),
+          ),
+        for (final scale in {for (final c in byTerm[term]!) c.scale})
+          if (creditAverage(scale, [for (final c in byTerm[term]!) if (c.scale == scale) (credits: c.credits, grade: c.grades.average)]) case final avg?)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text.verbatim(tr('Average by credits: {g}', {'g': gradeText(scale, avg)}), key: ValueKey('hub-term-average-$term-${scale.name}'), style: TextStyle(color: scheme.primary)),
+            ),
+      ],
+    ];
   }
 
   List<Widget> _today(BuildContext context) {

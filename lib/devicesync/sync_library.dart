@@ -51,6 +51,8 @@ bool syncedSetting(String key) =>
     key.startsWith('a11y_') ||
     // the study plans, one key each (see StudyPlanner)
     key.startsWith('study_plan:') ||
+    // the courses, one key each (see CourseRepository)
+    key.startsWith('course:') ||
     // designed brushes (see BrushLibrary)
     key.startsWith('brush:') ||
     key.startsWith('stylus_') ||

@@ -8,6 +8,7 @@ import 'spelling/spell_service.dart';
 import 'images/subject_service.dart';
 import 'scan/ocr_service.dart';
 import 'shortcuts/shortcut_service.dart';
+import 'review/course.dart';
 import 'review/study_calendar.dart';
 import 'review/study_material_reader.dart';
 import 'review/study_planner.dart';
@@ -316,6 +317,8 @@ Future<void> _start() async {
     aiSwitch.load(),
   ]);
   final cards = CardRepository(db, settings: settings);
+  final courses = CourseRepository(settings);
+  await courses.load();
   // (before the mirror's first run: the to-dos of study sessions are kept off its calendar)
   final planner = StudyPlanner(settings, cards, tasks, calendar: AppStudyCalendar(caldav: caldav, device: device, ics: ics), readNote: (id) => readNoteShape(db, id));
   await planner.load();
@@ -528,6 +531,7 @@ Future<void> _start() async {
       sync: sync,
       cards: cards,
       planner: planner,
+      courses: courses,
       tags: tags,
       bookmarks: bookmarks,
       links: LinkRepository(db),

@@ -1495,6 +1495,13 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
           onOpenNote: (id) => _go(index: 3, note: id),
           refresh: _pageRefresh,
           showFavourites: _showFavourites,
+          // (courses go with learning: their cards, their exams and their grades)
+          courses: _learnOn ? _app.courses : null,
+          cards: _cardsOn ? _app.cards : null,
+          events: _f(Feature.calendar) ? CalendarAccess.of(caldav: _app.caldav, device: _app.device, ics: _app.ics).events : null,
+          onAddTask: (title, due) async {
+            await _app.tasks.createTask(title, dueDate: due);
+          },
         );
       case 9:
         final ai = _app.ai;
@@ -1555,7 +1562,7 @@ class _MainShellNavigationState extends State<MainShellNavigation> with WidgetsB
         return CalendarView(local: _app.events, reminders: _app.reminders, mirror: _app.mirror, repository: _app.tasks, caldav: _app.caldav, device: _app.device, ics: _app.ics, style: _app.style, refresh: _pageRefresh);
       case 10:
         if (!_learnOn) return const SizedBox.shrink();
-        return LearningHub(repository: _app.repository, planner: _studyOn ? _app.planner : null, cards: _cardsOn ? _app.cards : null, onOpenNoteAt: (id, page) => _openAtPage(id, page));
+        return LearningHub(repository: _app.repository, planner: _studyOn ? _app.planner : null, cards: _cardsOn ? _app.cards : null, courses: _app.courses, onOpenNoteAt: (id, page) => _openAtPage(id, page));
       case 3:
         return const Center(child: Text('Open a note from the dashboard or create a new one.'));
       case 4:

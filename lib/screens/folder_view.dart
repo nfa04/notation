@@ -39,6 +39,10 @@ import '../data/tag_repository.dart';
 import '../tags/tag_names.dart';
 import '../style/motion.dart';
 import '../style/platform_dialog.dart';
+import '../data/card_repository.dart';
+import '../review/course.dart';
+import '../sync/caldav_remote.dart' show DayEvent;
+import 'course_header.dart';
 
 /// Folder tree on the left, the notes of the selected folder on the right.
 class FolderView extends StatefulWidget {
@@ -69,7 +73,14 @@ class FolderView extends StatefulWidget {
   /// "Remind me" in a note's menu; null hides it.
   final ReminderService? reminders;
 
-  const FolderView({super.key, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.collab, this.previews, this.sync, this.tags, this.reminders, this.refresh, this.showFavourites});
+  /// The courses (folders marked as one), the cards of their notes, the calendar (for their lectures) and the to-dos (for their
+  /// deadlines); null: not offered.
+  final CourseRepository? courses;
+  final CardRepository? cards;
+  final Future<List<DayEvent>> Function(DateTime from, DateTime to)? events;
+  final Future<void> Function(String title, DateTime due)? onAddTask;
+
+  const FolderView({super.key, required this.repository, required this.onOpenNote, this.noteFiles, this.templates, this.collab, this.previews, this.sync, this.tags, this.reminders, this.refresh, this.showFavourites, this.courses, this.cards, this.events, this.onAddTask});
 
   @override
   State<FolderView> createState() => _FolderViewState();
@@ -510,6 +521,14 @@ class _FolderViewState extends State<FolderView> {
     await citations.setFolderStyle(f.id, chosen.isEmpty ? null : citationStyleById(chosen));
   }
 
+  /// Makes the folder a course (and asks its details), or shows the details of the course it is.
+  Future<void> _course(FolderEntry f) async {
+    final courses = widget.courses!;
+    final course = courses.of(f.id) ?? Course(folderId: f.id);
+    setState(() => _scope = f.id);
+    await showCourseDialog(context, courses, course, onAddTask: widget.onAddTask);
+  }
+
   Future<void> _renameFolder(FolderEntry f) async {
     final name = await _askName('Rename folder', initial: f.name);
     if (name != null) await _run(() => _repo.renameFolder(f.id, name));
@@ -587,9 +606,9 @@ class _FolderViewState extends State<FolderView> {
   @override
   Widget build(BuildContext context) {
     final collab = widget.collab;
-    if (collab == null) return _page(context);
+    if (collab == null) return widget.courses == null ? _page(context) : ListenableBuilder(listenable: widget.courses!, builder: (context, _) => _page(context));
     // the group symbols and the "Shared with me" folder follow what is shared
-    return ListenableBuilder(listenable: Listenable.merge([collab, collab.shared, ?collab.nativeShares]), builder: (context, _) => _page(context));
+    return ListenableBuilder(listenable: Listenable.merge([collab, collab.shared, ?collab.nativeShares, ?widget.courses]), builder: (context, _) => _page(context));
   }
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -824,6 +843,9 @@ class _FolderViewState extends State<FolderView> {
                 PopupMenuItem(value: () => showShareFolder(context, widget.collab!.nativeShares!, folderId: f.id, name: f.name), child: const Text('Share with people...')),
               if (CitationScope.maybeOf(context) case final citations? when citations.enabled())
                 PopupMenuItem(value: () => _chooseCitationStyle(citations, f), child: const Text('Citation style...')),
+              if (widget.courses != null)
+                PopupMenuItem(value: () => _course(f), child: Text(widget.courses!.of(f.id) == null ? 'Make this a course' : 'Course details...')),
+              if (widget.courses?.of(f.id) != null) PopupMenuItem(value: () => widget.courses!.remove(f.id), child: const Text('No longer a course')),
               PopupMenuItem(value: () => _renameFolder(f), child: const Text('Rename')),
               PopupMenuItem(value: () => _moveFolder(f), child: const Text('Move to...')),
               PopupMenuItem(value: () => _pickThemeImage(f), child: Text(f.themeImage == null ? 'Set theme image...' : 'Change theme image...')),
@@ -918,6 +940,7 @@ class _FolderViewState extends State<FolderView> {
         return SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             item(Symbols.create_new_folder, tr('New subfolder'), () => _newFolder(parentId: f.id)),
+            if (widget.courses != null) item(Symbols.school, tr(widget.courses!.of(f.id) == null ? 'Make this a course' : 'Course details...'), () => _course(f)),
             item(Symbols.edit, tr('Rename'), () => _renameFolder(f)),
             item(Symbols.drive_file_move, tr('Move to...'), () => _moveFolder(f)),
             item(Symbols.delete_outline, tr('Delete'), () => _deleteFolder(f)),
@@ -946,6 +969,16 @@ class _FolderViewState extends State<FolderView> {
       if (widget.collab?.nativeShares != null) ShareInvitations(service: widget.collab!.nativeShares!),
       if (_narrow && _inRealFolder) _upRow(),
       _buildHeader(title),
+      if ((_inRealFolder ? widget.courses?.of(_scope) : null) case final course?)
+        CourseHeader(
+          key: ValueKey('course-$_scope'),
+          course: course,
+          courses: widget.courses!,
+          noteIds: [for (final n in _notes) if (n.folderId != null && _subtreeOf(_scope).contains(n.folderId)) n.id],
+          cards: widget.cards,
+          events: widget.events,
+          onAddTask: widget.onAddTask,
+        ),
       if (subfolders.isNotEmpty) ...[
         const SizedBox(height: 16),
         if (_narrow)

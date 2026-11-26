@@ -1,6 +1,7 @@
 import 'ai/ai_service.dart';
 import 'ai/ai_switch.dart';
 import 'automations/automation_service.dart';
+import 'review/course.dart';
 import 'review/study_planner.dart';
 import 'citations/citation_service.dart';
 import 'collab/collab_service.dart';
@@ -115,6 +116,9 @@ class AppServices {
   /// Plans for exams: sessions on the calendar worked out from the cards; null: not offered.
   final StudyPlanner? planner;
 
+  /// The folders that are courses (their details and grades); null: not offered.
+  final CourseRepository? courses;
+
   /// The tags of notes; null: no tags.
   final TagRepository? tags;
 
@@ -174,6 +178,7 @@ class AppServices {
     this.profile,
     this.cards,
     this.planner,
+    this.courses,
     this.tags,
     this.bookmarks,
     this.links,
